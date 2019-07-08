@@ -42,6 +42,12 @@ TKDEF(TKSTR1, TKSTR2)
 #define LEX_EOF			(-1)
 #define lex_iseol(ls)		(ls->c == '\n' || ls->c == '\r')
 
+int escape_sequences_allowed = 1;
+LUALIB_API void lj_allow_escape_sequences(int allowed)
+{
+    escape_sequences_allowed = allowed;
+}
+
 /* Get more input from reader. */
 static LJ_NOINLINE LexChar lex_more(LexState *ls)
 {
@@ -266,6 +272,8 @@ static void lex_string(LexState *ls, TValue *tv)
       case '\\': case '\"': case '\'': break;
       case LEX_EOF: continue;
       default: {
+        if (!escape_sequences_allowed)
+            break;
         if (!lj_char_isdigit(c))
           goto err_xesc;
 	    c -= '0';  /* Decimal escape '\ddd'. */
