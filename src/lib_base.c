@@ -592,6 +592,12 @@ LJLIB_ASM(coroutine_yield)
   return FFH_UNREACHABLE;
 }
 
+LJLIB_CF(coroutine_cstacksize)
+{
+  lua_pushinteger(L, luaL_optint(L, 1, -1)); // literally do nothing
+  return 1;
+}
+
 static int ffh_resume(lua_State *L, lua_State *co, int wrap)
 {
   if (co->cframe != NULL || co->status > LUA_YIELD ||
