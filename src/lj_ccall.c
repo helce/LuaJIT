@@ -574,6 +574,41 @@
     goto done; \
   }
 
+#elif LJ_TARGET_E2K
+
+#define CCALL_HANDLE_STRUCTRET \
+  cc->retref = 0; \
+  if (sz > 64) { \
+    cc->ret_stack = dp; \
+  }
+  /* Pass all structs by value in registers and/or on the stack. */
+
+#define CCALL_HANDLE_COMPLEXRET CCALL_HANDLE_STRUCTRET
+
+#define CCALL_HANDLE_COMPLEXRET2 \
+  memcpy(dp, sp, ctr->size);  /* Copy complex from GPRs. */
+
+#define CCALL_HANDLE_COMPLEXARG \
+  /* Pass complex by value in  GPRs. */
+
+#define CCALL_HANDLE_STRUCTARG \
+  /* Pass all structs by value in registers and/or on the stack. */
+
+#define CCALL_HANDLE_REGARG \
+  if (ngpr < maxgpr) { \
+    if (n > 1)  /* if size more then 8 bytes, then skip odd space*/ \
+      ngpr += (ngpr%2); \
+    dp = &cc->gpr[ngpr]; \
+    if (ngpr + n > maxgpr) { \
+      nsp += ngpr + n - maxgpr; \
+      if (nsp > CCALL_MAXSTACK) goto err_nyi;  /* Too many arguments. */ \
+      ngpr = maxgpr; \
+    } else { \
+      ngpr += n; \
+    } \
+    goto done; \
+  }
+
 #else
 #error "Missing calling convention definitions for this architecture"
 #endif
@@ -1036,6 +1071,10 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
     err_nyi:
       lj_err_caller(L, LJ_ERR_FFI_NYICALL);
     }
+#ifdef LJ_TARGET_E2K
+    if (n > 1)  /* if size more then 8 bytes, then skip odd space*/ \
+      nsp += (nsp%2);
+#endif
     dp = &cc->stack[nsp];
     nsp += n;
     isva = 0;
@@ -1101,8 +1140,21 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 #endif
   cc->nsp = nsp;
   cc->spadj = (CCALL_SPS_FREE + CCALL_SPS_EXTRA)*CTSIZE_PTR;
+#if LJ_TARGET_E2K
+  /* Add reserved space for arguments in registers */
+  cc->spadj += (((nsp-CCALL_SPS_FREE)*CTSIZE_PTR + 15u) & ~15u);
+  cc->spadj += 8*8;
+  if ((int32_t)ctr->size > 64) {
+    if (cc->spadj < ctr->size)
+      cc->spadj = ctr->size;
+    cc->ret_size = ctr->size;
+  } else {
+    cc->ret_size = 0;
+  }
+#else
   if (nsp > CCALL_SPS_FREE)
     cc->spadj += (((nsp-CCALL_SPS_FREE)*CTSIZE_PTR + 15u) & ~15u);
+#endif
   return gcsteps;
 }
 

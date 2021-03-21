@@ -511,6 +511,11 @@ void lj_ccallback_mcode_free(CTState *cts)
   if (ctype_isfp(ctr->info) && ctr->size == sizeof(float)) \
     ((float *)dp)[1] = *(float *)dp;
 
+#elif LJ_TARGET_E2K
+
+#define CALLBACK_HANDLE_REGARG
+/* Unsupported yet. */
+
 #else
 #error "Missing calling convention definitions for this architecture"
 #endif

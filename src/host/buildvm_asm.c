@@ -110,9 +110,20 @@ static void emit_asm_words(BuildCtx *ctx, uint8_t *p, int n)
 static void emit_asm_wordreloc(BuildCtx *ctx, uint8_t *p, int n,
 			       const char *sym)
 {
+#if LJ_TARGET_E2K
+  /*
+   * This will work only in case of disp operation would be
+   * the only one in wide instruction.
+   * Remove generated code (2 syls), and put asm instead.
+   */
+  emit_asm_words(ctx, p, n-8);
+  fprintf(ctx->fp, "\tdisp %%ctpr1, %s\n", sym);
+  return;
+#else
   uint32_t ins;
   emit_asm_words(ctx, p, n-4);
   ins = *(uint32_t *)(p+n-4);
+#endif
 #if LJ_TARGET_ARM
   if ((ins & 0xff000000u) == 0xfa000000u) {
     fprintf(ctx->fp, "\tblx %s\n", sym);
@@ -156,6 +167,8 @@ static void emit_asm_wordreloc(BuildCtx *ctx, uint8_t *p, int n,
 	  "Error: unsupported opcode %08x for %s symbol relocation.\n",
 	  ins, sym);
   exit(1);
+#elif LJ_TARGET_E2K
+  /* ureachable */
 #else
 #error "missing relocation support for this architecture"
 #endif
