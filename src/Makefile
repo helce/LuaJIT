@@ -268,7 +268,11 @@ ifneq (,$(findstring LJ_TARGET_MIPS ,$(TARGET_TESTARCH)))
     TARGET_LJARCH= mips
   endif
 else
+ifneq (,$(findstring LJ_TARGET_E2K, $(TARGET_TESTARCH)))
+  TARGET_LJARCH= e2k
+else
   $(error Unsupported target architecture)
+endif
 endif
 endif
 endif

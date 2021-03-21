@@ -144,6 +144,8 @@ typedef uint32_t RegCost;
 #include "lj_target_ppc.h"
 #elif LJ_TARGET_MIPS
 #include "lj_target_mips.h"
+#elif LJ_TARGET_E2K
+#include "lj_target_e2k.h"
 #else
 #error "Missing include for target CPU"
 #endif
