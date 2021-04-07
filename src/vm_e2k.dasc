@@ -3540,6 +3540,7 @@ static void build_subroutines(BuildCtx *ctx)
     |<
     | lddsm 3, BASE, 0x10, TMP0
     | addd 4, 0x0, 0x0, RA
+    | adds 5, 0x0, 0xffffffff, TMP1
     | nop 1
     |>
     |<
@@ -3555,13 +3556,13 @@ static void build_subroutines(BuildCtx *ctx)
     | pass pred0, p0
     | pass pred1, p1
     | pass pred2, p2
-    | landp ~p1, ~p2, p4
-    | landp ~p4, ~p0, p5
-    | pass p5, pred0
+    | landp ~p0, p2, p4
+    | landp ~p1, p2, p5
+    | pass p4, pred0
+    | pass p5, pred1
     |>
     |<
-    | fdtoistr 3, TMP0, TMP1, pred2
-    | adds 4, 0x0, 0xffffffff, TMP1, ~pred2
+    | fdtoistr 3, TMP0, TMP1, pred1
     | ct ctpr3, ~pred0
     |>
     |<
@@ -7632,7 +7633,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_CALLMT:
         | // ins_AD RA = base*8, RD = extra_nargs*8
         |<
-        | ldd 0, STACK, MULTRES, TMP0
+        | ldw 0, STACK, MULTRES, TMP0
         | nop 2
         |>
         | addd 3, RD, TMP0, RD
@@ -8226,7 +8227,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_RETM:
         | // ins_AD RA = results*8, RD = extra_nresults*8
         |<
-        | ldd 0, STACK, MULTRES, TMP0
+        | ldw 0, STACK, MULTRES, TMP0
         | nop 2
         |>
         | addd 3, RD, TMP0, RD                 // MULTRES >=8, so RD >= 8
