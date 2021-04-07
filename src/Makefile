@@ -514,8 +514,12 @@ LUAJIT_T= luajit
 ALL_T= $(LUAJIT_T) $(LUAJIT_A) $(LUAJIT_SO) $(HOST_T)
 ALL_HDRGEN= lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h \
 	    host/buildvm_arch.h
+ifeq (e2k,$(TARGET_LJARCH))
 ALL_HDRGEN_PREGEN= lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h
 ALL_GEN= $(LJVM_S) $(ALL_HDRGEN_PREGEN) $(LIB_VMDEFP)
+else
+ALL_GEN= $(LJVM_S) $(ALL_HDRGEN) $(LIB_VMDEFP)
+endif
 WIN_RM= *.obj *.lib *.exp *.dll *.exe *.manifest *.pdb *.ilk
 ALL_RM= $(ALL_T) $(ALL_GEN) *.o host/*.o $(WIN_RM)
 
@@ -639,9 +643,11 @@ $(MINILUA_T): $(MINILUA_O)
 	$(E) "HOSTLINK  $@"
 	$(Q)$(HOST_CC) $(HOST_ALDFLAGS) -o $@ $(MINILUA_O) $(MINILUA_LIBS) $(HOST_ALIBS)
 
+ifneq (e2k,$(TARGET_LJARCH))
 host/buildvm_arch.h: $(DASM_DASC) $(DASM_DEP) $(DASM_DIR)/*.lua lj_arch.h lua.h luaconf.h
 	$(E) "DYNASM    $@"
-#	$(Q)$(DASM) $(DASM_FLAGS) -o $@ $(DASM_DASC)
+	$(Q)$(DASM) $(DASM_FLAGS) -o $@ $(DASM_DASC)
+endif
 
 host/buildvm.o: $(DASM_DIR)/dasm_*.h
 

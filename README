@@ -1,6 +1,9 @@
 README for LuaJIT 2.1.0-beta3
 -----------------------------
 
+Basic port AOT part of LuaJIT for e2k(Elbrus) architecture.
+Codegen cannot be published due to NDA. Using pregenerated version set as default.
+
 LuaJIT is a Just-In-Time (JIT) compiler for the Lua programming language.
 
 Project Homepage: https://luajit.org/
