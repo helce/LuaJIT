@@ -1121,7 +1121,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd 2, DISPATCH, DISPATCH_GL(tmptv), CARG2, pred0 // Store fn->l.env in g->tmptv
     |>
     |<
-    | std 2, RB, 0x0, RA, pred0
+    | std 2, CARG2, 0x0, RA, pred0
     | ct ctpr1
     |>
     |
