@@ -61,7 +61,7 @@
 ** The POSIX/x64 interpreter only saves r12/r13 for INT (e.g. PS4).
 */
 
-#if (defined(__GNUC__) || defined(__clang__)) && (LJ_TARGET_X64 || defined(LUAJIT_UNWIND_EXTERNAL)) && !LJ_NO_UNWIND
+#if (defined(__GNUC__) || defined(__clang__)) && (LJ_TARGET_X64 || LJ_TARGET_E2K || defined(LUAJIT_UNWIND_EXTERNAL)) && !LJ_NO_UNWIND
 #define LJ_UNWIND_EXT	1
 #elif LJ_TARGET_WINDOWS
 #define LJ_UNWIND_EXT	1
