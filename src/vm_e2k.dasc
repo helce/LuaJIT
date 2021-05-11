@@ -2362,9 +2362,9 @@ static void build_subroutines(BuildCtx *ctx)
     | sxt 4, 0x2, CARG2, CARG2
     | nop 1
     |>
-    | shld 3, CARG2, 0x3, CARG2
+    | shld 3, CARG2, 0x3, RA
     |<
-    | addd 3, RD, CARG2, RD, pred0
+    | addd 3, RD, RA, RD, pred0
     | ct ctpr2, ~pred0                      // Not in array part?
     |>
     |<
@@ -2391,7 +2391,6 @@ static void build_subroutines(BuildCtx *ctx)
     |<
     | cmpedb 3, CARG4, 0x0, pred0
     | addd 4, RB, 0x0, CARG1
-    | addd 5, RA, 0x0, CARG2
     | nop 2
     |>
     |<
@@ -2418,8 +2417,8 @@ static void build_subroutines(BuildCtx *ctx)
     | pass p4, pred0
     |>
     |<
-    | addd 3, 0x0, (0+1)*8, RD, pred0
-    | ct ctpr3, pred0
+    | addd 3, 0x0, (0+1)*8, RD, ~pred0
+    | ct ctpr3, ~pred0
     |>
     | // Copy array slot.
     |<
