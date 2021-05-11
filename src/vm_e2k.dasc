@@ -1406,11 +1406,11 @@ static void build_subroutines(BuildCtx *ctx)
     |<
     | ldd 0, STACK, SAVE_L, RB
     | addd 1, RB, 0x0, CARG4
-    | subd 2, PC, 0x4, PC
     | andd 3, RD, U64x(0x00007fff,0xffffffff), RD
     |>
     |<
     | ldh 0, PC, PC_RD, TMP0
+    | subd 2, PC, 0x4, PC
     | subd 1, PC, BCBIAS_J*4, TMP1
     | nop 1
     |>
