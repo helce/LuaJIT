@@ -2151,20 +2151,20 @@ static void build_subroutines(BuildCtx *ctx)
     |>
     |<
     | pass pred0, p0
-    | pass pred2, p1
-    | pass pred3, p2
-    | landp ~p0, p1, p4
-    | landp p4, p2, p5
+    | pass pred1, p1
+    | pass pred2, p2
+    | pass pred3, p3
+    | landp ~p0, p2, p4
+    | landp p4, p3, p5
+    | landp ~p1, p2, p6 
     | pass p5, pred0
+    | pass p6, pred2
     |>
-    |<
-    | addd 3, 0x0, (1+1)*8, RD, ~pred2
     | ct ctpr1, ~pred0
-    |>
     | // Only handles the string or number case inline.
     | // A __tostring method in the string base metatable is ignored.
     |<
-    | addd 4, 0x0, (1+1)*8, RD, pred1
+    | addd 4, 0x0, (1+1)*8, RD, ~pred2
     | std 5, BASE, 0xfffffff0, RB, pred1
     | ct ctpr2, pred1
     |>
