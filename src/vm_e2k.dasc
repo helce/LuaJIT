@@ -7860,13 +7860,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |>
         |<
         | ldw 3, RB, TAB->asize, TMP1
-        | shls 4, RC, 0x3, TMP0
+        | shls 4, RC, 0x3, CARG4
         | ldd 5, RB, TAB->array, ITYPE
-        | nop 1
         |>
+        | sxt 3, 0x6, CARG4, CARG4
         |1: // Traverse array part.
         |<
-        | lddsm 3, ITYPE, TMP0, TMP0
+        | lddsm 3, ITYPE, CARG4, TMP0
         | cmpbsb 4, RC, TMP1, pred0
         | nop 2
         |>
@@ -7877,8 +7877,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | nop 2
         |>
         |<
-        | adds 0, RC, 0x1, RC, pred1        // Skip holes in array part.
-        | shls 3, RC, 0x3, TMP0, pred1
+        | adds 3, RC, 0x1, RC, pred1        // Skip holes in array part.
+        | addd 4, CARG4, 0x8, CARG4, pred1
         | ct ctpr2, pred1
         |>
         | // Copy array slot to returned value.
