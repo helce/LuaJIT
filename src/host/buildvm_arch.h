@@ -458,17 +458,17 @@ static const unsigned int build_actionlist[12714] = {
   0xff444044,0xff830000,0xff820000,0xff810000,0x20040011,0xe68cd803,0x00000000,
   0x60614060,0xff820000,0x20011022,0xc0000460,0x6784d887,0x00000000,0xfffffff8,
   0x44600000,0xe0000023,0xe78cd88e,0x3fc28901,0x2784d989,0xfffffff0,0x00000000,
-  0xff810000,0x60000092,0x20010220,0x0cc20101,0x00000000,0x20000001,0x1901c301,
-  0x20011012,0xc0000860,0x118e018e,0x44600000,0xa0000112,0x668ec089,0xe78ec08c,
+  0xff810000,0x60000092,0x20010220,0x0cc20101,0x00000000,0x20000001,0x1901c38b,
+  0x20011012,0xc0000860,0x118e8b8e,0x44600000,0xa0000112,0x668ec089,0xe78ec08c,
   0x00000000,0x20000091,0x2089d840,0x00000000,0x00000000,0xff810000,0x20011022,
   0xc0000c40,0x11c0d88e,0x00000000,0x00000000,0x44600000,0xff820000,0xa0001023,
   0xc0000c20,0x11c0d88e,0x2784d98c,0xfffffff8,0x00000000,0xff810000,0xff50000b,
-  0x00004001,0x40000000,0xff311002,0xe0000113,0x2103c040,0x118cc000,0x118bc001,
+  0x00004001,0x40000000,0xff311002,0x60000112,0x2103c040,0x118cc000,0x00000000,
   0x20011022,0xc0000c40,0x11c0d88e,0x00000000,0x00000000,0x44600000,0xff820000,
   0x00009012,0xc0000420,0x50000008,0x00000000,0x1c004124,0xe700c08c,0x2100c040,
   0xe600c089,0xc0000000,0x00000000,0xff423044,0x08000091,0xa089d841,0x00000000,
-  0x00000000,0xff810000,0x00040000,0x60616260,0x20011022,0xc0000c40,0x11c0d88e,
-  0x00000000,0x00000000,0x44600000,0xff820000,0xa0001023,0xc0000c20,0x11c0d88e,
+  0x00000000,0xff810000,0x00040000,0x60616260,0x20011022,0xc0000c60,0x11c0d88e,
+  0x00000000,0x00000000,0x44e00000,0xff820000,0xa0001023,0xc0000c20,0x11c0d88e,
   0x2784d98c,0xfffffff8,0x00000000,0xff810000,0xff50004e,0xe0004134,0x6784c08c,
   0x11c0dc01,0xe784da00,0x40000000,0xfffffff0,0x00007fff,0xffffffff,0xff444043,
   0xf0000024,0x01000100,0x118cc08a,0x1d8cd08f,0x018c018c,0x0000002f,0xe0000033,
@@ -4577,9 +4577,9 @@ static void build_subroutines(BuildCtx *ctx)
     //| sxt 4, 0x2, CARG2, CARG2
     //| nop 1
     //|>
-    //| shld 3, CARG2, 0x3, CARG2
+    //| shld 3, CARG2, 0x3, RA
     //|<
-    //| addd 3, RD, CARG2, RD, pred0
+    //| addd 3, RD, RA, RD, pred0
     //| ct ctpr2, ~pred0                      // Not in array part?
     //|>
     //|<
@@ -4606,7 +4606,6 @@ static void build_subroutines(BuildCtx *ctx)
     //|<
     //| cmpedb 3, CARG4, 0x0, pred0
     //| addd 4, RB, 0x0, CARG1
-    //| addd 5, RA, 0x0, CARG2
     //| nop 2
     //|>
     //|<
@@ -4633,8 +4632,8 @@ static void build_subroutines(BuildCtx *ctx)
     //| pass p4, pred0
     //|>
     //|<
-    //| addd 3, 0x0, (0+1)*8, RD, pred0
-    //| ct ctpr3, pred0
+    //| addd 3, 0x0, (0+1)*8, RD, ~pred0
+    //| ct ctpr3, ~pred0
     //|>
     //| // Copy array slot.
     //|<
@@ -4675,7 +4674,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|>
     //| ct ctpr1, ~pred0
     dasm_put(Dst, 2970, LJ_TNIL, (1+3)*8, (2+1)*8, Dt6(->asize), LJ_TISNUM, LJ_TTAB, Dt6(->hmask), Dt6(->array), LJ_TNIL, (0+1)*8, (1+2)*8, (0+1)*8, LJ_TNIL, (0+1)*8, (1+2)*8, Dt6(->metatable), LJ_TTAB, (1+1)*8, LJ_TFUNC, Dt8(->upvalue[0]));
-#line 2462 "vm_e2k.dasc"
+#line 2461 "vm_e2k.dasc"
 #if LJ_52
     //|<
     //| cmpedb 3, TMP0, 0x0, pred0
@@ -4683,7 +4682,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|>
     //| ct ctpr1, ~pred0
     dasm_put(Dst, 3168);
-#line 2468 "vm_e2k.dasc"
+#line 2467 "vm_e2k.dasc"
 #endif
     //|<
     //| ldd 0, BASE, 0xfffffff8, PC
@@ -5176,11 +5175,11 @@ static void build_subroutines(BuildCtx *ctx)
     //| coroutine_resume_wrap 1        // coroutine.resume
     dasm_put(Dst, 3173, (1+3)*8, (1+1)*8, DISPATCH_GL(hookmask), HOOK_ACTIVE_SHIFT, 16+FRAME_PCALL, LJ_TFUNC, Dt7(->pc), LJ_TFUNC, (2+1)*8, 0x18+FRAME_PCALL, DISPATCH_GL(hookmask), HOOK_ACTIVE_SHIFT, LJ_TFUNC, Dt7(->pc));
     dasm_put(Dst, 3387, LJ_TTHREAD, (1+1)*8, Dt1(->status), Dt1(->cframe), Dt1(->top), Dt1(->base), LUA_YIELD, LUA_YIELD, Dt1(->maxstack), Dt1(->top), Dt1(->base), Dt1(->top), ~LJ_VMST_INTERP, Dt1(->base), DISPATCH_GL(cur_L), DISPATCH_GL(vmstate), LUA_YIELD);
-#line 2958 "vm_e2k.dasc"
+#line 2957 "vm_e2k.dasc"
     //| coroutine_resume_wrap 0        // coroutine.wrap
     dasm_put(Dst, 3558, Dt1(->maxstack), Dt1(->top), Dt1(->base), Dt1(->top), (1+1)*8, FRAME_TYPE, Dt1(->top), Dt1(->top), (1+2)*8, Dt1(->top), Dt1(->base));
     dasm_put(Dst, 3700, Dt8(->upvalue[0].gcr), Dt1(->status), Dt1(->cframe), Dt1(->top), Dt1(->base), LUA_YIELD, LUA_YIELD, Dt1(->maxstack), Dt1(->top), Dt1(->base), Dt1(->top), ~LJ_VMST_INTERP, Dt1(->base), DISPATCH_GL(cur_L), DISPATCH_GL(vmstate), LUA_YIELD);
-#line 2959 "vm_e2k.dasc"
+#line 2958 "vm_e2k.dasc"
     //|
     //|->ff_coroutine_yield:
     //|<
@@ -5220,7 +5219,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|
     //|->ff_math_abs:
     dasm_put(Dst, 3859, Dt1(->maxstack), Dt1(->top), Dt1(->base), Dt1(->top), 1*8, FRAME_TYPE, Dt1(->top), Dt1(->base), Dt1(->cframe), CFRAME_RESUME, Dt1(->base), Dt1(->top), Dt1(->cframe), LUA_YIELD, Dt1(->status));
-#line 2997 "vm_e2k.dasc"
+#line 2996 "vm_e2k.dasc"
     //|<
     //| ldd 3, BASE, 0x0, RB
     //| disp ctpr1, ->fff_fallback
@@ -5377,7 +5376,7 @@ static void build_subroutines(BuildCtx *ctx)
     //| math_round floor
     //| math_round ceil
     dasm_put(Dst, 4019, LJ_TISNUM, (1+1)*8, (1+1)*8, LJ_TISNUM, (1+1)*8, (1+1)*8, LJ_TNIL, FRAME_TYPE, LJ_TISNUM);
-#line 3152 "vm_e2k.dasc"
+#line 3151 "vm_e2k.dasc"
     //|
     //|->ff_math_log:
     //|<
@@ -5479,19 +5478,19 @@ static void build_subroutines(BuildCtx *ctx)
     //| math_extern sin
     //| math_extern cos
     dasm_put(Dst, 4199, LJ_TISNUM, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8);
-#line 3252 "vm_e2k.dasc"
+#line 3251 "vm_e2k.dasc"
     //| math_extern tan
     //| math_extern asin
     //| math_extern acos
     //| math_extern atan
     dasm_put(Dst, 4375, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8);
-#line 3256 "vm_e2k.dasc"
+#line 3255 "vm_e2k.dasc"
     //| math_extern sinh
     //| math_extern cosh
     //| math_extern tanh
     //| math_extern2 pow
     dasm_put(Dst, 4520, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8);
-#line 3260 "vm_e2k.dasc"
+#line 3259 "vm_e2k.dasc"
     //| math_extern2 atan2
     //| math_extern2 fmod
     //|
@@ -5538,7 +5537,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|
     //|->ff_math_frexp:
     dasm_put(Dst, 4665, (2+1)*8, LJ_TISNUM, LJ_TISNUM, (2+1)*8, LJ_TISNUM, LJ_TISNUM, (2+1)*8, LJ_TISNUM, LJ_TISNUM, (2+1)*8, LJ_TISNUM, LJ_TISNUM, (1+1)*8);
-#line 3305 "vm_e2k.dasc"
+#line 3304 "vm_e2k.dasc"
     //|<
     //| ldd 3, BASE, 0x0, CARG1
     //| disp ctpr2, ->fff_fallback
@@ -5666,7 +5665,7 @@ static void build_subroutines(BuildCtx *ctx)
     //| math_minmax math_min, fmind
     //| math_minmax math_max, fmaxd
     dasm_put(Dst, 4840, LJ_TISNUM, (1+1)*8, (1+2)*8, LJ_TISNUM, (1+1)*8, (1+2)*8, LJ_TISNUM, (1+1)*8, LJ_TISNUM, LJ_TISNUM, (1+1)*8);
-#line 3431 "vm_e2k.dasc"
+#line 3430 "vm_e2k.dasc"
     //|
     //|//-- String library -----------------------------------------------------
     //|
@@ -5742,7 +5741,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|
     //|->fff_newstr:
     dasm_put(Dst, 5011, LJ_TISNUM, LJ_TSTR, (1+1)*8, Dt5(->len), Dt5([1]), (0+1)*8, DISPATCH_GL(gc.threshold), DISPATCH_GL(gc.total), Dt1(->base), Dt1(->top), Dt1(->top), Dt1(->base), LJ_TISNUM, (1+1)*8);
-#line 3505 "vm_e2k.dasc"
+#line 3504 "vm_e2k.dasc"
     //| disp ctpr1, extern lj_str_new         // (lua_State *L, char *str, size_t l)
     //|<
     //| ldd 0, STACK, SAVE_L, RB
@@ -5870,7 +5869,7 @@ static void build_subroutines(BuildCtx *ctx)
     //| adds 3, 0x0, 0x1, RA, pred0           // start = 1
     //|2:
     dasm_put(Dst, 5173, Dt1(->base), Dt1(->base), LJ_TSTR, (1+1)*8, DISPATCH_GL(gc.threshold), DISPATCH_GL(gc.total), Dt1(->base), Dt1(->top), Dt1(->top), Dt1(->base), (1+2)*8, (1+2)*8, LJ_TISNUM, Dt5(->len), LJ_TISNUM, LJ_TSTR);
-#line 3631 "vm_e2k.dasc"
+#line 3630 "vm_e2k.dasc"
     //|<
     //| subs 3, TMP1, RA, TMP1
     //| addd 4, RB, RA, CARG1
@@ -5978,10 +5977,10 @@ static void build_subroutines(BuildCtx *ctx)
     //| ffstring_op reverse
     //| ffstring_op lower
     dasm_put(Dst, 5370, sizeof(GCstr)-1, DISPATCH_GL(gc.threshold), DISPATCH_GL(gc.total), (1+1)*8, Dt1(->base), Dt1(->top), Dt1(->top), Dt1(->base), DISPATCH_GL(tmpbuf), DtE(->b), LJ_TSTR, Dt1(->base), DtE(->L), DtE(->p), Dt1(->base), LJ_TSTR, (1+1)*8);
-#line 3737 "vm_e2k.dasc"
+#line 3736 "vm_e2k.dasc"
     //| ffstring_op upper
     dasm_put(Dst, 5526, DISPATCH_GL(gc.threshold), DISPATCH_GL(gc.total), (1+1)*8, Dt1(->base), Dt1(->top), Dt1(->top), Dt1(->base), DISPATCH_GL(tmpbuf), DtE(->b), LJ_TSTR, Dt1(->base), DtE(->L), DtE(->p), Dt1(->base), LJ_TSTR, (1+1)*8);
-#line 3738 "vm_e2k.dasc"
+#line 3737 "vm_e2k.dasc"
     //|
     //|//-- Bit library --------------------------------------------------------
     //|
@@ -6050,11 +6049,11 @@ static void build_subroutines(BuildCtx *ctx)
     //|
     //|.ffunc_bit_op band, ands
     dasm_put(Dst, 5666, DISPATCH_GL(gc.threshold), DISPATCH_GL(gc.total), (1+1)*8, Dt1(->base), Dt1(->top), Dt1(->top), Dt1(->base), DISPATCH_GL(tmpbuf), DtE(->b), LJ_TSTR, Dt1(->base), DtE(->L), DtE(->p), Dt1(->base), LJ_TSTR, (1+1)*8);
-#line 3805 "vm_e2k.dasc"
+#line 3804 "vm_e2k.dasc"
     //|.ffunc_bit_op bor, ors
     //|.ffunc_bit_op bxor, xors
     dasm_put(Dst, 5806, (1+1)*8, LJ_TISNUM, LJ_TISNUM, (1+1)*8, LJ_TISNUM, LJ_TISNUM, (1+1)*8, LJ_TISNUM);
-#line 3807 "vm_e2k.dasc"
+#line 3806 "vm_e2k.dasc"
     //|
     //|.ffunc_bit tobit
     //|<
@@ -6133,7 +6132,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|.ffunc_bit_sh lshift, shls
     //|.ffunc_bit_sh rshift, shrs
     dasm_put(Dst, 5987, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (1+1)*8, LJ_TISNUM, (2+1)*8, LJ_TISNUM, LJ_TISNUM);
-#line 3884 "vm_e2k.dasc"
+#line 3883 "vm_e2k.dasc"
     //|.ffunc_bit_sh arshift, sars
     //|.ffunc_bit_sh rol, scls
     //|.ffunc_bit_sh ror, scrs
@@ -6142,7 +6141,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|
     //|->fff_fallback:                        // Call fast function fallback handler.
     dasm_put(Dst, 6182, (2+1)*8, LJ_TISNUM, LJ_TISNUM, (2+1)*8, LJ_TISNUM, LJ_TISNUM, (2+1)*8, LJ_TISNUM, LJ_TISNUM, (2+1)*8, LJ_TISNUM, LJ_TISNUM);
-#line 3891 "vm_e2k.dasc"
+#line 3890 "vm_e2k.dasc"
     //| // BASE = new base, RD = (nargs+1)*8
     //|<
     //| ldd 0, STACK, SAVE_L, RB
@@ -6286,7 +6285,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|
     //|->vm_record:                           // Dispatch target for recording phase.
     dasm_put(Dst, 6375, Dt1(->maxstack), Dt8(->f), Dt1(->top), 8*LUA_MINSTACK, Dt1(->base), Dt1(->base), Dt1(->top), Dt7(->pc), FRAME_TYPE, LJ_TFUNC, Dt7(->pc), LJ_TFUNC, Dt7(->pc), LUA_MINSTACK, Dt1(->base));
-#line 4033 "vm_e2k.dasc"
+#line 4032 "vm_e2k.dasc"
     //| do_fault
     //|
     //|->vm_rethook:                          // Dispatch target for return hooks.
@@ -6342,7 +6341,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|
     //|->cont_hook:                           // Continue from hook yield.
     dasm_put(Dst, 6617, DISPATCH_GL(hookmask), HOOK_ACTIVE, DISPATCH_GL(hookmask), HOOK_ACTIVE, LUA_MASKLINE|LUA_MASKCOUNT, DISPATCH_GL(hookcount), DISPATCH_GL(hookcount), LUA_MASKLINE, Dt1(->base), Dt1(->base), GG_DISP2STATIC);
-#line 4087 "vm_e2k.dasc"
+#line 4086 "vm_e2k.dasc"
     //| do_fault
     //|
     //|->vm_callhook:                         // Dispatch target for call hooks.
@@ -6373,7 +6372,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|
     //|->vm_profhook:                         // Dispatch target for profiler hook.
     dasm_put(Dst, 6767, Dt1(->base), Dt1(->top), Dt1(->base), Dt1(->top));
-#line 4116 "vm_e2k.dasc"
+#line 4115 "vm_e2k.dasc"
 #if LJ_HASPROFILE
     //| ldd 0, STACK, SAVE_L, RB
     //| std 2, RB, L->base, BASE
@@ -6386,7 +6385,7 @@ static void build_subroutines(BuildCtx *ctx)
     //| subd 0, PC, 0x4, PC
     //| ins_next
     dasm_put(Dst, 6841, Dt1(->base), Dt1(->base));
-#line 4127 "vm_e2k.dasc"
+#line 4126 "vm_e2k.dasc"
 #endif
     //|
     //|//-----------------------------------------------------------------------
@@ -6534,7 +6533,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|.if FFI
     //| .type CTSTATE, CTState
 #define DtF(_V) (int)(ptrdiff_t)&(((CTState *)0)_V)
-#line 4273 "vm_e2k.dasc"
+#line 4272 "vm_e2k.dasc"
     //| disp ctpr1, extern lj_ccallback_leave // (CTState *cts, TValue *o)
     //|<
     //| ldd 0, STACK, SAVE_L, RA
@@ -6560,11 +6559,11 @@ static void build_subroutines(BuildCtx *ctx)
     //|
     //|->vm_ffi_call:                         // Call C function via FFI.
     dasm_put(Dst, 6893, DISPATCH_GL(ctype_state), DtF(->L), Dt1(->base), Dt1(->top), DtF(->cb.gpr[0]));
-#line 4297 "vm_e2k.dasc"
+#line 4296 "vm_e2k.dasc"
     //|.if FFI
     //| .type CCSTATE, CCallState
 #define Dt10(_V) (int)(ptrdiff_t)&(((CCallState *)0)_V)
-#line 4299 "vm_e2k.dasc"
+#line 4298 "vm_e2k.dasc"
     //|<
     //| setwd wsz = 0x8, nfx = 0x1, dbl = 0x0
     //| setbn rsz = 0x3, rbs = 0x4, rcur = 0x0
@@ -6683,7 +6682,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|.endif
     //|//-----------------------------------------------------------------------
     dasm_put(Dst, 7144, Dt10(->nsp), Dt10(->spadj), offsetof(CCallState, stack), Dt10(->gpr[2]), Dt10(->gpr[1]), Dt10(->func), Dt10(->gpr[0]), Dt10(->gpr[5]), Dt10(->gpr[4]), Dt10(->gpr[3]), Dt10(->gpr[6]), Dt10(->gpr[7]), Dt10(->ret_size), Dt10(->ret_stack), Dt10(->gpr[1]), Dt10(->gpr[0]), Dt10(->gpr[3]), Dt10(->gpr[2]), Dt10(->gpr[5]), Dt10(->gpr[4]), Dt10(->gpr[7]), Dt10(->gpr[6]));
-#line 4416 "vm_e2k.dasc"
+#line 4415 "vm_e2k.dasc"
 }
 
 /* Generate the code for a single instruction. */
@@ -6692,7 +6691,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     int vk = 0;
     //|=>defop:
     dasm_put(Dst, 7309, defop);
-#line 4423 "vm_e2k.dasc"
+#line 4422 "vm_e2k.dasc"
 
     switch (op) {
 
@@ -6715,7 +6714,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| subd 1, CARG3, BCBIAS_J*4, CARG1
         //|>
         dasm_put(Dst, 7311, BCBIAS_J*4);
-#line 4444 "vm_e2k.dasc"
+#line 4443 "vm_e2k.dasc"
         switch (op) {
         case BC_ISLT:
         //|<
@@ -6724,7 +6723,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| sard 5, RD, 0x2f, RB
         //|>
         dasm_put(Dst, 7326);
-#line 4451 "vm_e2k.dasc"
+#line 4450 "vm_e2k.dasc"
           break;
         case BC_ISGE:
         //|<
@@ -6733,7 +6732,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| sard 5, RD, 0x2f, RB
         //|>
         dasm_put(Dst, 7333);
-#line 4458 "vm_e2k.dasc"
+#line 4457 "vm_e2k.dasc"
           break;
         case BC_ISLE:
         //|<
@@ -6742,7 +6741,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| sard 5, RD, 0x2f, RB
         //|>
         dasm_put(Dst, 7340);
-#line 4465 "vm_e2k.dasc"
+#line 4464 "vm_e2k.dasc"
           break;
         case BC_ISGT:
         //|<
@@ -6751,7 +6750,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| sard 5, RD, 0x2f, RB
         //|>
         dasm_put(Dst, 7347);
-#line 4472 "vm_e2k.dasc"
+#line 4471 "vm_e2k.dasc"
           break;
         default: break;
         }
@@ -6802,7 +6801,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1
         dasm_put(Dst, 7354, LJ_TISNUM, LJ_TISNUM);
-#line 4521 "vm_e2k.dasc"
+#line 4520 "vm_e2k.dasc"
         break;
 
     case BC_ISEQV: case BC_ISNEV:
@@ -6849,21 +6848,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1, ~pred0
         //|>
         dasm_put(Dst, 7399, BCBIAS_J*4, LJ_TISNUM, LJ_TISNUM);
-#line 4566 "vm_e2k.dasc"
+#line 4565 "vm_e2k.dasc"
         if (vk) {
         //| ct ctpr2, ~pred1
         //|1: // EQ: Branch to the target.
         //| addd 0, CARG2, CARG1, PC
         //|2: // NE: Fallthrough to next instruction.
         dasm_put(Dst, 7440);
-#line 4571 "vm_e2k.dasc"
+#line 4570 "vm_e2k.dasc"
         } else {
         //| ct ctpr3, pred1
         //|2: // NE: Branch to the target.
         //| addd 0, CARG2, CARG1, PC
         //|1: // EQ: Fallthrough to next instruction.
         dasm_put(Dst, 7447);
-#line 4576 "vm_e2k.dasc"
+#line 4575 "vm_e2k.dasc"
         }
         //|<
         //| ldw 0, PC, 0x0, TMP0
@@ -6940,21 +6939,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr2, ~pred0                  //  Or 'no __eq' flag set?
         dasm_put(Dst, 7454, LJ_TCDATA, LJ_TCDATA, LJ_TISTABUD, Dt6(->metatable), Dt6(->nomm), 1<<MM_eq);
-#line 4651 "vm_e2k.dasc"
+#line 4650 "vm_e2k.dasc"
         if (vk) {
         //|<
         //| addd 3, 0x0, 0x0, RB              // ne = 0
         //| ct ctpr1                          // Handle __eq metamethod.
         //|>
         dasm_put(Dst, 7532);
-#line 4656 "vm_e2k.dasc"
+#line 4655 "vm_e2k.dasc"
         } else {
         //|<
         //| addd 3, 0x0, 0x1, RB              // ne = 1
         //| ct ctpr1                          // Handle __eq metamethod.
         //|>
         dasm_put(Dst, 7537);
-#line 4661 "vm_e2k.dasc"
+#line 4660 "vm_e2k.dasc"
         }
         break;
 
@@ -6990,7 +6989,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1, ~pred1
         //|>
         dasm_put(Dst, 7542, BCBIAS_J*4, LJ_TSTR);
-#line 4695 "vm_e2k.dasc"
+#line 4694 "vm_e2k.dasc"
         if (vk) {
         //| ct ctpr2, ~pred0
         //|1: // EQ: Branch to the target.
@@ -7000,7 +6999,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|3:
         //|.endif
         dasm_put(Dst, 7578);
-#line 4703 "vm_e2k.dasc"
+#line 4702 "vm_e2k.dasc"
         } else {
         //| ct ctpr3, pred0
         //|.if not FFI
@@ -7010,7 +7009,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| addd 0, CARG2, CARG1, PC
         //|1: // EQ: Fallthrough to next instruction.
         dasm_put(Dst, 7585);
-#line 4711 "vm_e2k.dasc"
+#line 4710 "vm_e2k.dasc"
         }
         //|<
         //| ldw 0, PC, 0x0, TMP0
@@ -7047,7 +7046,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|.endif
         dasm_put(Dst, 7592, LJ_TCDATA);
-#line 4746 "vm_e2k.dasc"
+#line 4745 "vm_e2k.dasc"
         break;
 
     case BC_ISEQN: case BC_ISNEN:
@@ -7085,7 +7084,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| pass p4, pred1
         //|>
         dasm_put(Dst, 7628, BCBIAS_J*4, LJ_TISNUM);
-#line 4782 "vm_e2k.dasc"
+#line 4781 "vm_e2k.dasc"
         if (vk) {
         //| ct ctpr2, ~pred1
         //|1: // EQ: Branch to the target.
@@ -7095,7 +7094,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|3:
         //|.endif
         dasm_put(Dst, 7662);
-#line 4790 "vm_e2k.dasc"
+#line 4789 "vm_e2k.dasc"
         } else {
         //| ct ctpr3, pred1
         //|.if not FFI
@@ -7105,7 +7104,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| addd 0, CARG2, CARG1, PC
         //|1: // EQ: Fallthrough to next instruction.
         dasm_put(Dst, 7669);
-#line 4798 "vm_e2k.dasc"
+#line 4797 "vm_e2k.dasc"
         }
         //|<
         //| ldw 0, PC, 0x0, TMP0
@@ -7142,7 +7141,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|.endif
         dasm_put(Dst, 7676, LJ_TCDATA);
-#line 4833 "vm_e2k.dasc"
+#line 4832 "vm_e2k.dasc"
         break;
 
     case BC_ISEQP: case BC_ISNEP:
@@ -7178,21 +7177,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| pass p5, pred1
         //|>
         dasm_put(Dst, 7712, BCBIAS_J*4, LJ_TCDATA);
-#line 4867 "vm_e2k.dasc"
+#line 4866 "vm_e2k.dasc"
         if (vk) {
         //|<
         //| ct ctpr1, pred2
         //| addd 0, CARG2, CARG1, PC, pred0
         //|>
         dasm_put(Dst, 7744);
-#line 4872 "vm_e2k.dasc"
+#line 4871 "vm_e2k.dasc"
         } else {
         //|<
         //| ct ctpr1, pred2
         //| addd 0, CARG2, CARG1, PC, pred1
         //|>
         dasm_put(Dst, 7749);
-#line 4877 "vm_e2k.dasc"
+#line 4876 "vm_e2k.dasc"
         }
         //|<
         //| ldw 0, PC, 0x0, TMP0
@@ -7219,7 +7218,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1
         dasm_put(Dst, 7754);
-#line 4902 "vm_e2k.dasc"
+#line 4901 "vm_e2k.dasc"
         break;
 
     /* -- Unary test and copy ops ------------------------------------------- */
@@ -7244,20 +7243,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| nop 1
         //|>
         dasm_put(Dst, 7779, BCBIAS_J*4, LJ_TISTRUECOND);
-#line 4925 "vm_e2k.dasc"
+#line 4924 "vm_e2k.dasc"
         if (op == BC_IST || op == BC_ISTC) {
         //| addd 0, CARG2, CARG1, PC, pred0
         dasm_put(Dst, 7800);
-#line 4927 "vm_e2k.dasc"
+#line 4926 "vm_e2k.dasc"
         } else {
         //| addd 0, CARG2, CARG1, PC, ~pred0
         dasm_put(Dst, 7805);
-#line 4929 "vm_e2k.dasc"
+#line 4928 "vm_e2k.dasc"
         }
         if (op == BC_ISTC || op == BC_ISFC) {
         //| std 5, BASE, RA, RD
         dasm_put(Dst, 7810);
-#line 4932 "vm_e2k.dasc"
+#line 4931 "vm_e2k.dasc"
         }
         //|<
         //| ldw 0, PC, 0x0, TMP0
@@ -7284,7 +7283,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1
         dasm_put(Dst, 7813);
-#line 4957 "vm_e2k.dasc"
+#line 4956 "vm_e2k.dasc"
         break;
 
     case BC_ISTYPE:
@@ -7327,7 +7326,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr2
         //|>
         dasm_put(Dst, 7838);
-#line 4998 "vm_e2k.dasc"
+#line 4997 "vm_e2k.dasc"
         break;
 
     case BC_ISNUM:
@@ -7366,7 +7365,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 7884, LJ_TISNUM);
-#line 5035 "vm_e2k.dasc"
+#line 5034 "vm_e2k.dasc"
         break;
 
     /* -- Unary ops --------------------------------------------------------- */
@@ -7402,7 +7401,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 7923);
-#line 5069 "vm_e2k.dasc"
+#line 5068 "vm_e2k.dasc"
         break;
 
     case BC_NOT:
@@ -7447,7 +7446,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 7952, LJ_TISTRUECOND);
-#line 5112 "vm_e2k.dasc"
+#line 5111 "vm_e2k.dasc"
         break;
 
     case BC_UNM:
@@ -7491,7 +7490,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr2
         //|>
         dasm_put(Dst, 8000, LJ_TISNUM);
-#line 5154 "vm_e2k.dasc"
+#line 5153 "vm_e2k.dasc"
         break;
 
     case BC_LEN:
@@ -7551,7 +7550,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //|2:
         dasm_put(Dst, 8043, LJ_TTAB, LJ_TSTR, Dt5(->len));
-#line 5212 "vm_e2k.dasc"
+#line 5211 "vm_e2k.dasc"
 #if LJ_52
         //|<
         //| disp ctpr1, >4
@@ -7565,7 +7564,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1, ~pred0
         //|3:
         dasm_put(Dst, 8105, Dt6(->metatable));
-#line 5224 "vm_e2k.dasc"
+#line 5223 "vm_e2k.dasc"
 #endif
         //|->BC_LEN_Z:
         //|<
@@ -7594,7 +7593,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr2
         //|>
         dasm_put(Dst, 8117);
-#line 5251 "vm_e2k.dasc"
+#line 5250 "vm_e2k.dasc"
 #if LJ_52
         //|4: // Check for __len.
         //|<
@@ -7609,7 +7608,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1, ~pred0
         //| ct ctpr2                          // 'no __len' flag NOT set: check.
         dasm_put(Dst, 8143, Dt6(->nomm), 1<<MM_len);
-#line 5264 "vm_e2k.dasc"
+#line 5263 "vm_e2k.dasc"
 #endif
         break;
 
@@ -7729,7 +7728,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
           break;
          }
         dasm_put(Dst, 8238);
-#line 5370 "vm_e2k.dasc"
+#line 5369 "vm_e2k.dasc"
         break;
 
     case BC_SUBVN: case BC_SUBNV: case BC_SUBVV:
@@ -7748,7 +7747,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
           break;
          }
         dasm_put(Dst, 8343);
-#line 5375 "vm_e2k.dasc"
+#line 5374 "vm_e2k.dasc"
         break;
 
     case BC_MULVN: case BC_MULNV: case BC_MULVV:
@@ -7767,7 +7766,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
           break;
          }
         dasm_put(Dst, 8448);
-#line 5380 "vm_e2k.dasc"
+#line 5379 "vm_e2k.dasc"
         break;
 
     case BC_DIVVN: case BC_DIVNV: case BC_DIVVV:
@@ -7786,7 +7785,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
           break;
          }
         dasm_put(Dst, 8553);
-#line 5385 "vm_e2k.dasc"
+#line 5384 "vm_e2k.dasc"
         break;
 
     case BC_MODVN: case BC_MODNV: case BC_MODVV:
@@ -7815,7 +7814,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1, ~pred0
         //|>
         dasm_put(Dst, 8580, LJ_TISNUM);
-#line 5412 "vm_e2k.dasc"
+#line 5411 "vm_e2k.dasc"
           break;
         case BC_MODNV:
         //|<
@@ -7838,7 +7837,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1, ~pred0
         dasm_put(Dst, 8602, LJ_TISNUM);
-#line 5433 "vm_e2k.dasc"
+#line 5432 "vm_e2k.dasc"
           break;
         case BC_MODVV:
         //|<
@@ -7869,7 +7868,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1, ~pred0
         dasm_put(Dst, 8624, LJ_TISNUM, LJ_TISNUM);
-#line 5462 "vm_e2k.dasc"
+#line 5461 "vm_e2k.dasc"
           break;
         default:
           break;
@@ -7896,7 +7895,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 8653);
-#line 5487 "vm_e2k.dasc"
+#line 5486 "vm_e2k.dasc"
         break;
 
     case BC_POW:
@@ -7953,7 +7952,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 8680, LJ_TISNUM, LJ_TISNUM);
-#line 5542 "vm_e2k.dasc"
+#line 5541 "vm_e2k.dasc"
         break;
 
     case BC_CAT:
@@ -8019,7 +8018,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 8739, Dt1(->base), Dt1(->base));
-#line 5606 "vm_e2k.dasc"
+#line 5605 "vm_e2k.dasc"
         break;
 
     /* -- Constant ops ------------------------------------------------------ */
@@ -8061,7 +8060,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1
         dasm_put(Dst, 8811, LJ_TSTR);
-#line 5646 "vm_e2k.dasc"
+#line 5645 "vm_e2k.dasc"
         break;
 
     case BC_KCDATA:
@@ -8106,7 +8105,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //|.endif
         dasm_put(Dst, 8853, LJ_TCDATA);
-#line 5689 "vm_e2k.dasc"
+#line 5688 "vm_e2k.dasc"
         break;
 
     case BC_KSHORT:
@@ -8145,7 +8144,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 8895);
-#line 5726 "vm_e2k.dasc"
+#line 5725 "vm_e2k.dasc"
         break;
 
     case BC_KNUM:
@@ -8180,7 +8179,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 8930);
-#line 5759 "vm_e2k.dasc"
+#line 5758 "vm_e2k.dasc"
         break;
 
     case BC_KPRI:
@@ -8216,7 +8215,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 8959);
-#line 5793 "vm_e2k.dasc"
+#line 5792 "vm_e2k.dasc"
         break;
 
     case BC_KNIL:
@@ -8265,7 +8264,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr2
         //|>
         dasm_put(Dst, 8992, LJ_TNIL);
-#line 5840 "vm_e2k.dasc"
+#line 5839 "vm_e2k.dasc"
         break;
 
     /* -- Upvalue and function ops ------------------------------------------ */
@@ -8313,7 +8312,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 9044, offsetof(GCfuncL, uvptr), DtA(->v));
-#line 5886 "vm_e2k.dasc"
+#line 5885 "vm_e2k.dasc"
         break;
 
     case BC_USETV:
@@ -8399,7 +8398,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| movtd 0, TMP1, ctpr3
         //| ct ctpr3
         dasm_put(Dst, 9089, offsetof(GCfuncL, uvptr), DtA(->v), DtA(->closed), TV2MARKOFS, LJ_GC_BLACK, GG_DISP2G, LJ_TISGCV, Dt4(->gch.marked), LJ_GC_WHITES, LJ_TNUMX - LJ_TISGCV);
-#line 5970 "vm_e2k.dasc"
+#line 5969 "vm_e2k.dasc"
         break;
 #undef TV2MARKOFS
 
@@ -8478,7 +8477,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| movtd 0, TMP1, ctpr3
         //| ct ctpr3
         dasm_put(Dst, 9187, LJ_TSTR, offsetof(GCfuncL, uvptr), DtA(->marked), DtA(->v), LJ_GC_BLACK, DtA(->closed), Dt4(->gch.marked), GG_DISP2G, LJ_GC_WHITES);
-#line 6047 "vm_e2k.dasc"
+#line 6046 "vm_e2k.dasc"
         break;
 
     case BC_USETN:
@@ -8522,7 +8521,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 9279, offsetof(GCfuncL, uvptr), DtA(->v));
-#line 6089 "vm_e2k.dasc"
+#line 6088 "vm_e2k.dasc"
         break;
 
     case BC_USETP:
@@ -8565,7 +8564,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 9324, offsetof(GCfuncL, uvptr), DtA(->v));
-#line 6130 "vm_e2k.dasc"
+#line 6129 "vm_e2k.dasc"
         break;
 
     case BC_UCLO:
@@ -8620,7 +8619,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr2
         //|>
         dasm_put(Dst, 9371, BCBIAS_J*4, Dt1(->openupval), Dt1(->base), Dt1(->base));
-#line 6183 "vm_e2k.dasc"
+#line 6182 "vm_e2k.dasc"
         break;
 
     case BC_FNEW:
@@ -8678,7 +8677,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1
         dasm_put(Dst, 9435, Dt1(->base), Dt1(->base), LJ_TFUNC);
-#line 6239 "vm_e2k.dasc"
+#line 6238 "vm_e2k.dasc"
         break;
 
     /* -- Table ops --------------------------------------------------------- */
@@ -8758,7 +8757,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr3
         //|>
         dasm_put(Dst, 9504, DISPATCH_GL(gc.threshold), DISPATCH_GL(gc.total), Dt1(->base), Dt1(->base), LJ_TTAB);
-#line 6317 "vm_e2k.dasc"
+#line 6316 "vm_e2k.dasc"
         break;
 
     case BC_TDUP:
@@ -8833,7 +8832,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr3
         //|>
         dasm_put(Dst, 9602, DISPATCH_GL(gc.threshold), DISPATCH_GL(gc.total), Dt1(->base), LJ_TTAB, Dt1(->base));
-#line 6390 "vm_e2k.dasc"
+#line 6389 "vm_e2k.dasc"
         break;
 
     case BC_GGET:
@@ -8968,7 +8967,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr3
         //|>
         dasm_put(Dst, 9698, LJ_TSTR, Dt7(->env), Dt5(->sid), Dt6(->hmask), Dt6(->node), DtB(->next), DtB(->key), DtB(->val), DtB(->next), LJ_TNIL, DtB(->key), LJ_TNIL, Dt6(->metatable), Dt6(->nomm), 1<<MM_index);
-#line 6523 "vm_e2k.dasc"
+#line 6522 "vm_e2k.dasc"
         break;
 
     case BC_GSET:
@@ -8993,7 +8992,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1
         dasm_put(Dst, 9857, Dt7(->env));
-#line 6546 "vm_e2k.dasc"
+#line 6545 "vm_e2k.dasc"
         break;
 
     case BC_TGETV:
@@ -9117,7 +9116,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr2
         //|>
         dasm_put(Dst, 9882, Dt6(->array), Dt6(->asize), LJ_TISNUM, LJ_TTAB, LJ_TNIL, Dt6(->metatable), Dt6(->nomm), 1<<MM_index, LJ_TSTR, LJ_TSTR, Dt6(->node), Dt5(->sid), Dt6(->hmask));
-#line 6668 "vm_e2k.dasc"
+#line 6667 "vm_e2k.dasc"
         break;
 
     case BC_TGETS:
@@ -9256,7 +9255,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr3
         //|>
         dasm_put(Dst, 10028, LJ_TSTR, LJ_TTAB, Dt5(->sid), Dt6(->hmask), Dt6(->node), DtB(->next), DtB(->key), DtB(->val), DtB(->next), LJ_TNIL, DtB(->key), LJ_TNIL, Dt6(->metatable), Dt6(->nomm), 1<<MM_index);
-#line 6805 "vm_e2k.dasc"
+#line 6804 "vm_e2k.dasc"
         break;
 
     case BC_TGETB:
@@ -9340,7 +9339,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr3
         //|>
         dasm_put(Dst, 10195, Dt6(->array), Dt6(->asize), Dt6(->metatable), LJ_TTAB, Dt6(->nomm), 1<<MM_index, LJ_TNIL);
-#line 6887 "vm_e2k.dasc"
+#line 6886 "vm_e2k.dasc"
         break;
 
     case BC_TGETR:
@@ -9397,7 +9396,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr2
         //|>
         dasm_put(Dst, 10278, Dt6(->array), Dt6(->asize));
-#line 6942 "vm_e2k.dasc"
+#line 6941 "vm_e2k.dasc"
         break;
 
     case BC_TSETV:
@@ -9527,7 +9526,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr3
         //|>
         dasm_put(Dst, 10334, LJ_TTAB, Dt6(->asize), LJ_TISNUM, Dt6(->metatable), LJ_TSTR, Dt6(->array), Dt6(->marked), Dt6(->nomm), 1<<MM_newindex, LJ_TNIL, LJ_GC_BLACK, Dt6(->marked), DISPATCH_GL(gc.grayagain), Dt6(->gclist), ~LJ_GC_BLACK, DISPATCH_GL(gc.grayagain), Dt6(->marked));
-#line 7070 "vm_e2k.dasc"
+#line 7069 "vm_e2k.dasc"
         break;
 
     case BC_TSETS:
@@ -9665,7 +9664,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //|2:
         dasm_put(Dst, 10486, LJ_TTAB, Dt5(->sid), LJ_TSTR, Dt6(->hmask), Dt6(->node), sizeof(Node), Dt6(->nomm), DtB(->next), DtB(->key), Dt6(->metatable), DISPATCH_GL(gc.grayagain), Dt6(->marked), DtB(->key), DtB(->next), Dt6(->nomm), ~LJ_GC_BLACK, LJ_TNIL, Dt6(->marked), 1<<MM_newindex, LJ_GC_BLACK, Dt6(->marked), DISPATCH_GL(gc.grayagain), Dt6(->gclist));
-#line 7206 "vm_e2k.dasc"
+#line 7205 "vm_e2k.dasc"
         //| // End of hash chain: key not found, add a new one.
         //| // But check for __newindex first.
         //|<
@@ -9750,7 +9749,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 10656, Dt6(->metatable), DISPATCH_GL(tmptv), Dt6(->nomm), 1<<MM_newindex, Dt1(->base), Dt6(->marked), Dt1(->base), Dt6(->marked), DISPATCH_GL(gc.grayagain), LJ_GC_BLACK, DISPATCH_GL(gc.grayagain), ~LJ_GC_BLACK, Dt6(->marked), Dt6(->gclist));
-#line 7289 "vm_e2k.dasc"
+#line 7288 "vm_e2k.dasc"
         break;
 
     case BC_TSETB:
@@ -9852,7 +9851,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr3
         //|>
         dasm_put(Dst, 10763, Dt6(->array), LJ_TTAB, Dt6(->asize), Dt6(->marked), Dt6(->metatable), Dt6(->nomm), LJ_GC_BLACK, 1<<MM_newindex, LJ_TNIL, Dt6(->marked), DISPATCH_GL(gc.grayagain), Dt6(->gclist), ~LJ_GC_BLACK, DISPATCH_GL(gc.grayagain), Dt6(->marked));
-#line 7389 "vm_e2k.dasc"
+#line 7388 "vm_e2k.dasc"
         break;
 
     case BC_TSETR:
@@ -9917,7 +9916,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr2
         //|>
         dasm_put(Dst, 10890, Dt6(->array), DISPATCH_GL(gc.grayagain), Dt6(->marked), Dt6(->marked), Dt6(->asize), ~LJ_GC_BLACK, LJ_GC_BLACK, Dt6(->marked), DISPATCH_GL(gc.grayagain), Dt6(->gclist));
-#line 7452 "vm_e2k.dasc"
+#line 7451 "vm_e2k.dasc"
         break;
 
     case BC_TSETM:
@@ -10041,7 +10040,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr2                          // Retry.
         //|>
         dasm_put(Dst, 10972, DISPATCH_GL(gc.grayagain), Dt6(->marked), Dt6(->marked), Dt6(->array), Dt6(->asize), ~LJ_GC_BLACK, LJ_GC_BLACK, Dt6(->marked), DISPATCH_GL(gc.grayagain), Dt6(->gclist), Dt1(->base), Dt1(->base));
-#line 7574 "vm_e2k.dasc"
+#line 7573 "vm_e2k.dasc"
         break;
 
     /* -- Calls and vararg handling ----------------------------------------- */
@@ -10057,7 +10056,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| andd 4, RD, 0x7f8, RD
         dasm_put(Dst, 11118);
-#line 7588 "vm_e2k.dasc"
+#line 7587 "vm_e2k.dasc"
         if (op == BC_CALLM) {
           //|<
           //| sard 3, RB, 0x2f, ITYPE
@@ -10065,14 +10064,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
           //| addd 5, RD, TMP0, RD
           //|>
           dasm_put(Dst, 11130);
-#line 7594 "vm_e2k.dasc"
+#line 7593 "vm_e2k.dasc"
         } else {
           //|<
           //| sard 3, RB, 0x2f, ITYPE
           //| andd 4, RB, U64x(0x00007fff,0xffffffff), RB
           //|>
           dasm_put(Dst, 11139);
-#line 7599 "vm_e2k.dasc"
+#line 7598 "vm_e2k.dasc"
         }
         //|<
         //| cmpesb 3, ITYPE, LJ_TFUNC, pred0
@@ -10106,7 +10105,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| movtd 0, TMP0, ctpr1
         //| ct ctpr1
         dasm_put(Dst, 11146, Dt7(->pc), LJ_TFUNC);
-#line 7631 "vm_e2k.dasc"
+#line 7630 "vm_e2k.dasc"
         break;
 
     case BC_CALLMT:
@@ -10118,7 +10117,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| addd 3, RD, TMP0, RD
         //| // Fall through. Assumes BC_CALLT follows and ins AD is a no-op.
         dasm_put(Dst, 11183);
-#line 7641 "vm_e2k.dasc"
+#line 7640 "vm_e2k.dasc"
         break;
 
     case BC_CALLT:
@@ -10259,7 +10258,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ldd 0, KBASE, PC2PROTO(k), KBASE
         //| ct ctpr1
         dasm_put(Dst, 11188, LJ_TFUNC, FRAME_TYPE, FRAME_VARG, FRAME_TYPEP, FRAME_VARG, FRAME_TYPE, Dt7(->pc), Dt7(->ffid), Dt7(->pc), PC2PROTO(k));
-#line 7780 "vm_e2k.dasc"
+#line 7779 "vm_e2k.dasc"
         break;
 
     case BC_ITERC:
@@ -10324,7 +10323,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| movtd 0, TMP0, ctpr1
         //| ct ctpr1
         dasm_put(Dst, 11349, LJ_TFUNC, Dt7(->pc));
-#line 7843 "vm_e2k.dasc"
+#line 7842 "vm_e2k.dasc"
         break;
 
     case BC_ITERN:
@@ -10465,7 +10464,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr3
         //|>
         dasm_put(Dst, 11417, Dt6(->array), Dt6(->asize), LJ_TNIL, BCBIAS_J*4, Dt6(->node), sizeof(Node), Dt6(->hmask), DtB(->key), DtB(->val), DtB(->val), LJ_TNIL, BCBIAS_J*4);
-#line 7982 "vm_e2k.dasc"
+#line 7981 "vm_e2k.dasc"
         break;
 
     case BC_ISNEXT:
@@ -10548,7 +10547,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 11568, BCBIAS_J*4, BC_JMP, BC_ITERC, LJ_TNIL, Dt8(->ffid), LJ_TTAB, LJ_TFUNC, FF_next_N);
-#line 8063 "vm_e2k.dasc"
+#line 8062 "vm_e2k.dasc"
         break;
 
     case BC_VARG:
@@ -10710,7 +10709,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 11666, LJ_TNIL, FRAME_VARG+0x10, (0+1)*8, Dt1(->maxstack), Dt1(->base), Dt1(->top), Dt1(->top), Dt1(->base));
-#line 8223 "vm_e2k.dasc"
+#line 8222 "vm_e2k.dasc"
         break;
 
     /* -- Returns ----------------------------------------------------------- */
@@ -10724,7 +10723,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| addd 3, RD, TMP0, RD                 // MULTRES >=8, so RD >= 8
         //| // Fall through. Assumes BC_RET follows and ins_AD is a no-op.
         dasm_put(Dst, 11851);
-#line 8235 "vm_e2k.dasc"
+#line 8234 "vm_e2k.dasc"
         break;
 
     case BC_RET:
@@ -10843,7 +10842,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 11856, FRAME_VARG, FRAME_TYPE, FRAME_TYPEP, LJ_TNIL, Dt7(->pc), PC2PROTO(k));
-#line 8352 "vm_e2k.dasc"
+#line 8351 "vm_e2k.dasc"
         break;
 
     case BC_RET0: case BC_RET1:
@@ -10876,7 +10875,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr3, pred1
         dasm_put(Dst, 11987, FRAME_VARG, FRAME_TYPE, FRAME_TYPEP);
-#line 8383 "vm_e2k.dasc"
+#line 8382 "vm_e2k.dasc"
         if (op == BC_RET1) {
           //|<
           //| shld 2, CARG2, 0x3, CARG2, pred0
@@ -10886,7 +10885,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
           //| ct ctpr1, ~pred0
           //|>
           dasm_put(Dst, 12019);
-#line 8391 "vm_e2k.dasc"
+#line 8390 "vm_e2k.dasc"
         } else {
           //|<
           //| shld 2, CARG2, 0x3, CARG2, pred0
@@ -10894,12 +10893,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
           //| ct ctpr1, ~pred0
           //|>
           dasm_put(Dst, 12028);
-#line 8397 "vm_e2k.dasc"
+#line 8396 "vm_e2k.dasc"
         }
         if (op == BC_RET1) {
           //| std 5, BASE, 0xfffffff0, RB
           dasm_put(Dst, 12035);
-#line 8400 "vm_e2k.dasc"
+#line 8399 "vm_e2k.dasc"
         }
         //|2:
         //|<
@@ -10955,7 +10954,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 12040, Dt7(->pc), PC2PROTO(k), LJ_TNIL);
-#line 8454 "vm_e2k.dasc"
+#line 8453 "vm_e2k.dasc"
         break;
 
     /* -- Loops and branches ------------------------------------------------ */
@@ -11036,7 +11035,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 12113, BCBIAS_J*4);
-#line 8533 "vm_e2k.dasc"
+#line 8532 "vm_e2k.dasc"
         break;
 
     case BC_FORI:
@@ -11119,7 +11118,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1
         dasm_put(Dst, 12177, BCBIAS_J*4, LJ_TISNUM, LJ_TISNUM, LJ_TISNUM, LJ_TISNUM);
-#line 8614 "vm_e2k.dasc"
+#line 8613 "vm_e2k.dasc"
         break;
 
     case BC_ITERL:
@@ -11174,7 +11173,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1
         dasm_put(Dst, 12260, BCBIAS_J*4, LJ_TNIL);
-#line 8667 "vm_e2k.dasc"
+#line 8666 "vm_e2k.dasc"
         break;
 
     case BC_LOOP:
@@ -11188,7 +11187,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| // ins_A RA = base*8, RD = target*8 (loop extent)
         //| ins_next
         dasm_put(Dst, 12305);
-#line 8679 "vm_e2k.dasc"
+#line 8678 "vm_e2k.dasc"
         break;
 
     case BC_JLOOP:
@@ -11227,7 +11226,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //| ct ctpr1
         dasm_put(Dst, 12330, BCBIAS_J*4);
-#line 8716 "vm_e2k.dasc"
+#line 8715 "vm_e2k.dasc"
         break;
 
     /* -- Function headers -------------------------------------------------- */
@@ -11308,7 +11307,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr3
         //|>
         dasm_put(Dst, 12362, PC2PROTO(k)-4, LJ_TNIL, PC2PROTO(numparams)-4, Dt1(->maxstack));
-#line 8795 "vm_e2k.dasc"
+#line 8794 "vm_e2k.dasc"
         break;
 
     case BC_JFUNCV:
@@ -11413,7 +11412,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1, ~pred0
         //| ct ctpr2
         dasm_put(Dst, 12430, FRAME_VARG+0x8, PC2PROTO(numparams)-4, Dt1(->maxstack), PC2PROTO(k)-4, LJ_TNIL);
-#line 8898 "vm_e2k.dasc"
+#line 8897 "vm_e2k.dasc"
         break;
 
     case BC_FUNCC:
@@ -11470,7 +11469,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 12544, Dt1(->base), 8*LUA_MINSTACK, Dt1(->maxstack), Dt8(->f), Dt1(->top), ~LJ_VMST_C, DISPATCH_GL(vmstate), ~LJ_VMST_INTERP, Dt1(->base), DISPATCH_GL(vmstate), DISPATCH_GL(cur_L), Dt1(->top));
-#line 8953 "vm_e2k.dasc"
+#line 8952 "vm_e2k.dasc"
         break;
 
     case BC_FUNCCW:
@@ -11529,7 +11528,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         dasm_put(Dst, 12627, Dt1(->base), 8*LUA_MINSTACK, Dt1(->maxstack), DISPATCH_GL(wrapf), Dt8(->f), Dt1(->top), ~LJ_VMST_C, DISPATCH_GL(vmstate), ~LJ_VMST_INTERP, Dt1(->base), DISPATCH_GL(vmstate), DISPATCH_GL(cur_L), Dt1(->top));
-#line 9010 "vm_e2k.dasc"
+#line 9009 "vm_e2k.dasc"
         break;
 
     /* ---------------------------------------------------------------------- */
@@ -11547,7 +11546,7 @@ static int build_backend(BuildCtx *ctx)
     build_subroutines(ctx);
     //|.code_op
     dasm_put(Dst, 12713);
-#line 9026 "vm_e2k.dasc"
+#line 9025 "vm_e2k.dasc"
     for (op = 0 ; op < BC__MAX; op++)
         build_ins(ctx, (BCOp)op, op);
     return BC__MAX;
