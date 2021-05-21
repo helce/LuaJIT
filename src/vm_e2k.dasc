@@ -2156,7 +2156,7 @@ static void build_subroutines(BuildCtx *ctx)
     | pass pred3, p3
     | landp ~p0, p2, p4
     | landp p4, p3, p5
-    | landp ~p1, p2, p6 
+    | landp ~p1, p2, p6
     | pass p5, pred0
     | pass p6, pred2
     |>
@@ -7084,11 +7084,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |<
         | shldsm 2, CARG6, 0x3, CARG6
         | sard 3, RB, 0x2f, ITYPE
+        |>
+        |<
+        | lddsm 2, CARG6, DISPATCH, CARG6
         | cmpesb 4, ITYPE, LJ_TTAB, pred0
         | nop 2
         |>
         |<
-        | lddsm 2, CARG6, DISPATCH, CARG6
         | andd 4, RB, U64x(0x00007fff,0xffffffff), RB
         | ct ctpr1, ~pred0
         |>
