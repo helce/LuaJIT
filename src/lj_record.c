@@ -259,6 +259,14 @@ TRef lj_record_constify(jit_State *J, cTValue *o)
     return 0;  /* Can't represent lightuserdata (pointless). */
 }
 
+/* Emit a VLOAD with the correct type. */
+TRef lj_record_vload(jit_State *J, TRef ref, IRType t)
+{
+  TRef tr = emitir(IRTG(IR_VLOAD, t), ref, 0);
+  if (irtype_ispri(t)) tr = TREF_PRI(t);  /* Canonicalize primitives. */
+  return tr;
+}
+
 /* -- Record loop ops ----------------------------------------------------- */
 
 /* Loop event. */
@@ -832,6 +840,7 @@ void lj_record_ret(jit_State *J, BCReg rbase, ptrdiff_t gotresults)
     J->base -= cbase;
     J->base[--rbase] = TREF_TRUE;  /* Prepend true to results. */
     frame = frame_prevd(frame);
+    J->needsnap = 1;  /* Stop catching on-trace errors. */
   }
   /* Return to lower frame via interpreter for unhandled cases. */
   if (J->framedepth == 0 && J->pt && bc_isret(bc_op(*J->pc)) &&
@@ -918,6 +927,9 @@ void lj_record_ret(jit_State *J, BCReg rbase, ptrdiff_t gotresults)
       TRef tr = gotresults ? J->base[cbase+rbase] : TREF_NIL;
       if (bslot != J->maxslot) {  /* Concatenate the remainder. */
 	TValue *b = J->L->base, save;  /* Simulate lower frame and result. */
+	/* Can't handle MM_concat + CALLT + fast func side-effects. */
+	if (J->postproc != LJ_POST_NONE)
+	  lj_trace_err(J, LJ_TRERR_NYIRETL);
 	J->base[J->maxslot] = tr;
 	copyTV(J->L, &save, b-(2<<LJ_FR2));
 	if (gotresults)
@@ -1433,6 +1445,16 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	return 0;  /* No result yet. */
       }
     }
+#if LJ_HASBUFFER
+    /* The index table of buffer objects is treated as immutable. */
+    if (ix->mt == TREF_NIL && !ix->val &&
+	tref_isudata(ix->tab) && udataV(&ix->tabv)->udtype == UDTYPE_BUFFER &&
+	tref_istab(ix->mobj) && tref_isstr(ix->key) && tref_isk(ix->key)) {
+      cTValue *val = lj_tab_getstr(tabV(&ix->mobjv), strV(&ix->keyv));
+      TRef tr = lj_record_constify(J, val);
+      if (tr) return tr;  /* Specialize to the value, i.e. a method. */
+    }
+#endif
     /* Otherwise retry lookup with metaobject. */
     ix->tab = ix->mobj;
     copyTV(J->L, &ix->tabv, &ix->mobjv);
@@ -1828,9 +1850,7 @@ static void rec_varg(jit_State *J, BCReg dst, ptrdiff_t nresults)
 	  IRType t = itype2irt(&J->L->base[i-1-LJ_FR2-nvararg]);
 	  TRef aref = emitir(IRT(IR_AREF, IRT_PGC),
 			     vbase, lj_ir_kint(J, (int32_t)i));
-	  TRef tr = emitir(IRTG(IR_VLOAD, t), aref, 0);
-	  if (irtype_ispri(t)) tr = TREF_PRI(t);  /* Canonicalize primitives. */
-	  J->base[dst+i] = tr;
+	  J->base[dst+i] = lj_record_vload(J, aref, t);
 	}
       } else {
 	emitir(IRTGI(IR_LE), fr, lj_ir_kint(J, frofs));
@@ -1877,8 +1897,7 @@ static void rec_varg(jit_State *J, BCReg dst, ptrdiff_t nresults)
 		       lj_ir_kint(J, frofs-(8<<LJ_FR2)));
 	t = itype2irt(&J->L->base[idx-2-LJ_FR2-nvararg]);
 	aref = emitir(IRT(IR_AREF, IRT_PGC), vbase, tridx);
-	tr = emitir(IRTG(IR_VLOAD, t), aref, 0);
-	if (irtype_ispri(t)) tr = TREF_PRI(t);  /* Canonicalize primitives. */
+	tr = lj_record_vload(J, aref, t);
       }
       J->base[dst-2-LJ_FR2] = tr;
       J->maxslot = dst-1-LJ_FR2;
@@ -1935,9 +1954,9 @@ static TRef rec_cat(jit_State *J, BCReg baseslot, BCReg topslot)
     tr = hdr = emitir(IRT(IR_BUFHDR, IRT_PGC),
 		      lj_ir_kptr(J, &J2G(J)->tmpbuf), IRBUFHDR_RESET);
     do {
-      tr = emitir(IRT(IR_BUFPUT, IRT_PGC), tr, *trp++);
+      tr = emitir(IRTG(IR_BUFPUT, IRT_PGC), tr, *trp++);
     } while (trp <= top);
-    tr = emitir(IRT(IR_BUFSTR, IRT_STR), tr, hdr);
+    tr = emitir(IRTG(IR_BUFSTR, IRT_STR), tr, hdr);
     J->maxslot = (BCReg)(xbase - J->base);
     if (xbase == base) return tr;  /* Return simple concatenation result. */
     /* Pass partial result. */
@@ -2050,7 +2069,7 @@ void lj_record_ins(jit_State *J)
   /* Need snapshot before recording next bytecode (e.g. after a store). */
   if (J->needsnap) {
     J->needsnap = 0;
-    lj_snap_purge(J);
+    if (J->pt) lj_snap_purge(J);
     lj_snap_add(J);
     J->mergesnap = 1;
   }
