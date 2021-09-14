@@ -3706,7 +3706,7 @@ static void build_subroutines(BuildCtx *ctx)
     | std 5, RB, L->base, BASE
     |>
     |<
-    | std 2, CARG1, SBUF->p, RC
+    | std 2, CARG1, SBUF->w, RC
     | std 5, STACK, SAVE_PC, PC
     | call ctpr1, wbs = 0x8
     |>

@@ -5976,7 +5976,7 @@ static void build_subroutines(BuildCtx *ctx)
     //|
     //| ffstring_op reverse
     //| ffstring_op lower
-    dasm_put(Dst, 5365, sizeof(GCstr)-1, DISPATCH_GL(gc.threshold), DISPATCH_GL(gc.total), (1+1)*8, Dt1(->base), Dt1(->top), Dt1(->top), Dt1(->base), DISPATCH_GL(tmpbuf), DtE(->b), LJ_TSTR, Dt1(->base), DtE(->L), DtE(->p), Dt1(->base), LJ_TSTR, (1+1)*8);
+    dasm_put(Dst, 5365, sizeof(GCstr)-1, DISPATCH_GL(gc.threshold), DISPATCH_GL(gc.total), (1+1)*8, Dt1(->base), Dt1(->top), Dt1(->top), Dt1(->base), DISPATCH_GL(tmpbuf), DtE(->b), LJ_TSTR, Dt1(->base), DtE(->L), DtE(->w), Dt1(->base), LJ_TSTR, (1+1)*8);
 #line 3736 "vm_e2k.dasc"
     //| ffstring_op upper
     dasm_put(Dst, 5521, DISPATCH_GL(gc.threshold), DISPATCH_GL(gc.total), (1+1)*8, Dt1(->base), Dt1(->top), Dt1(->top), Dt1(->base), DISPATCH_GL(tmpbuf), DtE(->b), LJ_TSTR, Dt1(->base), DtE(->L), DtE(->p), Dt1(->base), LJ_TSTR, (1+1)*8);
