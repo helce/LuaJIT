@@ -2198,8 +2198,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->ff_next:
     |<
-    | lddsm 2, STACK, SAVE_L, RB
-    | lddsm 3, BASE, 0x0, CARG2
+    | lddsm 3, BASE, 0x0, CARG1
     | disp ctpr2, ->fff_fallback
     |>
     |<
@@ -2208,58 +2207,55 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 1
     |>
     |<
-    | sardsm 3, CARG2, 0x2f, ITYPE
-    | anddsm 4, CARG2, U64x(0x00007fff,0xffffffff), CARG2
+    | sardsm 3, CARG1, 0x2f, ITYPE
+    | anddsm 4, CARG1, U64x(0x00007fff,0xffffffff), CARG1
     |>
     |<
     | addd 0, 0x0, LJ_TNIL, TMP0
     | cmpesbsm 3, ITYPE, LJ_TTAB, pred2
     |>
-    | disp ctpr1, extern lj_tab_next        // (lua_State *L, GCtab *t, TValue *key)
+    | disp ctpr1, extern lj_tab_next        // (GCtab *t, cTValue *key, TValue *o)
     |<
     | std 5, BASE, 0x8, TMP0, pred1         // Set missing 2nd arg to nil
     | pass pred0, p0
     | pass pred2, p1
     | landp ~p0, p1, p4
     | pass p4, pred0
+    | nop 2
     |>
     |<
     | ldd 0, BASE, 0xfffffff8, PC, pred0
     | ct ctpr2, ~pred0
     |>
     |<
-    | std 2, RB, L->base, BASE
-    | std 5, RB, L->top, BASE
-    | nop 1
-    |>
-    |<
-    | addd 0, BASE, 0x8, CARG3
-    | addd 1, RB, 0x0, CARG1
-    | std 2, STACK, SAVE_PC, PC
+    | addd 0, BASE, 0x8, CARG2
+    | subd 1, BASE, 0x10, CARG3
     | call ctpr1, wbs = 0x8
     |>
-    | // Flag returned.
+    | // 1=found, 0=end, -1=error returned.
     |<
-    | cmpedb 0, CRET1, 0x0, pred0
-    | ldd 3, RB, L->base, BASE
-    | lddsm 5, BASE, 0x8, TMP1
+    | cmpledb 0, CRET1, 0x0, pred0
+    | cmpldb 1, CRET1, 0x0, pred1
+    | addd 3, 0x0, LJ_TNIL, TMP0
     | disp ctpr2, ->fff_res
     |>
     |<
-    | lddsm 0, BASE, 0x10, CARG2
-    | addd 1, 0x0, LJ_TNIL, TMP0
+    | disp ctpr1, ->fff_fallback
     | nop 3
     |>
     |<
-    | addd 4, 0x0, (1+1)*8, RD, pred0
-    | std 5, BASE, 0xfffffff0, TMP0, pred0  // End of traversal: return nil.
-    | ct ctpr2, pred0
+    | pass pred0, p0
+    | pass pred1, p1
+    | landp p0, ~p1, p4
+    | landp p0, p1, p5
+    | pass p4, pred2
+    | pass p5, pred3
+    | addd 4, 0x0, (1+2)*8, RD              // Found key/value
     |>
-    | // Copy key and value to results.
+    | ct ctpr1, pred3                       // Invalid key.
     |<
-    | std 2, BASE, 0xfffffff0, TMP1
-    | addd 4, 0x0, (1+2)*8, RD
-    | std 5, BASE, 0xfffffff8, CARG2
+    | addd 4, 0x0, (1+1)*8, RD, pred2
+    | std 5, BASE, 0xfffffff0, TMP0, pred2  // End of traversal: return nil.
     | ct ctpr2
     |>
     |
@@ -4242,6 +4238,9 @@ static void build_subroutines(BuildCtx *ctx)
     | fsubd 0, RARG1, RARG2, RRET1
     | return ctpr3
     | ct ctpr3
+    |
+    |->vm_next:
+    | // Unsupported
     |
     |//-----------------------------------------------------------------------
     |//-- Miscellaneous functions --------------------------------------------
@@ -7845,6 +7844,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_ITERN:
         | // ins_A RA = base*8, (RB = (nresults+1)*8, RC = (nargs+1)*8 (2+1)*8)
+        | // Unsupported. Just label for compatibility
+        |->vm_IITERN:
         |<
         | addd 2, PC, 0x4, PC
         | addd 3, BASE, RA, TMP0
