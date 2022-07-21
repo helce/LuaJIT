@@ -78,15 +78,16 @@
 |
 |// Stack layout while in interpreter. Must match with lj_frame.h.
 |//-----------------------------------------------------------------------
-|.define CFRAME_SPACE,  0x30                // 8*6
-|.define STACK_SPACE,   0xffffffd0          // -(8*6)
-|.define MULTRES,       0x0
-|.define SAVE_NRES,     0x8
-|.define SAVE_ERRF,     0xc
-|.define SAVE_L,        0x10
-|.define SAVE_PC,       0x18
-|.define SAVE_CFRAME,   0x20
-|.define STACK_TMP,     0x28
+|.define CFRAME_SPACE,  0x70                // 8*6 + 8*8
+|.define STACK_SPACE,   0xffffff90          // -(8*6 + 8*8)
+|.define STACK_TMP,     0x68
+|.define SAVE_CFRAME,   0x60
+|.define SAVE_PC,       0x58
+|.define SAVE_L,        0x50
+|.define SAVE_ERRF,     0x4c
+|.define SAVE_NRES,     0x48
+|.define MULTRES,       0x40
+|.define RESERVE_CARGS, 0x0                 // 8*8
 |
 |//-----------------------------------------------------------------------
 |// Instruction decode+dispatch.
@@ -3061,12 +3062,12 @@ static void build_subroutines(BuildCtx *ctx)
     |<
     | cmpandedb 0, PC, FRAME_TYPE, pred0
     | ldbsm 2, PC, 0x0, CARG4
-    | addd 3, 0x0, LJ_TNIL, TMP1
     | stw 5, STACK, MULTRES, RD
     | disp ctpr1, ->vm_return
     |>
     |<
     | ldb 3, PC, PC_RB, RB, pred0
+    | addd 4, 0x0, LJ_TNIL, TMP1
     | ldw 5, PC, 0x0, CARG3, pred0
     | disp ctpr2, >2
     | nop 1
@@ -7716,13 +7717,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |>
         |3:
         |<
-        | ldw 0, STACK, MULTRES, RD
         | cmpandedb 1, PC, FRAME_TYPE, pred1
         | ldbsm 2, PC, PC_RA, CARG1
         | andd 3, RB, U64x(0x00007fff,0xffffffff), RB
         | disp ctpr1, >4
         |>
         |<
+        | ldw 0, STACK, MULTRES, RD
         | ldb 3, RB, LFUNC->ffid, TMP0
         | ldd 5, RB, LFUNC->pc, PC
         | nop 2
