@@ -379,11 +379,11 @@ void emit_lib(BuildCtx *ctx)
       /* Simplistic pre-processor. Only handles top-level #if/#endif. */
       if (buf[0] == '#' && buf[1] == 'i' && buf[2] == 'f') {
 	int ok = 1;
-	if (!strcmp(buf, "#if LJ_52\n"))
+	if (!strcmp(buf, "#if LJ_52\n") || !strcmp(buf, "#if LJ_52\r\n"))
 	  ok = LJ_52;
-	else if (!strcmp(buf, "#if LJ_HASJIT\n"))
+	else if (!strcmp(buf, "#if LJ_HASJIT\n") || !strcmp(buf, "#if LJ_HASJIT\r\n"))
 	  ok = LJ_HASJIT;
-	else if (!strcmp(buf, "#if LJ_HASFFI\n"))
+	else if (!strcmp(buf, "#if LJ_HASFFI\n") || !strcmp(buf, "#if LJ_HASFFI\r\n"))
 	  ok = LJ_HASFFI;
 	if (!ok) {
 	  int lvl = 1;
