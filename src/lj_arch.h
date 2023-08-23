@@ -322,9 +322,9 @@
 
 #if _ARCH_PWR9
 #define LJ_ARCH_VERSION		90
-#if _ARCH_PWR8
+#elif _ARCH_PWR8
 #define LJ_ARCH_VERSION		80
-#if _ARCH_PWR7
+#elif _ARCH_PWR7
 #define LJ_ARCH_VERSION		70
 #elif _ARCH_PWR6
 #define LJ_ARCH_VERSION		60
@@ -337,6 +337,7 @@
 #else
 #define LJ_ARCH_VERSION		0
 #endif
+
 #if _ARCH_PPCSQ
 #define LJ_ARCH_SQRT		1
 #endif
