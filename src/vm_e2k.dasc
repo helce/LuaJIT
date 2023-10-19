@@ -4141,76 +4141,23 @@ static void build_subroutines(BuildCtx *ctx)
     |->name:
     |<
     | setwd wsz = 0x4, nfx = 0x1, dbl = 0x0
-    | andd 0, RARG1, U64x(0x7fffffff,0xffffffff), RARG3 // |x|
-    | disp ctpr1, >3
-    |>
-    |<
-    | andd 0, RARG1, U64x(0x80000000,0x00000000), RARG2 // Isolate sign bit.
-    | nop 2
-    |>
-    |<
-    | fcmpnltdb 0, RARG3, U64x(0x43300000,0x00000000), pred1 // No truncation if |x| >= 2^52.
     | return ctpr3
     | nop 4
     |>
-    | ct ctpr1, pred1
     |.if mode == 2                          // trunc(x)?
     |<
-    | faddd 0, RARG3, U64x(0x43300000,0x00000000), RARG4 // (|x| + 2^52) - 2^52
-    | nop 3
+    | fdtoifd 3, 0x3, RARG1, RRET1
     |>
+    |.elif mode == 1                        // ceil(x)? 
     |<
-    | fsubd 0, RARG4, U64x(0x43300000,0x00000000), RARG4
-    | nop 3
+    | fdtoifd 3, 0x2, RARG1, RRET1
     |>
+    |.else                                  // floor(x)
     |<
-    | fcmpltdb 0, RARG3, RARG4, pred0       // |x| < result?
-    | nop 3
-    |>
-    |<
-    | fsubd 0, RARG4, U64x(0x3ff00000,0x00000000), RARG4, pred0 // if yes, substruct -1.
-    | nop 3
-    |>
-    |<
-    | ord 0, RARG4, RARG2, RARG4            // Merge sign bit back in.
-    | nop 3
-    |>
-    |.else
-    |<
-    | faddd 0, RARG3, U64x(0x43300000,0x00000000), RARG4 // (|x| + 2^52) - 2^52
-    | nop 3
-    |>
-    |<
-    | fsubd 0, RARG4, U64x(0x43300000,0x00000000), RARG4
-    | nop 3
-    |>
-    |<
-    | ord 0, RARG4, RARG2, RARG4            // Merge sign bit back in.
-    | nop 3
-    |>
-    | .if mode == 1                         // ceil(x)?
-    |  addd 0, 0x0, U64x(0xbff00000,0x00000000), RARG2
-    |<
-    |  fcmpnledb 0, RARG1, RARG4, pred0     // x > result?
-    |  nop 3
-    |>
-    | .else                                 // floor(x)?
-    |  addd 0, 0x0, U64x(0x3ff00000,0x00000000), RARG2
-    |<
-    |  fcmpltdb 0, RARG1, RARG4, pred0      // x < result?
-    |  nop 3
-    |>
-    | .endif
-    |<
-    | fsubd 0, RARG4, RARG2, RARG4, pred0   // If yes, substruct +-1.
-    | nop 3
+    | fdtoifd 3, 0x1, RARG1, RRET1
     |>
     |.endif
-    |3:
-    |<
-    | addd 0, RARG4, 0x0, RRET1, ~pred1
     | ct ctpr3
-    |>
     |.endmacro
     |
     | vm_round vm_floor, 0
