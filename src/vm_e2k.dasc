@@ -1933,7 +1933,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ct ctpr1, pred0
     |>
     |<
-    | ldw 0, TMP1, STR->sid, TMP0
+    | ldw 0, TMP1, STR->hash, TMP0
     | nop 2
     |>
     |<
@@ -6358,7 +6358,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |>
         |<
         | ldw 3, RB, TAB->hmask, TMP0       // RB = GCtab *, RC = GCstr *
-        | ldw 5, RC, STR->sid, TMP1
+        | ldw 5, RC, STR->hash, TMP1
         |>
         |<
         | ldd 2, CARG4, DISPATCH, CARG4
@@ -6366,7 +6366,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | nop 1
         |>
         |<
-        | andd 4, TMP0, TMP1, TMP1          // idx = str->sid & tab->hmask
+        | andd 4, TMP0, TMP1, TMP1          // idx = str->hash & tab->hmask
         |>
         |<
         | movtd 0, CARG4, ctpr3
@@ -6604,12 +6604,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |<
         | ldw 3, RB, TAB->hmask, TMP0, pred0 // RB = GCtab *, RC = GCstr *
         | shld 4, CARG1, 0x2f, CARG1
-        | ldw 5, RC, STR->sid, TMP1, pred0
+        | ldw 5, RC, STR->hash, TMP1, pred0
         | ct ctpr1, ~pred0
         | nop 2
         |>
         |<
-        | andd 4, TMP0, TMP1, TMP1   // idx = str->sid & tab->hmask
+        | andd 4, TMP0, TMP1, TMP1   // idx = str->hash & tab->hmask
         | ct ctpr2
         |>
         break;
@@ -6638,7 +6638,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |>
         |<
         | ldw 3, RB, TAB->hmask, TMP0, pred0 // RB = GCtab *, RC = GCstr *
-        | ldw 5, RC, STR->sid, TMP1, pred0
+        | ldw 5, RC, STR->hash, TMP1, pred0
         |>
         |<
         | ldd 2, CARG4, DISPATCH, CARG4
@@ -6646,7 +6646,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | nop 1
         |>
         |<
-        | andd 4, TMP0, TMP1, TMP1, pred0   // idx = str->sid & tab->hmask
+        | andd 4, TMP0, TMP1, TMP1, pred0   // idx = str->hash & tab->hmask
         | ct ctpr1, ~pred0
         |>
         |->BC_TGETS_Z:
@@ -7047,7 +7047,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |<
         | ldw 3, RB, TAB->hmask, TMP0
         | addd 4, 0x0, LJ_TSTR, ITYPE
-        | ldw 5, RC, STR->sid, TMP1
+        | ldw 5, RC, STR->hash, TMP1
         | disp ctpr1, >1
         |>
         |<
@@ -7057,7 +7057,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | nop 1
         |>
         |<
-        | andd 3, TMP0, TMP1, TMP1          // idx = str->sid & tab->hmask
+        | andd 3, TMP0, TMP1, TMP1          // idx = str->hash & tab->hmask
         | ord 4, ITYPE, RC, ITYPE
         |>
         |<

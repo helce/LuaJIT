@@ -4128,7 +4128,7 @@ static void build_subroutines(BuildCtx *ctx)
     //| ct ctpr1, pred0
     //|>
     //|<
-    //| ldw 0, TMP1, STR->sid, TMP0
+    //| ldw 0, TMP1, STR->hash, TMP0
     //| nop 2
     //|>
     //|<
@@ -4166,7 +4166,7 @@ static void build_subroutines(BuildCtx *ctx)
     //| ct ctpr1                              // Not found, keep default result.
     //|>
     //|3:
-    dasm_put(Dst, 2365, (1+1)*8, LJ_TUDATA, LJ_TTAB, LJ_TISNUM, Dt6(->metatable), LJ_TTAB, LJ_TISNUM, DISPATCH_GL(gcroot[GCROOT_BASEMT]), LJ_TNIL, DISPATCH_GL(gcroot)+8*(GCROOT_MMNAME+MM_metatable), Dt6(->node), Dt6(->hmask), LJ_TSTR, (1+1)*8, Dt5(->sid), sizeof(Node), DtB(->key), DtB(->next), (1+1)*8);
+    dasm_put(Dst, 2365, (1+1)*8, LJ_TUDATA, LJ_TTAB, LJ_TISNUM, Dt6(->metatable), LJ_TTAB, LJ_TISNUM, DISPATCH_GL(gcroot[GCROOT_BASEMT]), LJ_TNIL, DISPATCH_GL(gcroot)+8*(GCROOT_MMNAME+MM_metatable), Dt6(->node), Dt6(->hmask), LJ_TSTR, (1+1)*8, Dt5(->hash), sizeof(Node), DtB(->key), DtB(->next), (1+1)*8);
 #line 1974 "vm_e2k.dasc"
     //|<
     //| ldd 0, RA, NODE->val, RB
@@ -8795,7 +8795,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //|<
         //| ldw 3, RB, TAB->hmask, TMP0       // RB = GCtab *, RC = GCstr *
-        //| ldw 5, RC, STR->sid, TMP1
+        //| ldw 5, RC, STR->hash, TMP1
         //|>
         //|<
         //| ldd 2, CARG4, DISPATCH, CARG4
@@ -8803,7 +8803,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| nop 1
         //|>
         //|<
-        //| andd 4, TMP0, TMP1, TMP1          // idx = str->sid & tab->hmask
+        //| andd 4, TMP0, TMP1, TMP1          // idx = str->hash & tab->hmask
         //|>
         //|<
         //| movtd 0, CARG4, ctpr3
@@ -8904,7 +8904,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| andd 4, RD, 0x7f8, RC
         //| ct ctpr3
         //|>
-        dasm_put(Dst, 9613, LJ_TSTR, Dt7(->env), Dt5(->sid), Dt6(->hmask), Dt6(->node), DtB(->next), DtB(->key), DtB(->val), DtB(->next), LJ_TNIL, DtB(->key), LJ_TNIL, Dt6(->metatable), Dt6(->nomm), 1<<MM_index);
+        dasm_put(Dst, 9613, LJ_TSTR, Dt7(->env), Dt5(->hash), Dt6(->hmask), Dt6(->node), DtB(->next), DtB(->key), DtB(->val), DtB(->next), LJ_TNIL, DtB(->key), LJ_TNIL, Dt6(->metatable), Dt6(->nomm), 1<<MM_index);
 #line 6470 "vm_e2k.dasc"
         break;
 
@@ -9045,15 +9045,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|<
         //| ldw 3, RB, TAB->hmask, TMP0, pred0 // RB = GCtab *, RC = GCstr *
         //| shld 4, CARG1, 0x2f, CARG1
-        //| ldw 5, RC, STR->sid, TMP1, pred0
+        //| ldw 5, RC, STR->hash, TMP1, pred0
         //| ct ctpr1, ~pred0
         //| nop 2
         //|>
         //|<
-        //| andd 4, TMP0, TMP1, TMP1   // idx = str->sid & tab->hmask
+        //| andd 4, TMP0, TMP1, TMP1   // idx = str->hash & tab->hmask
         //| ct ctpr2
         //|>
-        dasm_put(Dst, 9797, Dt6(->array), Dt6(->asize), LJ_TISNUM, LJ_TTAB, LJ_TNIL, Dt6(->metatable), Dt6(->nomm), 1<<MM_index, LJ_TSTR, LJ_TSTR, Dt6(->node), Dt5(->sid), Dt6(->hmask));
+        dasm_put(Dst, 9797, Dt6(->array), Dt6(->asize), LJ_TISNUM, LJ_TTAB, LJ_TNIL, Dt6(->metatable), Dt6(->nomm), 1<<MM_index, LJ_TSTR, LJ_TSTR, Dt6(->node), Dt5(->hash), Dt6(->hmask));
 #line 6615 "vm_e2k.dasc"
         break;
 
@@ -9081,7 +9081,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|>
         //|<
         //| ldw 3, RB, TAB->hmask, TMP0, pred0 // RB = GCtab *, RC = GCstr *
-        //| ldw 5, RC, STR->sid, TMP1, pred0
+        //| ldw 5, RC, STR->hash, TMP1, pred0
         //|>
         //|<
         //| ldd 2, CARG4, DISPATCH, CARG4
@@ -9089,7 +9089,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| nop 1
         //|>
         //|<
-        //| andd 4, TMP0, TMP1, TMP1, pred0   // idx = str->sid & tab->hmask
+        //| andd 4, TMP0, TMP1, TMP1, pred0   // idx = str->hash & tab->hmask
         //| ct ctpr1, ~pred0
         //|>
         //|->BC_TGETS_Z:
@@ -9192,7 +9192,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| andd 4, RD, 0x7f8, RC
         //| ct ctpr3
         //|>
-        dasm_put(Dst, 9943, LJ_TSTR, LJ_TTAB, Dt5(->sid), Dt6(->hmask), Dt6(->node), DtB(->next), DtB(->key), DtB(->val), DtB(->next), LJ_TNIL, DtB(->key), LJ_TNIL, Dt6(->metatable), Dt6(->nomm), 1<<MM_index);
+        dasm_put(Dst, 9943, LJ_TSTR, LJ_TTAB, Dt5(->hash), Dt6(->hmask), Dt6(->node), DtB(->next), DtB(->key), DtB(->val), DtB(->next), LJ_TNIL, DtB(->key), LJ_TNIL, Dt6(->metatable), Dt6(->nomm), 1<<MM_index);
 #line 6752 "vm_e2k.dasc"
         break;
 
@@ -9498,7 +9498,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //|<
         //| ldw 3, RB, TAB->hmask, TMP0
         //| addd 4, 0x0, LJ_TSTR, ITYPE
-        //| ldw 5, RC, STR->sid, TMP1
+        //| ldw 5, RC, STR->hash, TMP1
         //| disp ctpr1, >1
         //|>
         //|<
@@ -9508,7 +9508,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| nop 1
         //|>
         //|<
-        //| andd 3, TMP0, TMP1, TMP1          // idx = str->sid & tab->hmask
+        //| andd 3, TMP0, TMP1, TMP1          // idx = str->hash & tab->hmask
         //| ord 4, ITYPE, RC, ITYPE
         //|>
         //|<
@@ -9603,7 +9603,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         //| ct ctpr1
         //|>
         //|2:
-        dasm_put(Dst, 10401, LJ_TTAB, Dt5(->sid), LJ_TSTR, Dt6(->hmask), Dt6(->node), sizeof(Node), Dt6(->nomm), DtB(->next), DtB(->key), Dt6(->metatable), DISPATCH_GL(gc.grayagain), Dt6(->marked), DtB(->key), DtB(->next), Dt6(->nomm), ~LJ_GC_BLACK, LJ_TNIL, Dt6(->marked), 1<<MM_newindex, LJ_GC_BLACK, Dt6(->marked), DISPATCH_GL(gc.grayagain), Dt6(->gclist));
+        dasm_put(Dst, 10401, LJ_TTAB, Dt5(->hash), LJ_TSTR, Dt6(->hmask), Dt6(->node), sizeof(Node), Dt6(->nomm), DtB(->next), DtB(->key), Dt6(->metatable), DISPATCH_GL(gc.grayagain), Dt6(->marked), DtB(->key), DtB(->next), Dt6(->nomm), ~LJ_GC_BLACK, LJ_TNIL, Dt6(->marked), 1<<MM_newindex, LJ_GC_BLACK, Dt6(->marked), DISPATCH_GL(gc.grayagain), Dt6(->gclist));
 #line 7155 "vm_e2k.dasc"
         //| // End of hash chain: key not found, add a new one.
         //| // But check for __newindex first.
