@@ -268,6 +268,9 @@ int dasm_link(Dst_DECL, size_t *szp)
     int pos = DASM_SEC2POS(secnum);
     int lastpos = sec->pos;
 
+#if defined(__LCC__) && (__LCC__ >= 127)
+    int shift = 0, range = 0;
+#endif
     while (pos != lastpos) {
       dasm_ActList p = D->actionlist + b[pos++];
       while(1) {
@@ -278,12 +281,33 @@ int dasm_link(Dst_DECL, size_t *szp)
           case DASM_ESC: p++; break;
           case DASM_REL_EXT: break;
           case DASM_REL_LG: case DASM_REL_PC: pos++; break;
+#if defined(__LCC__) && (__LCC__ >= 127)
+          case DASM_LABEL_LG:
+            if ((ins & 0x3ff) < 20) {
+              b[pos++] += shift + ofs;
+              break;
+            }
+          case DASM_LABEL_PC:
+            b[pos] += shift;
+            range = (b[pos] + ofs) & 0x3ff;
+            if (range >= 0x1c0 && range <= 0x1ff) {
+              shift += 0x200 - range;
+              b[pos++] += 0x200 - range + ofs;
+            } else {
+              b[pos++] += ofs;
+            }
+            break;
+#else
           case DASM_LABEL_LG: case DASM_LABEL_PC: b[pos++] += ofs; break;
+#endif
           case DASM_IMM: pos++; break;
         }
       }
       stop: (void)0;
     }
+#if defined(__LCC__) && (__LCC__ >= 127)
+    sec->ofs += shift;
+#endif
     ofs += sec->ofs;  /* Next section starts right after current section. */
   }
 
@@ -313,6 +337,9 @@ int dasm_encode(Dst_DECL, void *buffer)
     int *b = sec->buf;
     int *endb = sec->rbuf + sec->pos;
     int ofs, ofs_e, ofs_s = 0;
+#if defined(__LCC__) && (__LCC__ >= 127)
+    int range = 0;
+#endif
 
     while (b != endb) {
       dasm_ActList p = D->actionlist + *b++;
@@ -344,10 +371,32 @@ int dasm_encode(Dst_DECL, void *buffer)
               ofs_s = ((ins & 0xf000) >> 12);
               cp[-ofs_e] |= (((n >> 3) + ofs_s) & 0x0fffffff);
               break;
+#if defined(__LCC__) && (__LCC__ >= 127)
+          case DASM_LABEL_LG:
+            ins &= 2047;
+            if (ins >= 20) {
+              //here n is already shifted, so just adjust cp if needed
+              range = ((char *)cp - base) & 0x3ff;
+              if (range >= 0x1c0 && range <= 0x1ff) {
+                memset((void*) cp, 0, 0x200 - range);
+                cp = (unsigned int *)((char*) cp + 0x200 - range);
+              }
+              D->globals[ins-20] = (void *)(base + n);
+            }
+            break;
+          case DASM_LABEL_PC:
+            range = ((char *)cp - base) & 0x3ff;
+            if (range >= 0x1c0 && range <= 0x1ff) {
+              memset((void*) cp, 0, 0x200 - range);
+              cp = (unsigned int *)((char*) cp + 0x200 - range);
+            }
+            break;
+#else
           case DASM_LABEL_LG:
             ins &= 2047; if (ins >= 20) D->globals[ins-20] = (void *)(base + n);
             break;
           case DASM_LABEL_PC: break;
+#endif
           case DASM_IMM:
             ofs = (ins & 0xf0000) >> 16;
             cp[-ofs] |= n;
