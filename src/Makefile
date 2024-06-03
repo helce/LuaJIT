@@ -343,6 +343,10 @@ else
     ifneq (,$(findstring E,$(TARGET_TESTUNWIND)))
       TARGET_XCFLAGS+= -DLUAJIT_UNWIND_EXTERNAL
     endif
+    # no eh_frame or __unwind_info sections
+    ifeq (e2k,$(TARGET_LJARCH))
+      TARGET_XCFLAGS+= -DLUAJIT_UNWIND_EXTERNAL
+    endif
   endif
   ifneq (SunOS,$(TARGET_SYS))
     ifneq (PS3,$(TARGET_SYS))
