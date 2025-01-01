@@ -347,7 +347,7 @@ local map_op = {
   fcmpnltdb_4 = "ALU2_ALOPF7_0_0x1b_0x2f_0x5",
   fcmpnledb_4 = "ALU2_ALOPF7_0_0x1b_0x2f_0x6",
   -- C.5.2.2 FSTOIFs and FDTOIFd operations
-  fdtoifd_4 = "ALU2_ALOPF11_0_0x1b_0x6d_N_0x01_0x0",
+  fdtoifd_4 = "ALU2_ALOPF11_0_0x1b_0x6d_N_0x01_0xc0",
   -- C.5.3 Converting FP to integer operations
   fdtois_3 = "ALU1_ALOPF2_0_0x1b_0x3f_0xc0",
   fdtoid_3 = "ALU1_ALOPF2_0_0x1b_0x3d_0xc0",
