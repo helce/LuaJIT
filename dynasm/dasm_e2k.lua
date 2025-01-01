@@ -321,6 +321,15 @@ local map_op = {
   sars_4 = "ALU2_ALOPF1_0_0x3f_0x1c",
   sard_4 = "ALU2_ALOPF1_0_0x3f_0x1d",
   sardsm_4 = "ALU2_ALOPF1_1_0x3f_0x1d",
+  -- C.?.? Extract field
+  getfs_4 = "ALU2_ALOPF1_0_0x3f_0x1e",
+  getfs_5 = "ALU2PR_ALOPF1_0_0x3f_0x1e",
+  getfssm_4 = "ALU2_ALOPF1_1_0x3f_0x1e",
+  getfssm_5 = "ALU2PR_ALOPF1_1_0x3f_0x1e",
+  getfd_4 = "ALU2_ALOPF1_0_0x3f_0x1f",
+  getfd_5 = "ALU2PR_ALOPF1_0_0x3f_0x1f",
+  getfdsm_4 = "ALU2_ALOPF1_1_0x3f_0x1f",
+  getfdsm_5 = "ALU2PR_ALOPF1_1_0x3f_0x1f",
   -- C.2.7.1 Sign or zero extension
   sxt_4 = "ALU2_ALOPF1_0_0x3f_0xc",
   sxt_5 = "ALU2PR_ALOPF1_0_0x3f_0xc",
