@@ -503,6 +503,10 @@ local function gen_code_dst(opnd)
     -- 1, 1, 0, 1, reg_num(4)
     value = 0xd
     value = shl(value,4) + dst.n
+  elseif dst.t == "GREG" then
+    -- 1, 1, 1, reg_num(5)
+    value = 0x7
+    value = shl(value,5) + dst.n
   else
     werror("operand of type: "..dst.t.." unsupported for dst")
   end
@@ -541,6 +545,10 @@ local function gen_code_src2(opnd)
     -- 1, 0, reg_num(6)
     value = 0x2
     value = shl(value,6) + src2.n
+  elseif src2.t == "GREG" then
+    -- 1, 1, 1, reg_num(5)
+    value = 0x7
+    value = shl(value,5) + src2.n
   elseif src2.t == "NUM_4" then
     -- 1, 1, 0, 0, num_value(4)
     value = 0xc
@@ -627,6 +635,10 @@ local function gen_code_src1(opnd)
     -- 1, 0, reg_num(6)
     value = 0x2
     value = shl(value,6) + src1.n
+  elseif src1.t == "GREG" then
+    -- 1, 1, 1, reg_num(5)
+    value = 0x7
+    value = shl(value,5) + src1.n
   elseif (src1.t == "NUM_4") or (src1.t == "NUM_5") then
     -- 1, 1, 0, num_value(5)
     value = 0x6
