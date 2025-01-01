@@ -110,6 +110,60 @@
 |.define RESERVE_CARGS, 0x0                 // 8*8
 |
 |//-----------------------------------------------------------------------
+|// Helper macros.
+|//-----------------------------------------------------------------------
+|
+|.macro wait_impl, n, latency
+|.if n + 1 >= latency
+| // nop 0
+|.elif n + 2 >= latency
+| nop 1
+|.elif n + 3 >= latency
+| nop 2
+|.elif n + 4 >= latency
+| nop 3
+|.elif n + 5 >= latency
+| nop 4
+|.elif n + 6 >= latency
+| nop 5
+|.elif n + 7 >= latency
+| nop 6
+|.elif n + 8 >= latency
+| nop 7
+|.else
+| nop 7
+| --
+|.endif
+|.endmacro
+|
+|// Insert nops until resource is ready to use.
+|//
+|// Paramters:
+|//       res - needed resource (just hint)
+|//         n - current cycle
+|//   latency - total count of cycles
+|.macro wait, res, n, latency
+| wait_impl n + 0x00, latency
+| wait_impl n + 0x08, latency
+| wait_impl n + 0x10, latency
+| wait_impl n + 0x18, latency
+| wait_impl n + 0x20, latency
+| wait_impl n + 0x28, latency
+|.endmacro
+|
+|.define LOAD_LATENCY, 3
+|
+|// Insert nops until load result is ready to use.
+|.macro wait_load_extra, reg, done, extra
+| wait reg, done, LOAD_LATENCY + extra
+|.endmacro
+|
+|// Insert nops until load result is ready to use.
+|.macro wait_load, reg, done
+| wait reg, done, LOAD_LATENCY
+|.endmacro
+|
+|//-----------------------------------------------------------------------
 |// Instruction decode+dispatch.
 |.macro ins_NEXT             // AD = {D |A|OP}, ABC = {B|C|A|OP}, AC = {lo_D|A|OP}
 | ldw 0, PC, 0x0, TMP0
@@ -7642,7 +7696,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd 3, RB, L->maxstack, TMP0
         | ldw 5, PC, 0x0, CARG1
         | disp ctpr2, >2
-        | nop 2
+        | wait_load TMP0, 0
         | --
         | movtd 0, CARG2, ctpr3
         | cmpbedb 3, RA, TMP0, pred0
@@ -7702,7 +7756,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | lddsm 2, CARG3, DISPATCH, CARG3
         | ldd 3, RB, L->maxstack, TMP0
-        | nop 2
+        | wait_load CARG3, 0
         | --
         | movtdsm 0, CARG3, ctpr3
         | cmpedbsm 1, CARG1, 0x0, pred1
@@ -7726,7 +7780,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldd 3, RA, 0xfffffff0, CARG4, pred0
         | subd 0, CARG1, 0x1, CARG1, pred0
-        | nop 1
+        | wait pred0, 0, 2
         | --
         | ct ctpr1, ~pred0                  // Less args than parameters?
         | --
@@ -7754,6 +7808,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp ctpr2, <2
         | --
         | cmpedb 0, CARG1, 0x0, pred0
+        | wait pred0, 0, 2
         | --
         | ct ctpr1, ~pred0
         | --
@@ -7767,7 +7822,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd 4, BASE, RD, RD
         | ldd 5, STACK, SAVE_L, RB
         | disp ctpr1, ->vm_growstack_c
-        | nop 2
+        | wait_load RB, 0
         | --
         | andd 3, KBASE, U64x(0x00007fff,0xffffffff), KBASE
         | subd 4, RD, 0x8, RD
@@ -7777,7 +7832,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd 0, KBASE, CFUNC->f, KBASE
         | ldd 3, RB, L->maxstack, TMP1
         | addd 4, RD, 8*LUA_MINSTACK, TMP0
-        | nop 2
+        | wait_load TMP1, 0
         | --
         | addd 1, 0x0, ~LJ_VMST_C, TMP0
         | cmpbedb 3, TMP0, TMP1, pred0
@@ -7802,7 +7857,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldd 0, BASE, 0xfffffff8, PC       // Fetch PC of caller
         | ldd 3, RB, L->top, TMP0
-        | nop 2
+        | wait_load TMP0, 0
         | --
         | subd 3, TMP0, RA, RA              // RA = (L->top - (L->base+nresults))*8
         | ct ctpr1
