@@ -55,6 +55,24 @@
 |.define RD,        r14
 |.define ITYPE,     r15
 |
+|// Temporary (volatile) registers.
+|.define T0,        g16
+|.define T1,        g17
+|.define T2,        g18
+|.define T3,        g19
+|.define T4,        g20
+|.define T5,        g21
+|.define T6,        g22
+|.define T7,        g23
+|.define T8,        g24
+|.define T9,        g25
+|.define T10,       g26
+|.define T11,       g27
+|.define T12,       g28
+|.define T13,       g29
+|.define T14,       g30
+|.define T15,       g31
+|
 |.macro do_fault
 | addd 0, 0x0, 0x0, RARG1
 | ldd 0, RARG1, 0x0, RARG1
