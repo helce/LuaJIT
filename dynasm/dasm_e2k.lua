@@ -536,7 +536,45 @@ local function gen_code_src3(opnd)
   return value
 end
 
-local function gen_code_src2(opnd)
+local function add_literal(channel, src2)
+  if wide_instr["LITERALS"] == nil then
+    wide_instr["LITERALS"] = {}
+  end
+
+  local literals = wide_instr["LITERALS"]
+  if src2.t == "NUM_16" or src2.t == "NUM_32" then
+    for i,j in ipairs(literals) do
+      if j.t == src2.t and j.n == src2.n then
+        j.channels[#j.channels+1] = channel
+        return
+      end
+    end
+  elseif src2.t == "NUM_64" then
+    for i,j in ipairs(literals) do
+      if j.t == src2.t and j.lo == src2.lo and j.hi == src2.hi then
+        j.channels[#j.channels+1] = channel
+        return
+      end
+    end
+  end
+
+  if src2.t == "NUM_64" then
+    literals[#literals+1] = {
+      t = src2.t,
+      lo = src2.lo,
+      hi = src2.hi,
+      channels = { channel },
+    }
+  else
+    literals[#literals+1] = {
+      t = src2.t,
+      n = src2.n,
+      channels = { channel },
+    }
+  end
+end
+
+local function gen_code_src2(opnd, channel)
   local value = 0
   local src2 = check_operand(opnd)
   if src2.t == "BREG" then
@@ -556,70 +594,14 @@ local function gen_code_src2(opnd)
     value = 0xc
     value = shl(value,4) + src2.n
   elseif ((src2.t == "NUM_5") or (src2.t == "NUM_16")) then
-    local found = false
-    for i,j in ipairs({ "LTS0", "LTS1" }) do
-      if wide_instr[j] == nil then
-        wide_instr[j] = { value=src2.n }
-        -- 1, 1, 0, 1, 0, lts_hi, lts_num
-        value = 0x1a
-        value = shl(value,1) + 0
-        value = shl(value,2) + i - 1
-        found = true
-        break
-      end
-    end
-    if found == false then werror("No empty LTS for num16") end
+    src2.t = "NUM_16"
+    add_literal(channel, src2)
   elseif src2.t == "NUM_32" then
-    local found = false
-    for i,j in ipairs({ "LTS0", "LTS1", "LTS2", "LTS3" }) do
-      if wide_instr[j] == nil then
-        wide_instr[j] = { value=src2.n }
-        -- 1, 1, 0, 1, 1, 0, lts_num
-        value = 0x36
-        value = shl(value,2) + i - 1
-        found = true
-        break
-      end
-    end
-    if found == false then werror("No empty LTS for num32") end
+    add_literal(channel, src2)
   elseif src2.t == "NUM_64" then
-    local found = false
-    for i,j in ipairs({ "LTS0", "LTS1", "LTS2" }) do
-      if (wide_instr["LTS"..i] == nil) and (wide_instr[j] == nil) then
-        wide_instr[j] = { value = src2.lo }
-        wide_instr["LTS"..i] = { value = src2.hi }
-        -- 1, 1, 0, 1, 1, 1, lit_num
-        value = 0x37
-        value = shl(value,2) + i - 1
-        found = true
-        break
-      end
-    end
-    if found == false then werror("No empty LTS for num64") end
+    add_literal(channel, src2)
   elseif src2.t == "NUM_UNDEF" then
-    -- set it to undef_lit32, hope, all of them not bigger that
-    local name, tail = match(src2.n, "^([%w_]+)(->.*)$")
-    -- also check for arrays
-    if tail == nil then
-      name, tail = match(src2.n, "^([%w_]+)(%[[%d]+%])$")
-    end
-    if tail ~= nil then
-      name = format(map_type[name].ctypefmt, tail)
-    else
-      name = src2.n
-    end
-    local found = false
-    for i,j in ipairs({ "LTS0", "LTS1", "LTS2", "LTS3" }) do
-      if wide_instr[j] == nil then
-        wide_instr[j] = { value=0x0, action="IMM", lit=name }
-        -- 1, 1, 0, 1, 1, 0, lit_num
-        value = 0x36
-        value = shl(value,2) + i - 1
-        found = true
-        break
-      end
-    end
-    if found == false then werror("No empty LTS for num32") end
+    add_literal(channel, src2)
   else
     werror("Operand of type: "..src2.t.." unsupported for src2")
   end
@@ -792,7 +774,7 @@ local function gen_code_alf1(channel, spec, cop, src1, src2, dst)
   code = spec
   code = shl(code,7) + cop
   code = shl(code,8) + gen_code_src1(src1)
-  code = shl(code,8) + gen_code_src2(src2)
+  code = shl(code,8) + gen_code_src2(src2, channel)
   code = shl(code,8) + gen_code_dst(dst)
   wide_instr["ALS"..channel] = { value=code }
 end
@@ -803,7 +785,7 @@ local function gen_code_alf2(channel, spec, cop, opce, src2, dst)
   code = spec
   code = shl(code,7) + cop
   code = shl(code,8) + opce
-  code = shl(code,8) + gen_code_src2(src2)
+  code = shl(code,8) + gen_code_src2(src2, channel)
   code = shl(code,8) + gen_code_dst(dst)
   wide_instr["ALS"..channel] = { value=code }
 end
@@ -814,7 +796,7 @@ local function gen_code_alf3(channel, spec, cop, src1, src2, src3)
   code = spec
   code = shl(code,7) + cop
   code = shl(code,8) + gen_code_src1(src1)
-  code = shl(code,8) + gen_code_src2(src2)
+  code = shl(code,8) + gen_code_src2(src2, channel)
   code = shl(code,8) + gen_code_src3(src3)
   wide_instr["ALS"..channel] = { value=code }
 end
@@ -824,7 +806,7 @@ local function gen_code_alf7(channel, spec, cop, opce, src1, src2, pred)
     code = spec
     code = shl(code,7) + cop
     code = shl(code,8) + gen_code_src1(src1)
-    code = shl(code,8) + gen_code_src2(src2)
+    code = shl(code,8) + gen_code_src2(src2, channel)
     code = shl(code,3) + opce
     code = shl(code,5) + gen_code_pred(pred)
     wide_instr["ALS"..channel] = { value=code }
@@ -1007,6 +989,122 @@ local function generate_nop_oper(opnd)
   end
 end
 
+local function update_src2(channels, value)
+  for i,channel in ipairs(channels) do
+    local als = wide_instr["ALS"..channel]
+    als.value = bor(als.value, shl(value, 8))
+  end
+end
+
+local function generate_lts16()
+  for i,lit in ipairs(wide_instr["LITERALS"]) do
+    if lit.t == "NUM_16" then
+      local found = false
+      for i,j in ipairs({ "LTS0", "LTS1" }) do
+        if wide_instr[j] == nil then
+          wide_instr[j] = { value=lit.n, half = true }
+          update_src2(lit.channels, 0xd0 + i - 1)
+          found = true
+          break
+        elseif wide_instr[j].half == true then
+          wide_instr[j].half = nil
+          wide_instr[j].value = bor(wide_instr[j].value, shl(lit.n, 16))
+          update_src2(lit.channels, 0xd4 + i - 1)
+          found = true
+          break
+        end
+      end
+      if not found then
+        -- Try 32-bit.
+        lit.t = "NUM_32"
+      end
+    end
+  end
+end
+
+local function generate_lts32()
+  for i,lit in ipairs(wide_instr["LITERALS"]) do
+    if lit.t == "NUM_32" then
+      local found = false
+      for i,j in ipairs({ "LTS0", "LTS1", "LTS2", "LTS3" }) do
+        if wide_instr[j] == nil then
+          wide_instr[j] = { value=lit.n }
+          -- 1, 1, 0, 1, 1, 0, lts_num
+          local value = 0xd8 + i - 1
+          update_src2(lit.channels, value)
+          found = true
+          break
+        end
+      end
+      if not found then
+        return false
+      end
+    elseif lit.t == "NUM_UNDEF" then
+      -- set it to undef_lit32, hope, all of them not bigger that
+      local name, tail = match(lit.n, "^([%w_]+)(->.*)$")
+      -- also check for arrays
+      if tail == nil then
+        name, tail = match(lit.n, "^([%w_]+)(%[[%d]+%])$")
+      end
+      if tail ~= nil then
+        name = format(map_type[name].ctypefmt, tail)
+      else
+        name = lit.n
+      end
+      local found = false
+      for i,j in ipairs({ "LTS0", "LTS1", "LTS2", "LTS3" }) do
+        if wide_instr[j] == nil then
+          wide_instr[j] = { value=0x0, action="IMM", lit=name }
+          -- 1, 1, 0, 1, 1, 0, lit_num
+          value = 0x36
+          value = shl(value,2) + i - 1
+          update_src2(lit.channels, value)
+          found = true
+          break
+        end
+      end
+      if not found then
+        return false
+      end
+    end
+  end
+  return true
+end
+
+local function generate_lts64()
+  for i,lit in ipairs(wide_instr["LITERALS"]) do
+    if lit.t == "NUM_64" then
+      local found = false
+      for i,j in ipairs({ "LTS0", "LTS1", "LTS2" }) do
+        if (wide_instr["LTS"..i] == nil) and (wide_instr[j] == nil) then
+          wide_instr[j] = { value = lit.lo }
+          wide_instr["LTS"..i] = { value = lit.hi }
+          -- 1, 1, 0, 1, 1, 1, lit_num
+          local value = 0x37
+          value = shl(value,2) + i - 1
+          update_src2(lit.channels, value)
+          found = true
+          break
+        end
+      end
+      if not found then
+        return false
+      end
+    end
+  end
+  return true
+end
+
+local function generate_lts()
+  if wide_instr["LITERALS"] ~= nil then
+    generate_lts16()
+    if not generate_lts32() or not generate_lts64() then
+      wide_instr["LITERALS"] = nil
+      werror("Not enough space for literals")
+    end
+  end
+end
+
 local function generate_hs_code()
   -- look for syls, in f1 one of them HS himself
   local num_sylf1 = 1
@@ -1149,6 +1247,7 @@ local function wide_gen(force)
   end
   -- Stop capturing bundle instructions.
   wide_capture = false
+  generate_lts()
   local hs_code, is_notaligned = generate_hs_code()
   local code = generate_ins_code(hs_code, is_notaligned)
   local actions = {}
