@@ -250,6 +250,92 @@ mkrmap("LPRED", 6)
 mkrmap("LIPRED", 6)
 mkrmap("CTPR", 2)
 
+local sreg_list = {}    -- State regs
+sreg_list["psr"]          = 0x00
+sreg_list["wd"]           = 0x01
+sreg_list["core_mode"]    = 0x04
+sreg_list["cwd"]          = 0x06
+sreg_list["psp.hi"]       = 0x07
+sreg_list["psp.lo"]       = 0x09
+sreg_list["pshtp"]        = 0x0b
+sreg_list["pcsp.hi"]      = 0x0d
+sreg_list["pcsp.lo"]      = 0x0f
+sreg_list["pcshtp"]       = 0x13
+sreg_list["ctpr1"]        = 0x15
+sreg_list["ctpr2"]        = 0x16
+sreg_list["ctpr3"]        = 0x17
+sreg_list["sbr"]          = 0x1e
+sreg_list["cutd"]         = 0x21
+sreg_list["eir"]          = 0x23
+sreg_list["tsd"]          = 0x24 -- deprecated
+sreg_list["cuir"]         = 0x25
+sreg_list["oscud.hi"]     = 0x26
+sreg_list["oscud.lo"]     = 0x27
+sreg_list["osgd.hi"]      = 0x28
+sreg_list["osgd.lo"]      = 0x29
+sreg_list["osem"]         = 0x2a
+sreg_list["usd.hi"]       = 0x2c
+sreg_list["usd.lo"]       = 0x2d
+sreg_list["tr"]           = 0x2e -- deprecated
+sreg_list["osr0"]         = 0x2f
+sreg_list["cud.hi"]       = 0x30
+sreg_list["cud.lo"]       = 0x31
+sreg_list["gd.hi"]        = 0x32
+sreg_list["gd.lo"]        = 0x33
+sreg_list["cs.hi"]        = 0x34
+sreg_list["cs.lo"]        = 0x35
+sreg_list["ds.hi"]        = 0x36
+sreg_list["ds.lo"]        = 0x37
+sreg_list["es.hi"]        = 0x38
+sreg_list["es.lo"]        = 0x39
+sreg_list["fs.hi"]        = 0x3a
+sreg_list["fs.lo"]        = 0x3b
+sreg_list["gs.hi"]        = 0x3c
+sreg_list["gs.lo"]        = 0x3d
+sreg_list["ss.hi"]        = 0x3e
+sreg_list["ss.lo"]        = 0x3f
+sreg_list["dibcr"]        = 0x40
+sreg_list["dimcr"]        = 0x41
+sreg_list["dibsr"]        = 0x42
+sreg_list["dtcr"]         = 0x43
+sreg_list["dibar0"]       = 0x48
+sreg_list["dibar1"]       = 0x49
+sreg_list["dibar2"]       = 0x4a
+sreg_list["dibar3"]       = 0x4b
+sreg_list["dimar0"]       = 0x4c
+sreg_list["dimar1"]       = 0x4d
+sreg_list["dtarf"]        = 0x4e
+sreg_list["dtart"]        = 0x4f
+sreg_list["cr0.hi"]       = 0x51
+sreg_list["cr0.lo"]       = 0x53
+sreg_list["cr1.hi"]       = 0x55
+sreg_list["cr1.lo"]       = 0x57
+sreg_list["sclkm1"]       = 0x70
+sreg_list["sclkm2"]       = 0x71
+sreg_list["cu_hw0"]       = 0x78
+sreg_list["upsr"]         = 0x80
+sreg_list["ip"]           = 0x81
+sreg_list["nip"]          = 0x82
+sreg_list["lsr"]          = 0x83
+sreg_list["pfpfr"]        = 0x84
+sreg_list["fpcr"]         = 0x85
+sreg_list["fpsr"]         = 0x86
+sreg_list["ilcr"]         = 0x87
+sreg_list["br"]           = 0x88
+sreg_list["bgr"]          = 0x89
+sreg_list["idr"]          = 0x8a
+sreg_list["clkr"]         = 0x90
+sreg_list["rndpr"]        = 0x91
+sreg_list["sclkr"]        = 0x92
+sreg_list["tir.hi"]       = 0x9c
+sreg_list["tir.lo"]       = 0x9d
+sreg_list["rpr"]          = 0xa0
+sreg_list["sbbp"]         = 0xa1
+sreg_list["rpr.hi"]       = 0xa2
+sreg_list["upsrm"]        = 0xc0
+sreg_list["lsr1"]         = 0xc3 -- v5+
+sreg_list["ilcr1"]        = 0xc7 -- v5+
+
 -- Reverse defines for registers.
 function _M.revdef(s)
   return s
@@ -406,6 +492,23 @@ local map_op = {
   call_2 = "CALL_0x5",
   -- C.22.4. Push nop
   nop_1 = "NOP",
+  -- C.??.?. Read and write state registers
+  rws_3 = "ALU1_ALOPF15_0_0x01_0x3c_0xc0_0x01_0xc0",
+  rwd_3 = "ALU1_ALOPF15_0_0x01_0x3d_0xc0_0x01_0xc0",
+  rrs_3 = "ALU1_ALOPF16_0_0x01_0x3e_0xc0_0x01_0xc0",
+  rrd_3 = "ALU1_ALOPF16_0_0x01_0x3f_0xc0_0x01_0xc0",
+  rws_4 = "ALU1PR_ALOPF15_0_0x01_0x3c_0xc0_0x01_0xc0",
+  rwd_4 = "ALU1PR_ALOPF15_0_0x01_0x3d_0xc0_0x01_0xc0",
+  rrs_4 = "ALU1PR_ALOPF16_0_0x01_0x3e_0xc0_0x01_0xc0",
+  rrd_4 = "ALU1PR_ALOPF16_0_0x01_0x3f_0xc0_0x01_0xc0",
+  rwssm_3 = "ALU1_ALOPF15_1_0x01_0x3c_0xc0_0x01_0xc0",
+  rwdsm_3 = "ALU1_ALOPF15_1_0x01_0x3d_0xc0_0x01_0xc0",
+  rrssm_3 = "ALU1_ALOPF16_1_0x01_0x3e_0xc0_0x01_0xc0",
+  rrdsm_3 = "ALU1_ALOPF16_1_0x01_0x3f_0xc0_0x01_0xc0",
+  rwssm_4 = "ALU1PR_ALOPF15_1_0x01_0x3c_0xc0_0x01_0xc0",
+  rwdsm_4 = "ALU1PR_ALOPF15_1_0x01_0x3d_0xc0_0x01_0xc0",
+  rrssm_4 = "ALU1PR_ALOPF16_1_0x01_0x3e_0xc0_0x01_0xc0",
+  rrdsm_4 = "ALU1PR_ALOPF16_1_0x01_0x3f_0xc0_0x01_0xc0",
   -- Generate wide instruction
   ["--_0"] = "GEN",
 }
@@ -460,6 +563,8 @@ local function check_operand(opnd)
     operand = {t = "LIPRED", n = lipred_list[opnd]}
   elseif ctpr_list[opnd] then
     operand = {t = "CTPR", n = ctpr_list[opnd]}
+  elseif sreg_list[opnd] then
+    operand = {t = "SREG", n = sreg_list[opnd]}
   else
     if match(opnd, "^U64x%(.*%)$") then
       local u64 = {}
@@ -532,6 +637,17 @@ local function gen_code_src3(opnd)
     value = shl(value,5) + src3.n
   else
     werror("operand of type: "..src3.t.." unsupported for src3")
+  end
+  return value
+end
+
+local function gen_code_state_reg(opnd, field)
+  local value = 0
+  local sr = check_operand(opnd)
+  if sr.t == "SREG" then
+    value = sr.n
+  else
+    werror("operand of type: "..sr.t.." unsupported for "..field)
   end
   return value
 end
@@ -812,6 +928,28 @@ local function gen_code_alf7(channel, spec, cop, opce, src1, src2, pred)
     wide_instr["ALS"..channel] = { value=code }
 end
 
+local function gen_code_alf15(channel, spec, cop, opce, src2, dst)
+  local code = 0
+  -- 32bit, spec(1), cop(7), opce(8), src2(8), dst(8)
+  code = spec
+  code = shl(code,7) + cop
+  code = shl(code,8) + opce
+  code = shl(code,8) + gen_code_src2(src2, channel)
+  code = shl(code,8) + gen_code_state_reg(dst, "dst")
+  wide_instr["ALS"..channel] = { value=code }
+end
+
+local function gen_code_alf16(channel, spec, cop, opce, src1, dst)
+  local code = 0
+  -- 32bit, spec(1), cop(7), src1(8), opce(8), dst(8)
+  code = spec
+  code = shl(code,7) + cop
+  code = shl(code,8) + gen_code_state_reg(src1, "src1")
+  code = shl(code,8) + opce
+  code = shl(code,8) + gen_code_dst(dst)
+  wide_instr["ALS"..channel] = { value=code }
+end
+
 local function gen_code_alef1(channel, ales_opc2, src3)
   local code = 0
   -- 16bit, opc2(8), src3(8)
@@ -847,6 +985,12 @@ local function generate_alu_oper(format, spec, channel, op_channel, cop, opce, a
     gen_code_alf3(channel, spec, cop, opnd1, opnd2, opnd3)
   elseif format == "ALOPF7" then
     gen_code_alf7(channel, spec, cop, opce, opnd1, opnd2, opnd3)
+  elseif format == "ALOPF15" then
+    gen_code_alf15(channel, spec, cop, opce, opnd1, opnd2)
+    gen_code_alef2(channel, ales_opc2, ales_opce)
+  elseif format == "ALOPF16" then
+    gen_code_alf16(channel, spec, cop, opce, opnd1, opnd2)
+    gen_code_alef2(channel, ales_opc2, ales_opce)
   elseif format == "ALOPF21" then
     gen_code_alf1(channel, spec, cop, opnd1, opnd2, opnd4)
     gen_code_alef1(channel, ales_opc2, opnd3)
