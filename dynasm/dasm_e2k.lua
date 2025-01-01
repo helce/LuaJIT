@@ -509,6 +509,18 @@ local map_op = {
   rwdsm_4 = "ALU1PR_ALOPF15_1_0x01_0x3d_0xc0_0x01_0xc0",
   rrssm_4 = "ALU1PR_ALOPF16_1_0x01_0x3e_0xc0_0x01_0xc0",
   rrdsm_4 = "ALU1PR_ALOPF16_1_0x01_0x3f_0xc0_0x01_0xc0",
+  -- C.??.?. Advance loop counter
+  alct_0 = "SHORT_16",
+  alcf_0 = "SHORT_17",
+  -- C.??.?. Advance based predicate registers
+  abpt_0 = "SHORT_18",
+  abpf_0 = "SHORT_19",
+  -- C.??.?. Advance based registers
+  abnt_0 = "SHORT_21",
+  abnf_0 = "SHORT_22",
+  -- C.??.?. Start and stop array prefetching
+  bap_0 = "SHORT_28",
+  eap_0 = "SHORT_29",
   -- Generate wide instruction
   ["--_0"] = "GEN",
 }
@@ -1072,6 +1084,15 @@ local function generate_landp_oper(opc, opnd1, opnd2, opnd3)
   wide_instr["PLS"..pls] = { value=bor(code, clp_code) }
 end
 
+local function generate_short_oper(opnd)
+  local value = shl(1, tonumber(opnd))
+  if wide_instr["SS"] ~= nil then
+    wide_instr["SS"].value = bor(wide_instr["SS"].value, value)
+  else
+    wide_instr["SS"] = { value=value }
+  end
+end
+
 local function generate_pass_oper(opnd1, opnd2)
   local pred1 = check_operand(opnd1)
   local pred2 = check_operand(opnd2)
@@ -1485,6 +1506,8 @@ map_op[".template__"] = function(params, template)
   elseif op_type == "LANDP" then
     local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
     generate_landp_oper(opc, params[1], params[2], params[3])
+  elseif op_type == "SHORT" then
+    generate_short_oper(op_info[2])
   elseif op_type == "NOP" then
     generate_nop_oper(params[1])
   elseif op_type == "GEN" then
