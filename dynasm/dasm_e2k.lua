@@ -66,6 +66,9 @@ local wide_capture = false
 -- Current wide instruction.
 local wide_instr = {}
 
+-- Current bundling mode.
+local wide_mode = true
+
 ------------------------------------------------------------------------------
 
 -- Dump action names and numbers.
@@ -347,7 +350,7 @@ local map_op = {
   fcmpnltdb_4 = "ALU2_ALOPF7_0_0x1b_0x2f_0x5",
   fcmpnledb_4 = "ALU2_ALOPF7_0_0x1b_0x2f_0x6",
   -- C.5.2.2 FSTOIFs and FDTOIFd operations
-  fdtoifd_4 = "ALU2_ALOPF11_0_0x1b_0x6d_N_0x01_0x0",
+  fdtoifd_4 = "ALU2_ALOPF11_0_0x1b_0x6d_N_0x01_0xc0",
   -- C.5.3 Converting FP to integer operations
   fdtois_3 = "ALU1_ALOPF2_0_0x1b_0x3f_0xc0",
   fdtoid_3 = "ALU1_ALOPF2_0_0x1b_0x3d_0xc0",
@@ -403,9 +406,8 @@ local map_op = {
   call_2 = "CALL_0x5",
   -- C.22.4. Push nop
   nop_1 = "NOP",
-  -- Start and end wide instruction
-  ["<_0"] = "WIDE_START",
-  [">_0"] = "WIDE_END",
+  -- Generate wide instruction
+  ["--_0"] = "GEN",
 }
 
 ------------------------------------------------------------------------------
@@ -503,6 +505,10 @@ local function gen_code_dst(opnd)
     -- 1, 1, 0, 1, reg_num(4)
     value = 0xd
     value = shl(value,4) + dst.n
+  elseif dst.t == "GREG" then
+    -- 1, 1, 1, reg_num(5)
+    value = 0x7
+    value = shl(value,5) + dst.n
   else
     werror("operand of type: "..dst.t.." unsupported for dst")
   end
@@ -541,6 +547,10 @@ local function gen_code_src2(opnd)
     -- 1, 0, reg_num(6)
     value = 0x2
     value = shl(value,6) + src2.n
+  elseif src2.t == "GREG" then
+    -- 1, 1, 1, reg_num(5)
+    value = 0x7
+    value = shl(value,5) + src2.n
   elseif src2.t == "NUM_4" then
     -- 1, 1, 0, 0, num_value(4)
     value = 0xc
@@ -627,6 +637,10 @@ local function gen_code_src1(opnd)
     -- 1, 0, reg_num(6)
     value = 0x2
     value = shl(value,6) + src1.n
+  elseif src1.t == "GREG" then
+    -- 1, 1, 1, reg_num(5)
+    value = 0x7
+    value = shl(value,5) + src1.n
   elseif (src1.t == "NUM_4") or (src1.t == "NUM_5") then
     -- 1, 1, 0, num_value(5)
     value = 0x6
@@ -1129,11 +1143,45 @@ local function generate_ins_code(hs_code, is_notaligned)
   return ins
 end
 
+local function wide_gen(force)
+  if not force and not wide_capture then
+    return
+  end
+  -- Stop capturing bundle instructions.
+  wide_capture = false
+  local hs_code, is_notaligned = generate_hs_code()
+  local code = generate_ins_code(hs_code, is_notaligned)
+  local actions = {}
+  for i,j in ipairs(code) do
+    wputxw(j.value)
+    if j.action then
+      if j.action == "LABEL" then
+        local mode, n, s = parse_label(j.lit, false)
+        local ofs_e = #code - i + 1
+        local ofs_s = #code / 2
+        assert(ofs_e < 15, "Too big offset to CS0")
+        assert(ofs_s < 15, "Too big size of command")
+        actions[#actions+1] = { "REL_"..mode, n, s, ofs_e, ofs_s, 1 }
+      elseif j.action == "IMM" then
+        local ofs = #code - i + 1
+        actions[#actions+1] = { "IMM", 0, j.lit, ofs, nil, 1 }
+      else
+        werror("Incompatible action")
+      end
+    end
+  end
+  for i,j in ipairs(actions) do
+    waction(j[1], j[2], j[3], j[4], j[5], j[6])
+  end
+  for i in pairs(wide_instr) do
+    wide_instr[i] = nil
+  end
+end
+
 map_op[".template__"] = function(params, template)
   if not params then return template end
   -- Get operation info and format
   local op_info = {}
-  local wide_gen = false
   for t in gmatch(template, "[^_]+") do
     op_info[#op_info+1] = t
   end
@@ -1194,51 +1242,37 @@ map_op[".template__"] = function(params, template)
     generate_landp_oper(opc, params[1], params[2], params[3])
   elseif op_type == "NOP" then
     generate_nop_oper(params[1])
-  elseif op_type == "WIDE" then
-    if op_info[2] == "START" then
-      if wide_capture then werror("Nested wide instruction.") end
-      wide_capture = true
-    elseif op_info[2] == "END" then
-      if wide_capture == false then werror("No start of wide instruction set.") end
-      wide_capture = false
-      wide_gen = true
+  elseif op_type == "GEN" then
+    -- User requested to generate a bundle.
+    wide_gen(true)
+    if not wide_mode then
+      wide_mode = true
+      werror("Bundle end `--` cannot be used if wide mode is disabled")
     end
+    return
   else
     werror("Incorrect operation type")
   end
 
-  -- If its just single instruction, generate wide instruction for it
-  if wide_capture == false then wide_gen = true end
+  if wide_mode then
+    -- Start capturing instructions.
+    wide_capture = true
+  else
+    wide_gen(true)
+  end
+end
 
-  -- Check for wide instruction start and end, and generate code
-  if wide_gen == true then
-    local hs_code, is_notaligned = generate_hs_code()
-    local code = generate_ins_code(hs_code, is_notaligned)
-    local actions = {}
-    for i,j in ipairs(code) do
-      wputxw(j.value)
-      if j.action then
-        if j.action == "LABEL" then
-          local mode, n, s = parse_label(j.lit, false)
-          local ofs_e = #code - i + 1
-          local ofs_s = #code / 2
-          assert(ofs_e < 15, "Too big offset to CS0")
-          assert(ofs_s < 15, "Too big size of command")
-          actions[#actions+1] = { "REL_"..mode, n, s, ofs_e, ofs_s, 1 }
-        elseif j.action == "IMM" then
-          local ofs = #code - i + 1
-          actions[#actions+1] = { "IMM", 0, j.lit, ofs, nil, 1 }
-        else
-          werror("Incompatible action")
-        end
-      end
+------------------------------------------------------------------------------
+
+-- Pseudo-opcodes to switch wide mode
+map_op[".wide_1"] = function(params)
+  if params[1] == "on" or params[1] == "off" then
+    wide_mode = params[1] == "on"
+    if not wide_mode then
+      wide_gen(false)
     end
-    for i,j in ipairs(actions) do
-      waction(j[1], j[2], j[3], j[4], j[5], j[6])
-    end
-    for i in pairs(wide_instr) do
-      wide_instr[i] = nil
-    end
+  else
+    werror("Expected \"on\" or \"off\"")
   end
 end
 
@@ -1276,6 +1310,8 @@ end
 
 -- Label pseudo-opcode (converted from trailing colon form).
 map_op[".label_1"] = function(params)
+  -- Always generate bundle before a label.
+  wide_gen(false)
   if not params then return "[1-9] | ->global | =>pcexpr" end
   if secpos+1 > maxsecpos then wflush() end
   local mode, n, s = parse_label(params[1], true)
@@ -1330,6 +1366,8 @@ end
 
 -- Set the current section.
 function _M.section(num)
+  -- Always generate bundle before a label.
+  wide_gen(false)
   waction("SECTION", num)
   wflush(true) -- SECTION is a terminal action.
 end
