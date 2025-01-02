@@ -347,7 +347,7 @@ local map_op = {
   fcmpnltdb_4 = "ALU2_ALOPF7_0_0x1b_0x2f_0x5",
   fcmpnledb_4 = "ALU2_ALOPF7_0_0x1b_0x2f_0x6",
   -- C.5.2.2 FSTOIFs and FDTOIFd operations
-  fdtoifd_4 = "ALU2_ALOPF11_0_0x1b_0x6d_N_0x01_0x0",
+  fdtoifd_4 = "ALU2_ALOPF11_0_0x1b_0x6d_N_0x01_0xc0",
   -- C.5.3 Converting FP to integer operations
   fdtois_3 = "ALU1_ALOPF2_0_0x1b_0x3f_0xc0",
   fdtoid_3 = "ALU1_ALOPF2_0_0x1b_0x3d_0xc0",
@@ -503,6 +503,10 @@ local function gen_code_dst(opnd)
     -- 1, 1, 0, 1, reg_num(4)
     value = 0xd
     value = shl(value,4) + dst.n
+  elseif dst.t == "GREG" then
+    -- 1, 1, 1, reg_num(5)
+    value = 0x7
+    value = shl(value,5) + dst.n
   else
     werror("operand of type: "..dst.t.." unsupported for dst")
   end
@@ -541,6 +545,10 @@ local function gen_code_src2(opnd)
     -- 1, 0, reg_num(6)
     value = 0x2
     value = shl(value,6) + src2.n
+  elseif src2.t == "GREG" then
+    -- 1, 1, 1, reg_num(5)
+    value = 0x7
+    value = shl(value,5) + src2.n
   elseif src2.t == "NUM_4" then
     -- 1, 1, 0, 0, num_value(4)
     value = 0xc
@@ -627,6 +635,10 @@ local function gen_code_src1(opnd)
     -- 1, 0, reg_num(6)
     value = 0x2
     value = shl(value,6) + src1.n
+  elseif src1.t == "GREG" then
+    -- 1, 1, 1, reg_num(5)
+    value = 0x7
+    value = shl(value,5) + src1.n
   elseif (src1.t == "NUM_4") or (src1.t == "NUM_5") then
     -- 1, 1, 0, num_value(5)
     value = 0x6
