@@ -217,6 +217,9 @@ local lpred_list = {}   -- Local predicates
 local lipred_list = {}  -- Inversed local predicates
 local ctpr_list = {}    -- Ctprs
 local greg_list = {}    -- Gregs
+local aad_list = {}     -- Array descriptor registers
+local aasti_list = {}   -- Array store index registers
+local aaincr_list = {}  -- Array index increase registers
 
 -- Helper function to fill register maps.
 local function mkrmap(reg_type, reg_num)
@@ -237,6 +240,12 @@ local function mkrmap(reg_type, reg_num)
       lipred_list["~p"..n] = n
     elseif reg_type == "CTPR" then
       ctpr_list["ctpr"..(n+1)] = n + 1
+    elseif reg_type == "AAD" then
+      aad_list["aad"..n] = n
+    elseif reg_type == "AASTI" then
+      aasti_list["aasti"..n] = n
+    elseif reg_type == "AAINCR" then
+      aaincr_list["aaincr"..n] = n
     end
   end
 end
@@ -249,6 +258,9 @@ mkrmap("IPRED", 31)
 mkrmap("LPRED", 6)
 mkrmap("LIPRED", 6)
 mkrmap("CTPR", 2)
+mkrmap("AAD", 31)
+mkrmap("AASTI", 15)
+mkrmap("AAINCR", 7)
 
 local sreg_list = {}    -- State regs
 sreg_list["psr"]          = 0x00
@@ -521,6 +533,20 @@ local map_op = {
   -- C.??.?. Start and stop array prefetching
   bap_0 = "SHORT_28",
   eap_0 = "SHORT_29",
+  -- C.??.?. Write AAU registers.
+  staab_5 = "ALU3_ALOPF10_0_0x24_0x1c_N_0x01_0xc0",
+  staah_5 = "ALU3_ALOPF10_0_0x24_0x1d_N_0x01_0xc0",
+  staaw_5 = "ALU3_ALOPF10_0_0x24_0x1e_N_0x01_0xc0",
+  staad_5 = "ALU3_ALOPF10_0_0x24_0x1f_N_0x01_0xc0",
+  staab_6 = "ALU3PR_ALOPF10_0_0x24_0x1c_N_0x01_0xc0",
+  staah_6 = "ALU3PR_ALOPF10_0_0x24_0x1d_N_0x01_0xc0",
+  staaw_6 = "ALU3PR_ALOPF10_0_0x24_0x1e_N_0x01_0xc0",
+  staad_6 = "ALU3PR_ALOPF10_0_0x24_0x1f_N_0x01_0xc0",
+  incr_2 = "INCR",
+  -- C.??.?. Write AAU registers.
+  aaurw_3 = "ALU2_AAURW_0_0x24_0x1e_N_0x01_0xc0",
+  aaurwd_3 = "ALU2_AAURW_0_0x24_0x1f_N_0x01_0xc0",
+  aaurwq_3 = "ALU2_AAURWQ_0_0x04_0x3f_N_0x01_0xc0",
   -- Generate wide instruction
   ["--_0"] = "GEN",
 }
@@ -575,6 +601,12 @@ local function check_operand(opnd)
     operand = {t = "LIPRED", n = lipred_list[opnd]}
   elseif ctpr_list[opnd] then
     operand = {t = "CTPR", n = ctpr_list[opnd]}
+  elseif aad_list[opnd] then
+    operand = {t = "AAD", n = aad_list[opnd]}
+  elseif aasti_list[opnd] then
+    operand = {t = "AASTI", n = aasti_list[opnd]}
+  elseif aaincr_list[opnd] then
+    operand = {t = "AAINCR", n = aaincr_list[opnd]}
   elseif sreg_list[opnd] then
     operand = {t = "SREG", n = sreg_list[opnd]}
   else
@@ -664,13 +696,22 @@ local function gen_code_state_reg(opnd, field)
   return value
 end
 
+local function gen_code_for(opnd, name)
+  local tmp = check_operand(opnd)
+  if tmp.t == name then
+    return tmp.n
+  else
+    werror("operand of type: "..tmp.t.." unsupported for "..name)
+  end
+end
+
 local function add_literal(channel, src2)
   if wide_instr["LITERALS"] == nil then
     wide_instr["LITERALS"] = {}
   end
 
   local literals = wide_instr["LITERALS"]
-  if src2.t == "NUM_16" or src2.t == "NUM_32" then
+  if src2.t == "NUM_16" or src2.t == "NUM_32" or src2.t == "NUM_32_STAA" then
     for i,j in ipairs(literals) do
       if j.t == src2.t and j.n == src2.n then
         j.channels[#j.channels+1] = channel
@@ -766,6 +807,16 @@ local function gen_code_pred(opnd)
   local pred = check_operand(opnd)
   if ((pred.t ~= "PRED") and (pred.t ~= "IPRED")) then werror("Incorrect predicate register") end
   return pred.n
+end
+
+local function generate_setmas(channel, mas)
+  if wide_instr["CS1"] == nil then
+    wide_instr["CS1"] = { value = shl(0x6, 28) }
+  elseif sar(wide_instr["CS1"].value, 28) ~= 0x6 then
+    werror("CS1 already busy")
+  end
+  local offset = ({21, -1, 14, 7, -1, 0})[channel + 1]
+  wide_instr["CS1"].value = bor(wide_instr["CS1"].value, shl(mas, offset))
 end
 
 local function generate_setbn_oper(opc, rsz_seq, rbs_seq, rcur_seq)
@@ -940,6 +991,93 @@ local function gen_code_alf7(channel, spec, cop, opce, src1, src2, pred)
     wide_instr["ALS"..channel] = { value=code }
 end
 
+local function gen_code_staa_oper(channel, spec, cop, pair, mode, src4, aad, index, incr, lit, incr_op)
+  local src = gen_code_src3(src4)
+  if pair and band(src, 1) ~= 0 then
+    werror(src4.." must be even")
+  end
+
+  if lit ~= 0 then
+    add_literal(channel, { t = "NUM_32_STAA", n = lit })
+  end
+
+  local code = 0
+  -- 32bit, spec(1), cop(7), aad(5), index(4), incr(3), mode(2), lts(2), src4(8)
+  code = spec
+  code = shl(code,7) + cop
+  code = shl(code,5) + aad
+  code = shl(code,4) + index
+  code = shl(code,3) + incr
+  code = shl(code,2) + mode
+  code = shl(code,2) + 0 -- lts, will be filled latter
+  code = shl(code,8) + src
+  wide_instr["ALS"..channel] = { value=code, incr_op = incr_op }
+
+  if pair then
+    wide_instr["ALS5"] = { value=bor(code, 1) }
+  end
+end
+
+local function gen_code_incr_oper(channel, incr)
+  assert(channel == 2 or channel == 5, "Incorrect channel should be 2 or 5")
+  if wide_instr["ALS"..channel] == nil or not wide_instr["ALS"..channel].incr_op then
+    werror("Invalid main operation")
+  end
+  local code = 0x400 + shl(gen_code_for(incr, "AAINCR"), 12)
+  local als = wide_instr["ALS"..channel]
+  als.value = bor(als.value, code)
+  als.incr_op = nil
+end
+
+local function gen_code_alf10(channel, spec, cop, pair, src4, aad, ind, lit)
+  local aad = gen_code_for(aad, "AAD")
+  local ind = gen_code_for(ind, "AASTI")
+  local lit = assert(tonumber(lit), "Invalid operand for literal")
+  gen_code_staa_oper(channel, spec, cop, pair, 0, src4, aad, ind, 0, lit, true)
+end
+
+local function gen_code_aaurw(channel, spec, cop, pair, src4, dst)
+  local mode = nil
+  local aad = 0
+  local index = 0
+  local incr = 0
+
+  local reg = check_operand(dst)
+  if reg.t == "AAD" then
+    mode = 0
+    aad = reg.n
+  elseif reg.t == "AASTI" then
+    mode = 1
+    index = reg.n
+  elseif reg.t == "AAIND" then
+    mode = 2
+    index = reg.n
+  elseif reg.t == "AAINCR" then
+    mode = 3
+    incr = reg.n
+  else
+    werror("operand of type: "..reg.t.." is not an AAU register")
+  end
+
+  gen_code_staa_oper(channel, spec, cop, pair, mode, src4, aad, index, incr, 0, false)
+end
+
+local function gen_code_alef1(channel, ales_opc2, src3)
+  local code = 0
+  -- 16bit, opc2(8), src3(8)
+  code = ales_opc2
+  code = shl(code,8) + gen_code_src3(src3)
+  wide_instr["ALES"..channel] = { value=code }
+end
+
+local function gen_code_alef2(channel, ales_opc2, ales_opce)
+  local code = 0
+  -- 16bit, opc2(8), opce(8)
+  code = ales_opc2
+  code = shl(code,8) + ales_opce
+  wide_instr["ALES"..channel] = { value=code }
+end
+
 local function gen_code_alf15(channel, spec, cop, opce, src2, dst)
   local code = 0
   -- 32bit, spec(1), cop(7), opce(8), src2(8), dst(8)
@@ -960,22 +1098,6 @@ local function gen_code_alf16(channel, spec, cop, opce, src1, dst)
   code = shl(code,8) + opce
   code = shl(code,8) + gen_code_dst(dst)
   wide_instr["ALS"..channel] = { value=code }
-end
-
-local function gen_code_alef1(channel, ales_opc2, src3)
-  local code = 0
-  -- 16bit, opc2(8), src3(8)
-  code = ales_opc2
-  code = shl(code,8) + gen_code_src3(src3)
-  wide_instr["ALES"..channel] = { value=code }
-end
-
-local function gen_code_alef2(channel, ales_opc2, ales_opce)
-  local code = 0
-  -- 16bit, opc2(8), opce(8)
-  code = ales_opc2
-  code = shl(code,8) + ales_opce
-  wide_instr["ALES"..channel] = { value=code }
 end
 
 local function generate_alu_oper(format, spec, channel, op_channel, cop, opce, ales_opc2, ales_opce, opnd1, opnd2, opnd3, opnd4)
@@ -1003,6 +1125,19 @@ local function generate_alu_oper(format, spec, channel, op_channel, cop, opce, a
   elseif format == "ALOPF16" then
     gen_code_alf16(channel, spec, cop, opce, opnd1, opnd2)
     gen_code_alef2(channel, ales_opc2, ales_opce)
+  elseif format == "ALOPF10" then
+    gen_code_alf10(channel, spec, cop, pair, opnd1, opnd2, opnd3, opnd4)
+    gen_code_alef2(channel, ales_opc2, ales_opce)
+  elseif sub(format, 0, 5) == "AAURW" then
+    local pair = format == "AAURWQ"
+    if pair and wide_instr["ALS5"] ~= nil then werror("ALS5 already busy") end
+    gen_code_aaurw(channel, spec, cop, pair, opnd1, opnd2)
+    gen_code_alef2(channel, ales_opc2, ales_opce)
+    generate_setmas(channel, 0x3f)
+    if pair then
+      gen_code_alef2(5, ales_opc2, ales_opce)
+      generate_setmas(5, 0x3f)
+    end
   elseif format == "ALOPF21" then
     gen_code_alf1(channel, spec, cop, opnd1, opnd2, opnd4)
     gen_code_alef1(channel, ales_opc2, opnd3)
@@ -1190,6 +1325,24 @@ local function generate_lts16()
 end
 
 local function generate_lts32()
+  -- Handle first because it is more restricted.
+  for i,lit in ipairs(wide_instr["LITERALS"]) do
+    if lit.t == "NUM_32_STAA" then
+      local found = false
+      for i,j in ipairs({ "LTS0", "LTS1", "LTS2" }) do
+        if wide_instr[j] == nil then
+          wide_instr[j] = { value=lit.n }
+          update_src2(lit.channels, i)
+          found = true
+          break
+        end
+      end
+      if not found then
+        return false
+      end
+    end
+  end
+
   for i,lit in ipairs(wide_instr["LITERALS"]) do
     if lit.t == "NUM_32" then
       local found = false
@@ -1476,16 +1629,20 @@ map_op[".template__"] = function(params, template)
                             cop, opce, ales_opc2, ales_opce,
                             params[2], params[3], params[4])
       if op_type == "ALU2PR" then generate_alu_cond(channel, params[5]) end
-    elseif op_type == "ALU3" then
+    elseif op_type == "ALU3" or op_type == "ALU3PR" then
       local opce = op_info[6] -- May be nil, check later.
       local ales_opc2 = op_info[7] -- May be nil, check later.
       local ales_opce = op_info[8] -- May be nil, check later.
       generate_alu_oper(format, spec, channel, op_channel, 
                             cop, opce, ales_opc2, ales_opce,
                             params[2], params[3], params[4], params[5])
+      if op_type == "ALU3PR" then generate_alu_cond(channel, params[6]) end
     else
       werror("Unsupported ALU operation")
     end
+  elseif op_type == "INCR" then
+    local channel = assert(tonumber(params[1]), "Incorrect channel set")
+    gen_code_incr_oper(channel, params[2])
   elseif op_type == "DISP" then
     local operation = op_info[2]
     local opc = assert(tonumber(op_info[3]), "Incorrect opcode set")
