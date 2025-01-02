@@ -1350,10 +1350,8 @@ local function generate_nop_oper(opnd)
   local val = tonumber(opnd)
   if val == nil then werror("Incorrect nop value") end
   if val == 0 then wwarn("Ignoring nop 0") end
-  if wide_instr["NOP"] == nil then
+  if wide_instr["NOP"] == nil or wide_instr["NOP"].value < val then
     wide_instr["NOP"] = { value=val }
-  else
-    werror("Nop already set")
   end
 end
 
@@ -1634,7 +1632,14 @@ local function generate_hs_code()
     code = shl(code,1)
   end
   if wide_instr["NOP"] ~= nil then
-    code = shl(code,3) + wide_instr["NOP"].value -- set nop
+    local nops = wide_instr["NOP"]
+    if nops.value > 7 then
+      code = shl(code,3) + 7
+      nops.value = nops.value - 7 -- additional nops will be generated later
+    else
+      code = shl(code,3) + nops.value
+      wide_instr["NOP"] = nil -- do not generate additional nops after this bundle
+    end
   else
     code = shl(code,3) + 0
   end
@@ -1730,6 +1735,19 @@ local function wide_gen(force)
     end
     for i,j in ipairs(actions) do
       waction(j[1], j[2], j[3], j[4], j[5], j[6])
+    end
+    if wide_instr["NOP"] ~= nil then
+      -- Generate additional nops after this bundle.
+      local nops = wide_instr["NOP"].value
+      while nops > 0 do
+        if nops < 8 then
+          wputxw(shl(nops - 1, 7))
+        else
+          wputxw(shl(7, 7))
+        end
+        wputxw(0)
+        nops = nops - 8
+      end
     end
   end
   for i in pairs(wide_instr) do
