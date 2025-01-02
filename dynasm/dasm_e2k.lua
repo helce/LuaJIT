@@ -647,6 +647,10 @@ local function check_operand(opnd)
     operand = {t = "AAINCR", n = aaincr_list[opnd]}
   elseif sreg_list[opnd] then
     operand = {t = "SREG", n = sreg_list[opnd]}
+  elseif opnd == 'loop_end' then
+    operand = {t = "LOOP_END", n = 0 }
+  elseif opnd == '~loop_end' then
+    operand = {t = "NOT_LOOP_END", n = 0 }
   else
     if match(opnd, "^U64x%(.*%)$") then
       local u64 = {}
@@ -944,6 +948,10 @@ local function generate_ct_oper(opnd1, opnd2)
       value = 0x3
     elseif pred.t == "PRED" then
       value = 0x2
+    elseif pred.t == "LOOP_END" then
+      value = 0x4
+    elseif pred.t == "NOT_LOOP_END" then
+      value = 0x5
     else
       werror("Operand of type: "..pred.t.." unsupported for condition")
     end
