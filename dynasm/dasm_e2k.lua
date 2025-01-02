@@ -495,6 +495,8 @@ local map_op = {
   setbn_3 = "SETBN_0x4",
   -- C.15.1. Prepare to jump on literal disp
   disp_2 = "DISP_DISP_0x0",
+  -- C.??.?. Prepare program for array prefetch buffer.
+  ldisp_2 = "DISP_DISP_0x1",
   -- C.15.6. Prepare to return from call
   return_1 = "DISP_RETURN_0x3",
   -- C.17.1 Transfer of control operations
@@ -929,7 +931,7 @@ end
 local function generate_disp_oper(oper, opc, opnd1, opnd2)
   local code = 0
   local ctpr = check_operand(opnd1)
-  assert(ctpr.t == "CTPR", "Incorrect register for dist")
+  assert(ctpr.t == "CTPR" and (opc ~= 0x1 or ctpr.n == 2), "Incorrect register for dist")
   assert(wide_instr["CS0"] == nil, "CS0 already busy")
   -- 32Bit, ctpr(2), opcode(2), disp_value(28)
   code = ctpr.n
