@@ -1245,6 +1245,10 @@ map_op[".template__"] = function(params, template)
   elseif op_type == "GEN" then
     -- User requested to generate a bundle.
     wide_gen(true)
+    if not wide_mode then
+      wide_mode = true
+      werror("Bundle end `--` cannot be used if wide mode is disabled")
+    end
     return
   else
     werror("Incorrect operation type")
@@ -1262,8 +1266,11 @@ end
 
 -- Pseudo-opcodes to switch wide mode
 map_op[".wide_1"] = function(params)
-  assert(params[1] == "on" or params[1] == "off", "Expected \"on\" or \"off\"")
-  wide_mode = params[1] == "on"
+  if params[1] == "on" or params[1] == "off" then
+    wide_mode = params[1] == "on"
+  else
+    werror("Expected \"on\" or \"off\"")
+  end
 end
 
 ------------------------------------------------------------------------------
