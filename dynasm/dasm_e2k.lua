@@ -523,6 +523,8 @@ local map_op = {
   rwdsm_4 = "ALU1PR_ALOPF15_1_0x01_0x3d_0xc0_0x01_0xc0",
   rrssm_4 = "ALU1PR_ALOPF16_1_0x01_0x3e_0xc0_0x01_0xc0",
   rrdsm_4 = "ALU1PR_ALOPF16_1_0x01_0x3f_0xc0_0x01_0xc0",
+  -- C.??.?. Loop mode
+  loop_0 = "LOOP",
   -- C.??.?. Advance loop counter
   alct_0 = "SHORT_16",
   alcf_0 = "SHORT_17",
@@ -1336,6 +1338,14 @@ local function generate_pass_oper(opnd1, opnd2)
   end
 end
 
+local function generate_loop_oper()
+  if wide_instr["LOOP"] == nil then
+    wide_instr["LOOP"] = true
+  else
+    werror("Loop mode already set")
+  end
+end
+
 local function generate_nop_oper(opnd)
   local val = tonumber(opnd)
   if val == nil then werror("Incorrect nop value") end
@@ -1618,7 +1628,11 @@ local function generate_hs_code()
     code = shl(code,2) + 0
   end
   code = shl(code,1) + 0 -- set x
-  code = shl(code,1) + 0 -- set lm (will not support loop mode in first steps)
+  if wide_instr["LOOP"] then
+    code = shl(code,1) + 1
+  else
+    code = shl(code,1)
+  end
   if wide_instr["NOP"] ~= nil then
     code = shl(code,3) + wide_instr["NOP"].value -- set nop
   else
@@ -1793,6 +1807,8 @@ map_op[".template__"] = function(params, template)
     generate_short_oper(op_info[2])
   elseif op_type == "NOP" then
     generate_nop_oper(params[1])
+  elseif op_type == "LOOP" then
+    generate_loop_oper()
   elseif op_type == "MOVA" then
     local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
     local channel = assert(tonumber(params[1]), "Incorrect channel set")
