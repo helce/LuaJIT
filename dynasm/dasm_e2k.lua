@@ -556,6 +556,8 @@ local map_op = {
   movad_6 = "MOVA_0x4",
   movaq_6 = "MOVA_0x5",
   movaqp_6 = "MOVA_0x7",
+  -- C.??.?. APB program
+  fapb_10 = "FAPB",
   -- Generate wide instruction
   ["--_0"] = "GEN",
 }
@@ -675,8 +677,14 @@ local function check_operand(opnd)
   return operand
 end
 
-local function named_operand(value, name, min, max)
-  local value = assert(tonumber(sub(value, #name + 2)), "Incorrect "..name.." set")
+local function named_operand_raw(opnd, name)
+  assert(sub(opnd, 0, #name + 1) == name.."=", "Incorrect operand \""..opnd.."\" for "..name)
+  return assert(sub(opnd, #name + 2), "Incorrect "..name.." set")
+end
+
+local function named_operand(opnd, name, min, max)
+  local raw = named_operand_raw(opnd, name)
+  local value = assert(tonumber(raw), "Incorrect "..name.." set")
   assert(value >= min and value <= max, "Value for "..name.." must be in range "..min.."..="..max)
   return value
 end
@@ -1352,6 +1360,41 @@ local function generate_mova_oper(opc, channel, area, ind, am, be, dst)
   syllable_bor("AAS"..({0, 0, 1, 1})[channel + 1], dst)
 end
 
+local function generate_fapb_oper(opnd, dcd, fmt, mrng, d, incr, ind, asz, abs, disp)
+  -- fapb ct=1, dcd=0, fmt=4, mrng=8, d=0, incr=0, ind=2, asz=5, abs=0, disp=0
+  -- fapb dpl=0, dcd=0, fmt=3, mrng=4, d=0, incr=0, ind=1, asz=5, abs=0, disp=0
+  --
+  -- |63  32|31|30|29 28|27 25|24  20|19 15|14  12|11  8|7 5|4 0|
+  -- | disp |ct|si| dcd | fmt | mrng | aad | incr | ind |asz|abs|
+
+  local lo = 0
+  if not wide_capture then
+    lo = named_operand(opnd, "ct", 0, 1)
+  else
+    lo = named_operand(opnd, "dpl", 0, 1)
+  end
+  lo = shl(lo, 1) + 0
+  lo = shl(lo, 2) + named_operand(dcd, "dcd", 0, 3)
+  lo = shl(lo, 3) + named_operand(fmt, "fmt", 0, 7)
+  lo = shl(lo, 5) + named_operand(mrng, "mrng", 0, 31)
+  lo = shl(lo, 5) + named_operand(d, "d", 0, 31)
+  lo = shl(lo, 3) + named_operand(incr, "incr", 0, 7)
+  lo = shl(lo, 4) + named_operand(ind, "ind", 0, 15)
+  lo = shl(lo, 3) + named_operand(asz, "asz", 0, 7)
+  lo = shl(lo, 5) + named_operand(abs, "abs", 0, 31)
+
+  local hi = named_operand(disp, "disp", 0, 0xffffffff)
+
+  if not wide_capture then
+    wide_instr["FAPB0"] = { lo = lo, hi = hi }
+  else
+    if wide_instr["FAPB1"] ~= nil then
+      werror("FAPB1 already busy")
+    end
+    wide_instr["FAPB1"] = { lo = lo, hi = hi }
+  end
+end
+
 local function update_src2(channels, value)
   for i,channel in ipairs(channels) do
     local als = wide_instr["ALS"..channel]
@@ -1630,30 +1673,42 @@ local function wide_gen(force)
   end
   -- Stop capturing bundle instructions.
   wide_capture = false
-  generate_lts()
-  local hs_code, is_notaligned = generate_hs_code()
-  local code = generate_ins_code(hs_code, is_notaligned)
-  local actions = {}
-  for i,j in ipairs(code) do
-    wputxw(j.value)
-    if j.action then
-      if j.action == "LABEL" then
-        local mode, n, s = parse_label(j.lit, false)
-        local ofs_e = #code - i + 1
-        local ofs_s = #code / 2
-        assert(ofs_e < 15, "Too big offset to CS0")
-        assert(ofs_s < 15, "Too big size of command")
-        actions[#actions+1] = { "REL_"..mode, n, s, ofs_e, ofs_s, 1 }
-      elseif j.action == "IMM" then
-        local ofs = #code - i + 1
-        actions[#actions+1] = { "IMM", 0, j.lit, ofs, nil, 1 }
-      else
-        werror("Incompatible action")
+  if wide_instr["FAPB0"] ~= nil then
+    wputxw(wide_instr["FAPB0"].lo)
+    wputxw(wide_instr["FAPB0"].hi)
+    if wide_instr["FAPB1"] ~= nil then
+      wputxw(wide_instr["FAPB1"].lo)
+      wputxw(wide_instr["FAPB1"].hi)
+    else
+      wputxw(0)
+      wputxw(0)
+    end
+  else
+    generate_lts()
+    local hs_code, is_notaligned = generate_hs_code()
+    local code = generate_ins_code(hs_code, is_notaligned)
+    local actions = {}
+    for i,j in ipairs(code) do
+      wputxw(j.value)
+      if j.action then
+        if j.action == "LABEL" then
+          local mode, n, s = parse_label(j.lit, false)
+          local ofs_e = #code - i + 1
+          local ofs_s = #code / 2
+          assert(ofs_e < 15, "Too big offset to CS0")
+          assert(ofs_s < 15, "Too big size of command")
+          actions[#actions+1] = { "REL_"..mode, n, s, ofs_e, ofs_s, 1 }
+        elseif j.action == "IMM" then
+          local ofs = #code - i + 1
+          actions[#actions+1] = { "IMM", 0, j.lit, ofs, nil, 1 }
+        else
+          werror("Incompatible action")
+        end
       end
     end
-  end
-  for i,j in ipairs(actions) do
-    waction(j[1], j[2], j[3], j[4], j[5], j[6])
+    for i,j in ipairs(actions) do
+      waction(j[1], j[2], j[3], j[4], j[5], j[6])
+    end
   end
   for i in pairs(wide_instr) do
     wide_instr[i] = nil
@@ -1734,6 +1789,9 @@ map_op[".template__"] = function(params, template)
     local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
     local channel = assert(tonumber(params[1]), "Incorrect channel set")
     generate_mova_oper(opc, channel, params[2], params[3], params[4], params[5], params[6])
+  elseif op_type == "FAPB" then
+    generate_fapb_oper(params[1], params[2], params[3], params[4], params[5],
+                       params[6], params[7], params[8], params[9], params[10])
   elseif op_type == "GEN" then
     -- User requested to generate a bundle.
     wide_gen(true)
