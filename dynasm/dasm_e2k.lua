@@ -1003,12 +1003,14 @@ local function generate_lts16()
       for i,j in ipairs({ "LTS0", "LTS1" }) do
         if wide_instr[j] == nil then
           wide_instr[j] = { value=lit.n, half = true }
+          -- 1, 1, 0, 1, 0, lts_hi, lts_num
           update_src2(lit.channels, 0xd0 + i - 1)
           found = true
           break
         elseif wide_instr[j].half == true then
           wide_instr[j].half = nil
           wide_instr[j].value = bor(wide_instr[j].value, shl(lit.n, 16))
+          -- 1, 1, 0, 1, 0, lts_lo, lts_num
           update_src2(lit.channels, 0xd4 + i - 1)
           found = true
           break
