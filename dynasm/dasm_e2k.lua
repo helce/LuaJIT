@@ -66,6 +66,9 @@ local wide_capture = false
 -- Current wide instruction.
 local wide_instr = {}
 
+-- Current bundling mode.
+local wide_mode = true
+
 ------------------------------------------------------------------------------
 
 -- Dump action names and numbers.
@@ -1247,8 +1250,20 @@ map_op[".template__"] = function(params, template)
     werror("Incorrect operation type")
   end
 
-  -- Start capturing instructions.
-  wide_capture = true
+  if wide_mode then
+    -- Start capturing instructions.
+    wide_capture = true
+  else
+    wide_gen(true)
+  end
+end
+
+------------------------------------------------------------------------------
+
+-- Pseudo-opcodes to switch wide mode
+map_op[".wide_1"] = function(params)
+  assert(params[1] == "on" or params[1] == "off", "Expected \"on\" or \"off\"")
+  wide_mode = params[1] == "on"
 end
 
 ------------------------------------------------------------------------------

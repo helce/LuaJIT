@@ -3573,93 +3573,59 @@ static void build_subroutines(BuildCtx *ctx)
     | do_fault
     |
     |->vm_rethook:                          // Dispatch target for return hooks.
+    | .wide off
     | ldb 0, DISPATCH, DISPATCH_GL(hookmask), RD
-    | --
     | cmpandedb 0, RD, HOOK_ACTIVE, pred0
-    | --
     | disp ctpr1, >5                        // Hook already active?
-    | --
     | ct ctpr1, ~pred0
-    | --
     | disp ctpr1, >1
-    | --
     | ct ctpr1
-    | --
+    | .wide on
     |
     |->vm_inshook:                          // Dispatch target for instr/line hooks.
+    | .wide off
     | ldb 0, DISPATCH, DISPATCH_GL(hookmask), RD
-    | --
     | cmpandedb 0, RD, HOOK_ACTIVE, pred0
-    | --
     | disp ctpr1, >5                        // Hook already active?
-    | --
     | ct ctpr1, ~pred0
-    | --
     | cmpandedb 0, RD, LUA_MASKLINE|LUA_MASKCOUNT, pred0
-    | --
     | disp ctpr1, >5
-    | --
     | ct ctpr1, pred0
-    | --
     | ldw 0, DISPATCH, DISPATCH_GL(hookcount), TMP0
-    | --
     | subd 0, TMP0, 0x1, TMP0
-    | --
     | stw 2, DISPATCH, DISPATCH_GL(hookcount), TMP0
-    | --
     | cmpedb 0, TMP0, 0x0, pred0
-    | --
     | disp ctpr1, >1
-    | --
     | ct ctpr1, pred0
-    | --
     | cmpandedb 0, RD, LUA_MASKLINE, pred0
-    | --
     | disp ctpr1, >5
-    | --
     | ct ctpr1, pred0
     |1:
     | ldd 0, STACK, SAVE_L, RB
-    | --
     | std 2, RB, L->base, BASE
-    | --
     | addd 0, PC, 0x0, CARG2
-    | --
     | addd 0, RB, 0x0, CARG1
-    | --
     | // SAVE_PC must hold the _previous_ PC. The callee updates it with PC.
     | disp ctpr1, extern lj_dispatch_ins    // (lua_State *L, const BCIns *pc)
-    | --
     | call ctpr1, wbs = 0x8
     |3:
     | ldd 0, RB, L->base, BASE
     |4:
     | ldb 0, PC, PC_RA, RA
-    | --
     | shld 0, RA, 0x3, RA
     |5:
     | ldb 0, PC, PC_OP, TMP1
-    | --
     | shld 0, TMP1, 0x3, TMP1
-    | --
     | ldh 0, PC, PC_RD, RD
-    | --
     | shrd 0, RD, 0x5, RB
-    | --
     | shld 0, RD, 0x3, RD
-    | --
     | andd 0, RB, 0x7f8, RB
-    | --
     | andd 0, RD, 0x7f8, RC
-    | --
     | addd 0, DISPATCH, TMP1, TMP1
-    | --
     | ldd 0, TMP1, GG_DISP2STATIC, TMP1
-    | --
     | movtd 0, TMP1, ctpr1
-    | --
     | ct ctpr1
-    | --
+    | .wide on
     |
     |->cont_hook:                           // Continue from hook yield.
     | do_fault
@@ -3669,67 +3635,43 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vm_hotcall:                          // Hot call counter underflow.
+    | .wide off
     | addd 0, BASE, RD, RD
-    | --
     | subd 0, RD, 0x8, RD
-    | --
     | ldd 0, STACK, SAVE_L, RB
-    | --
     | std 2, RB, L->base, BASE
-    | --
     | std 2, RB, L->top, RD
-    | --
     | addd 0, PC, 0x0, CARG2
-    | --
     | addd 0, RB, 0x0, CARG1
-    | --
     | disp ctpr1, extern lj_dispatch_call   // (lua_State *L, const BCIns *pc)
-    | --
     | call ctpr1, wbs = 0x8
-    | --
     | // ASMFunction returned.
     | addd 0, 0x0, 0x0, TMP0
-    | --
     | std 2, STACK, SAVE_PC, TMP0              // Invalidate for subsequent line hook.
-    | --
     | ldd 0, RB, L->base, BASE
-    | --
     | addd 0, CRET1, 0x0, RA
-    | --
     | ldd 0, RB, L->top, RD
-    | --
     | subd 0, RD, BASE, RD
-    | --
     | movtd 0, RA, ctpr1
-    | --
     | ldb 0, PC, PC_RA, RA
-    | --
     | shld 0, RA, 0x3, RA
-    | --
     | addd 0, RD, 0x8, RD
-    | --
     | ct ctpr1
-    | --
+    | .wide on
     |
     |->vm_profhook:                         // Dispatch target for profiler hook.
 #if LJ_HASPROFILE
+    | .wide off
     | ldd 0, STACK, SAVE_L, RB
-    | --
     | std 2, RB, L->base, BASE
-    | --
     | addd 0, PC, 0x0, CARG2
-    | --
     | addd 0, RB, 0x0, CARG1
-    | --
     | disp ctpr1, extern lj_dispatch_profile // (lua_State *L, const BCIns *pc)
-    | --
     | call ctpr1, wbs = 0x8
-    | --
     | ldd 0, RB, L->base, BASE
-    | --
     | // HOOK_PROFILE is off again, so re-dispatch to dynamic instruction.
     | subd 0, PC, 0x4, PC
-    | --
+    | .wide on
     | ins_next
 #endif
     |
@@ -3770,50 +3712,32 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |// modulo x%y. Called by BC_MOD* and vm_arith.
     |->vm_mod:
+    | .wide off
     | setwd wsz = 0x4, nfx = 0x1, dbl = 0x0
-    | --
     | fdivd 5, RARG1, RARG2, RARG3
-    | --
     | andd 0, RARG3, U64x(0x7fffffff,0xffffffff), RARG4 // |x/y|
-    | --
     | fcmpnltdb 0, RARG4, U64x(0x43300000,0x00000000), pred0 // |x/y| >= 2^52
-    | --
     | disp ctpr1, >2
-    | --
     | ct ctpr1, pred0
-    | --
     | andd 0, RARG3, U64x(0x80000000,0x00000000), RARG5 // Isolate sign bit.
-    | --
     | faddd 0, RARG4, U64x(0x43300000,0x00000000), RARG4 // (|x/y| + 2^52) - 2^52
-    | --
     | fsubd 0, RARG4, U64x(0x43300000,0x00000000), RARG4
-    | --
     | ord 0, RARG4, RARG5, RARG4               // Merge sign bit back in.
-    | --
     | fcmpltdb 0, RARG3, RARG4, pred0
-    | --
     | disp ctpr1, >1                        // x/y < result?
-    | --
     | ct ctpr1, ~pred0
-    | --
     | fsubd 0, RARG4, U64x(0x3ff00000,0x00000000), RARG4 // If yes, subtract 1.0.
     |1:
     | fmuld 0, RARG2, RARG4, RARG2
-    | --
     | fsubd 0, RARG1, RARG2, RRET1
-    | --
     | return ctpr3
-    | --
     | ct ctpr3
     |2:
     | fmuld 0, RARG2, RARG3, RARG2
-    | --
     | fsubd 0, RARG1, RARG2, RRET1
-    | --
     | return ctpr3
-    | --
     | ct ctpr3
-    | --
+    | .wide on
     |
     |->vm_next:
     | // Unsupported
