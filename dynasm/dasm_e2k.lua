@@ -1268,6 +1268,9 @@ end
 map_op[".wide_1"] = function(params)
   if params[1] == "on" or params[1] == "off" then
     wide_mode = params[1] == "on"
+    if not wide_mode then
+      wide_gen(false)
+    end
   else
     werror("Expected \"on\" or \"off\"")
   end
