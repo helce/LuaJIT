@@ -549,11 +549,45 @@ local map_op = {
   aaurw_3 = "ALU2_AAURW_0_0x24_0x1e_N_0x01_0xc0",
   aaurwd_3 = "ALU2_AAURW_0_0x24_0x1f_N_0x01_0xc0",
   aaurwq_3 = "ALU2_AAURWQ_0_0x04_0x3f_N_0x01_0xc0",
+  -- C.??.?. Move data from APB
+  movab_6 = "MOVA_0x1",
+  movah_6 = "MOVA_0x2",
+  movaw_6 = "MOVA_0x3",
+  movad_6 = "MOVA_0x4",
+  movaq_6 = "MOVA_0x5",
+  movaqp_6 = "MOVA_0x7",
   -- Generate wide instruction
   ["--_0"] = "GEN",
 }
 
 ------------------------------------------------------------------------------
+
+local function assert_syllable(name)
+  if wide_instr[name] ~= nil then
+    werror(name.." already busy")
+  end
+end
+
+local function syllable(name)
+  if wide_instr[name] == nil then
+    wide_instr[name] = { value = 0 }
+  end
+  return wide_instr[name]
+end
+
+local function syllable_bor(name, value)
+  local syll = syllable(name, default)
+  syll.value = bor(syll.value, value)
+end
+
+local function syllable_set_unchecked(name, value)
+  wide_instr[name] = { value = value }
+end
+
+local function syllable_set(name, value)
+  assert_syllable(name)
+  syllable_set_unchecked(name, value)
+end
 
 local function parse_label(label, def)
   local prefix = sub(label, 1, 2)
@@ -639,6 +673,12 @@ local function check_operand(opnd)
     end
   end
   return operand
+end
+
+local function named_operand(value, name, min, max)
+  local value = assert(tonumber(sub(value, #name + 2)), "Incorrect "..name.." set")
+  assert(value >= min and value <= max, "Value for "..name.." must be in range "..min.."..="..max)
+  return value
 end
 
 local function gen_code_dst(opnd)
@@ -1291,6 +1331,27 @@ local function generate_nop_oper(opnd)
   end
 end
 
+local function generate_mova_oper(opc, channel, area, ind, am, be, dst)
+  local area = named_operand(area, "area", 0, 63)
+  local ind = named_operand(ind, "ind", 0, 31)
+  local am = named_operand(am, "am", 0, 1)
+  local be = named_operand(be, "be", 0, 1)
+
+  dst = gen_code_dst(dst)
+  if band(channel, 1) == 0 then
+    dst = shl(dst, 8)
+  end
+
+  local aas = bor(am, shl(ind, 1))
+  aas = bor(aas, shl(area, 6))
+  aas = bor(aas, shl(opc, 12))
+  aas = bor(aas, shl(be, 15))
+
+  syllable_set("AAS"..(channel + 2), aas)
+  syllable_bor("SS", shl(1, 12 + channel))
+  syllable_bor("AAS"..({0, 0, 1, 1})[channel + 1], dst)
+end
+
 local function update_src2(channels, value)
   for i,channel in ipairs(channels) do
     local als = wide_instr["ALS"..channel]
@@ -1531,18 +1592,18 @@ local function generate_ins_code(hs_code, is_notaligned)
     if wide_instr[j] ~= nil then ins[#ins+1] = wide_instr[j] end
   end
   local half_syls = { "ALES0", "ALES1", "ALES3", "ALES4", "AAS0", "AAS1", "AAS2", "AAS3", "AAS4", "AAS5" }
-  local tmp_code = 0
+  local tmp_code = nil
   for i,j in ipairs(half_syls) do
     if wide_instr[j] ~= nil then
-      if tmp_code ~= 0 then
+      if tmp_code ~= nil then
         ins[#ins+1] = { value = shl(tmp_code, 16) + wide_instr[j].value}
-        tmp_code = 0
+        tmp_code = nil
       else
         tmp_code = wide_instr[j].value
       end
     end
   end
-  if tmp_code ~= 0 then ins[#ins+1] = { value = shl(tmp_code, 16) } end
+  if tmp_code ~= nil then ins[#ins+1] = { value = shl(tmp_code, 16) } end
   if is_notaligned then ins[#ins+1] = { value = 0x0 } end
   syls = { "LTS3", "LTS2", "LTS1", "LTS0", "PLS2", "PLS1", "PLS0" }
   for i,j in ipairs(syls) do
@@ -1669,6 +1730,10 @@ map_op[".template__"] = function(params, template)
     generate_short_oper(op_info[2])
   elseif op_type == "NOP" then
     generate_nop_oper(params[1])
+  elseif op_type == "MOVA" then
+    local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
+    local channel = assert(tonumber(params[1]), "Incorrect channel set")
+    generate_mova_oper(opc, channel, params[2], params[3], params[4], params[5], params[6])
   elseif op_type == "GEN" then
     -- User requested to generate a bundle.
     wide_gen(true)
