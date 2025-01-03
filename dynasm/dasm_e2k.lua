@@ -404,6 +404,9 @@ local map_op = {
   ct_1 = "CT",
   -- C.17.4 Call operations
   call_2 = "CALL_0x5",
+  -- C.??.? Ibranch operations
+  ibranch_1 = "IBRANCH",
+  ibranch_2 = "IBRANCH",
   -- C.22.4. Push nop
   nop_1 = "NOP",
   -- Generate wide instruction
@@ -699,13 +702,12 @@ local function generate_setwd_oper(opc, wsz_seq, nfx_seq, dbl_seq)
   wide_instr["CS1"] = { value=cs_code }
 end
 
-local function generate_ct_oper(opnd1, opnd2)
+local function generate_ct_oper_raw(ctpr, opnd2)
   local code = 0
-  local ctpr = check_operand(opnd1)
   -- 32Bit, ipd(2),eap(1),bap(1),rp_hi(1),vfdi(1),rp_lo(1),abg(2),abn(2),type(1),
   --        abp(2),alc(2),aa(4),ctop(2),unused(1),ctcond(9)
   code = 0x3
-  code = shl(code,20) + ctpr.n
+  code = shl(code,20) + ctpr
   code = shl(code,10)
   if opnd2 ~= nil then
     -- ct(4), pred_num(5)
@@ -732,6 +734,14 @@ local function generate_ct_oper(opnd1, opnd2)
   else
     wide_instr["SS"] = { value=code }
   end
+end
+
+local function generate_ct_oper(opnd1, opnd2)
+  local ctpr = check_operand(opnd1)
+  if ctpr.t ~= "CTPR" then
+    werror("Operand of type: "..ctpr.t.." unsupported for ctpr")
+  end
+  generate_ct_oper_raw(ctpr.n, opnd2)
 end
 
 local function generate_call_oper(opc, opnd1, opnd2)
@@ -766,6 +776,14 @@ local function generate_disp_oper(oper, opc, opnd1, opnd2)
   else
     werror("Unsupported disp operation")
   end
+end
+
+local function generate_ibranch_oper(opnd1, opnd2)
+  assert(wide_instr["CS0"] == nil, "CS0 already busy")
+  local label = check_operand(opnd1)
+  assert(label.t == "NUM_UNDEF", "Incorrect label set")
+  wide_instr["CS0"] = { value=0, action="LABEL", lit=label.n }
+  generate_ct_oper_raw(0, opnd2)
 end
 
 local function gen_code_alf1(channel, spec, cop, src1, src2, dst)
@@ -1330,6 +1348,8 @@ map_op[".template__"] = function(params, template)
   elseif op_type == "CALL" then
     local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
     generate_call_oper(opc, params[1], params[2])
+  elseif op_type == "IBRANCH" then
+    generate_ibranch_oper(params[1], params[2])
   elseif op_type == "SETWD" then
     local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
     generate_setwd_oper(opc, params[1], params[2], params[3])
