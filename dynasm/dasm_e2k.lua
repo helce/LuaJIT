@@ -680,14 +680,17 @@ local function check_operand(opnd)
   end
   -- set concrete const type
   if operand.t == "CONST" then
-    if operand.n <= 0xf then
+    -- small immediates are unsigned
+    if operand.n >= 0 and operand.n <= 0xf then
       operand.t = "NUM_4"
-    elseif operand.n <= 0x1f then
+    elseif operand.n >= 0 and operand.n <= 0x1f then
       operand.t = "NUM_5"
     elseif operand.n <= 0xffff then
       operand.t = "NUM_16"
+      operand.n = band(operand.n, 0xffff)
     elseif operand.n <= 0xffffffff then
       operand.t = "NUM_32"
+      operand.n = band(operand.n, 0xffffffff)
     else
       werror("operand: "..tohex(operand.n).." is unsupported size")
     end

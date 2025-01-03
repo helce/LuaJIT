@@ -233,17 +233,17 @@
 |
 |.macro ins_call
 | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8, PC = caller PC
-| std 5, BASE, 0xfffffff8, PC
+| std 5, BASE, -8, PC
 | --
 | ins_callt
 |.endmacro
 |
 |//-----------------------------------------------------------------------
-|.define PC_OP, 0xfffffffc                  // Byte
-|.define PC_RA, 0xfffffffd                  // Byte
-|.define PC_RB, 0xffffffff                  // Byte
-|.define PC_RC, 0xfffffffe                  // Byte
-|.define PC_RD, 0xfffffffe                  // Halfword
+|.define PC_OP, -4                          // Byte
+|.define PC_RA, -3                          // Byte
+|.define PC_RB, -1                          // Byte
+|.define PC_RC, -2                          // Byte
+|.define PC_RD, -2                          // Halfword
 |
 |// Assumes DISPATCH is relative to GL.
 #define DISPATCH_GL(field)      (GG_DISP2G + (int)offsetof(global_State, field))
@@ -267,7 +267,7 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | ct ctpr1, pred0
-    | andd 3, PC, 0xfffffff8, PC, ~pred0
+    | andd 3, PC, -8, PC, ~pred0
     | subd 4, RA, 0x8, RA, ~pred0
     | --
     |
@@ -276,7 +276,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd 4, RA, PC, RA                    // Rebase RA and prepend one result.
     | addd 5, 0x0, U64x(0xfffeffff,0xffffffff), ITYPE
     | --
-    | ldd 3, BASE, 0xfffffff8, PC           // Fetch PC of previous frame.
+    | ldd 3, BASE, -8, PC                   // Fetch PC of previous frame.
     | --
     | // Prepending may overwrite the pcall frame, so do it at the end.
     | std 5, BASE, RA, ITYPE                // Prepend true to results.
@@ -334,7 +334,7 @@ static void build_subroutines(BuildCtx *ctx)
     | cmpedb 4, CARG3, 0x0, pred0
     | --
     | addd 3, BASE, 0x8, BASE
-    | std 5, BASE, 0xfffffff0, TMP1
+    | std 5, BASE, -16, TMP1
     | ct ctpr1, ~pred0
     |2:
     | disp ctpr1, >4
@@ -479,13 +479,13 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd 2, RB, L->base, BASE
     | nop 2
     | --
-    | ldd 0, BASE, 0xfffffff8, PC           // Fetch PC of previous frame.
+    | ldd 0, BASE, -8, PC           // Fetch PC of previous frame.
     | addd 1, DISPATCH, GG_G2DISP, DISPATCH
     | ldd 3, BASE, 0x0, RB
     | nop 2
     | --
-    | std 2, BASE, 0xfffffff8, RB
-    | std 5, BASE, 0xfffffff0, RA           // Prepend false to error message.
+    | std 2, BASE, -8, RB
+    | std 5, BASE, -16, RA           // Prepend false to error message.
     | --
     | subd 3, 0x0, 0x10, RA                 // Results start at BASE+RA = BASE-16.
     | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0
@@ -510,7 +510,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd 5, RB, L->top, RD
     | nop 2
     | --
-    | ldd 3, BASE, 0xfffffff0, RB
+    | ldd 3, BASE, -16, RB
     | subd 4, RD, BASE, RD
     | nop 2
     | --
@@ -540,7 +540,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd 5, RB, L->top, RD
     | nop 2
     | --
-    | ldd 3, BASE, 0xfffffff0, RB
+    | ldd 3, BASE, -16, RB
     | subd 4, RD, BASE, RD
     | nop 2
     | --
@@ -574,7 +574,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd 5, RB, L->top, RD
     | nop 2
     | --
-    | ldd 3, BASE, 0xfffffff0, RB
+    | ldd 3, BASE, -16, RB
     | subd 4, RD, BASE, RD
     | nop 2
     | --
@@ -632,7 +632,7 @@ static void build_subroutines(BuildCtx *ctx)
     | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0
     | stb 5, RB, L->status, RD
     | --
-    | ldd 3, BASE, 0xfffffff8, PC
+    | ldd 3, BASE, -8, PC
     | subd 4, TMP1, RA, RD
     | subd 5, RA, BASE, RA                  // RA = resultofs
     | --
@@ -695,7 +695,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | std 2, DISPATCH, DISPATCH_GL(cur_L), RB
     | --
-    | ldd 0, RA, 0xfffffff0, RB             // RB = LFUNC
+    | ldd 0, RA, -16, RB             // RB = LFUNC
     | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0
     | nop 1
     | --
@@ -719,7 +719,7 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | shld 0, TMP1, 0x3, TMP1               // jmp to [DISPATCH+OP*8]
-    | std 2, BASE, 0xfffffff8, PC           // [BASE-8] = PC
+    | std 2, BASE, -8, PC                   // [BASE-8] = PC
     | --
     | ldd 0, TMP1, DISPATCH, TMP1
     | addd 1, CARG1, 0x4, PC
@@ -793,7 +793,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->cont_dispatch:
     | // BASE = meta base, RA = resultofs, RD = (nresults+1)*8 (also in MULTRES)
-    | andd 2, PC, 0xfffffff8, PC
+    | andd 2, PC, -8, PC
     | addd 3, BASE, RA, RA
     | addd 4, BASE, 0x0, RB
     | addd 5, 0x0, LJ_TNIL, TMP0
@@ -808,11 +808,11 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd 2, RB, 0xffffffe0, RA
     | disp ctpr3, ->vm_call_tail
     | --
-    | lddsm 3, BASE, 0xfffffff0, CARG2
+    | lddsm 3, BASE, -16, CARG2
     | --
     | cmpbedb 0, RA, 0x1, pred0
     | cmpedb 1, RA, 0x1, pred1
-    | std 5, TMP1, 0xfffffff8, TMP0         // Ensure one valid arg.
+    | std 5, TMP1, -8, TMP0                 // Ensure one valid arg.
     | nop 2
     | --
     |.if FFI
@@ -991,7 +991,7 @@ static void build_subroutines(BuildCtx *ctx)
     | std 5, RA, 0xffffffe8, PC             // [RA-24] cont|PC
     | --
     | subd 2, PC, BASE, PC
-    | ldd 3, RA, 0xfffffff0, RB             // [RA-16] Guaranteed to be a function here.
+    | ldd 3, RA, -16, RB                    // [RA-16] Guaranteed to be a function here.
     | addd 4, 0x0, (2+1)*8, RD              // (2+1)*8 args for func(t, k)
     | nop 2
     | --
@@ -1159,7 +1159,7 @@ static void build_subroutines(BuildCtx *ctx)
     | subd 0, PC, BASE, PC
     | std 2, RA, 0x10, RB
     | --
-    | ldd 3, RA, 0xfffffff0, RB             // Guaranteed to be a function here.
+    | ldd 3, RA, -16, RB             // Guaranteed to be a function here.
     | addd 4, 0x0, (3+1)*8, RD              // 3 args for func (t, k, v)
     | nop 3
     | --
@@ -1176,7 +1176,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | andd 0, RA, 0xff, TMP0
     | addd 1, PC, 0x4, PC
-    | std 5, BASE, 0xfffffff8, TMP1
+    | std 5, BASE, -8, TMP1
     | --
     | shld 0, TMP0, 0x3, TMP0               // jmp to [DISPATCH+OP*8]
     | --
@@ -1469,7 +1469,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd 3, 0x0, (2+1)*8, RD              // 2 args for func(o1, o2).
     | --
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
-    | ldd 0, RA, 0xfffffff0, RB
+    | ldd 0, RA, -16, RB
     | disp ctpr1, ->vmeta_call
     | nop 2
     | --
@@ -1538,7 +1538,7 @@ static void build_subroutines(BuildCtx *ctx)
     | call ctpr1, wbs = 0x8
     | --
     | ldd 0, STACK, SAVE_L, TMP0
-    | ldd 2, RA, 0xfffffff0, RB
+    | ldd 2, RA, -16, RB
     | disp ctpr2, ->BC_CALLT_Z
     | nop 2
     | --
@@ -1563,7 +1563,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ldd 0, STACK, SAVE_L, RB
     | addd 1, RA, 0x0, CARG2
-    | ldwsm 2, PC, 0xfffffffc, TMP0
+    | ldwsm 2, PC, -4, TMP0
     | nop 2
     | --
     | andd 0, TMP0, 0xff, TMP1
@@ -1647,12 +1647,12 @@ static void build_subroutines(BuildCtx *ctx)
     | landp ~p0, p1, p4
     | pass p4, pred0
     | --
-    | ldd 0, BASE, 0xfffffff8, PC
+    | ldd 0, BASE, -8, PC
     | ct ctpr1, ~pred0
     | --
     | stw 2, STACK, MULTRES, RD
     | subd 4, RD, 0x10, RD
-    | std 5, BASE, 0xfffffff0, RB
+    | std 5, BASE, -16, RB
     | --
     | cmpedb 3, RD, 0x0, pred0
     | disp ctpr1, >1
@@ -1669,7 +1669,7 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | addd 4, RA, 0x8, RA, ~pred0
-    | std 5, RA, 0xfffffff0, RB
+    | std 5, RA, -16, RB
     | ct ctpr1, ~pred0
     | --
     | ldw 0, STACK, MULTRES, RD
@@ -1689,12 +1689,12 @@ static void build_subroutines(BuildCtx *ctx)
     | cmpbsb 4, RC, RB, pred1
     | nop 1
     | --
-    | xors 3, RB, 0xffffffff, RC, pred1
-    | xors 4, RC, 0xffffffff, RC, ~pred1
+    | xors 3, RB, -1, RC, pred1
+    | xors 4, RC, -1, RC, ~pred1
     | ct ctpr1, pred0
     | --
-    | ldd 0, BASE, 0xfffffff8, PC
-    | ldd 3, BASE, 0xfffffff0, RB
+    | ldd 0, BASE, -8, PC
+    | ldd 3, BASE, -16, RB
     | shls 4, RC, 0x3, RC
     | disp ctpr2, ->fff_res
     | nop 2
@@ -1712,7 +1712,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ord 3, RC, ITYPE, RC
     | --
     | addd 4, 0x0, (1+1)*8, RD
-    | std 5, BASE, 0xfffffff0, RC
+    | std 5, BASE, -16, RC
     | ct ctpr2
     | --
     |
@@ -1722,7 +1722,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd 3, BASE, 0x0, RB
     | disp ctpr1, ->fff_fallback
     | --
-    | ldd 0, BASE, 0xfffffff8, PC
+    | ldd 0, BASE, -8, PC
     | cmpbdb 3, RD, (1+1)*8, pred0
     | disp ctpr2, >1
     | nop 1
@@ -1748,7 +1748,7 @@ static void build_subroutines(BuildCtx *ctx)
     | pass p4, pred0
     | --
     | shld 3, RC, 0x2f, RC
-    | xord 4, ITYPE, U64x(0xffffffff,0xffffffff), ITYPE
+    | xord 4, ITYPE, -1, ITYPE
     | ct ctpr2, ~pred0
     | --
     | shld 0, ITYPE, 0x3, TMP0
@@ -1767,11 +1767,11 @@ static void build_subroutines(BuildCtx *ctx)
     | lddsm 5, RB, TAB->node, CARG1
     | --
     | addd 0, 0x0, LJ_TSTR, ITYPE
-    | std 5, BASE, 0xfffffff0, RC, ~pred0   // Store metatable as default result.
+    | std 5, BASE, -16, RC, ~pred0   // Store metatable as default result.
     | --
     | shld 0, ITYPE, 0x2f, ITYPE
     | addd 4, 0x0, (1+1)*8, RD
-    | std 5, BASE, 0xfffffff0, TMP0, pred0
+    | std 5, BASE, -16, TMP0, pred0
     | ct ctpr1, pred0
     | --
     | ldw 0, TMP1, STR->sid, TMP0
@@ -1812,7 +1812,7 @@ static void build_subroutines(BuildCtx *ctx)
     | cmpedb 0, RB, LJ_TNIL, pred0
     | nop 1
     | --
-    | std 5, BASE, 0xfffffff0, RB, ~pred0   // Return value of mt.__metatable.
+    | std 5, BASE, -16, RB, ~pred0   // Return value of mt.__metatable.
     | ct ctpr1
     | --
     |
@@ -1849,14 +1849,14 @@ static void build_subroutines(BuildCtx *ctx)
     | landp p0, p1, p4
     | pass p4, pred0
     | --
-    | ldd 0, BASE, 0xfffffff8, PC, pred0
+    | ldd 0, BASE, -8, PC, pred0
     | lddsm 2, DISPATCH, DISPATCH_GL(gc.grayagain), CARG1
     | ldbsm 3, RB, TAB->marked, TMP0
     | ct ctpr1, ~pred0
     | --
     | // Fast path: no mt for table yet and not clearing the mt.
     | std 2, RB, TAB->metatable, RA
-    | std 5, BASE, 0xfffffff0, TMP1            // Return original table.
+    | std 5, BASE, -16, TMP1                    // Return original table.
     | disp ctpr1, ->fff_res
     | nop 1
     | --
@@ -1901,12 +1901,12 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | // cTValue * returned.
     | ldd 0, CRET1, 0x0, RB
-    | ldd 2, BASE, 0xfffffff8, PC
+    | ldd 2, BASE, -8, PC
     | disp ctpr2, ->fff_res
     | nop 4
     | --
     | addd 4, 0x0, (1+1)*8, RD
-    | std 5, BASE, 0xfffffff0, RB
+    | std 5, BASE, -16, RB
     | ct ctpr2
     | --
     |
@@ -1930,16 +1930,16 @@ static void build_subroutines(BuildCtx *ctx)
     | landp p0, p1, p4
     | pass p4, pred0
     | --
-    | ldd 0, BASE, 0xfffffff8, PC, pred0
+    | ldd 0, BASE, -8, PC, pred0
     | ct ctpr1, ~pred0
     | --
     | addd 4, 0x0, (1+1)*8, RD
-    | std 5, BASE, 0xfffffff0, RB
+    | std 5, BASE, -16, RB
     | ct ctpr2
     | --
     |
     |->ff_tostring:
-    | ldd 0, BASE, 0xfffffff8, PC
+    | ldd 0, BASE, -8, PC
     | ldd 2, DISPATCH, DISPATCH_GL(gcroot[GCROOT_BASEMT_NUM]), TMP0
     | ldd 3, BASE, 0x0, RB
     | disp ctpr1, ->fff_fallback
@@ -1969,7 +1969,7 @@ static void build_subroutines(BuildCtx *ctx)
     | // Only handles the string or number case inline.
     | // A __tostring method in the string base metatable is ignored.
     | addd 4, 0x0, (1+1)*8, RD, ~pred2
-    | std 5, BASE, 0xfffffff0, RB, pred1
+    | std 5, BASE, -16, RB, pred1
     | ct ctpr2, pred1
     | --
     | // Handle numbers inline, unless a number base metatable is present.
@@ -1994,7 +1994,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ord 0, TMP1, CRET1, TMP1
     | --
-    | std 2, BASE, 0xfffffff0, TMP1
+    | std 2, BASE, -16, TMP1
     | --
     | addd 3, 0x0, (1+1)*8, RD
     | --
@@ -2026,7 +2026,7 @@ static void build_subroutines(BuildCtx *ctx)
     | pass p4, pred0
     | nop 2
     | --
-    | ldd 0, BASE, 0xfffffff8, PC, pred0
+    | ldd 0, BASE, -8, PC, pred0
     | ct ctpr2, ~pred0
     | --
     | addd 0, BASE, 0x8, CARG2
@@ -2053,13 +2053,13 @@ static void build_subroutines(BuildCtx *ctx)
     | ct ctpr1, pred3                       // Invalid key.
     | --
     | addd 4, 0x0, (1+1)*8, RD, pred2
-    | std 5, BASE, 0xfffffff0, TMP0, pred2  // End of traversal: return nil.
+    | std 5, BASE, -16, TMP0, pred2         // End of traversal: return nil.
     | ct ctpr2
     | --
     |
     |->ff_pairs:
     | ldd 3, BASE, 0x0, RB
-    | lddsm 5, BASE, 0xfffffff0, CARG1
+    | lddsm 5, BASE, -16, CARG1
     | disp ctpr1, ->fff_fallback
     | nop 2
     | --
@@ -2091,12 +2091,12 @@ static void build_subroutines(BuildCtx *ctx)
     | ct ctpr1, ~pred0
     | --
 #endif
-    | ldd 0, BASE, 0xfffffff8, PC
+    | ldd 0, BASE, -8, PC
     | addd 1, 0x0, LJ_TNIL, TMP0
     | ord 3, CARG2, ITYPE, CARG2
     | --
-    | std 2, BASE, 0xfffffff0, CARG2
-    | std 5, BASE, 0xfffffff8, TMP1
+    | std 2, BASE, -16, CARG2
+    | std 5, BASE, -8, TMP1
     | --
     | addd 4, 0x0, (1+3)*8, RD
     | std 5, BASE, 0x0, TMP0
@@ -2130,12 +2130,12 @@ static void build_subroutines(BuildCtx *ctx)
     | landp p0, p1, p4
     | pass p4, pred0
     | --
-    | ldd 3, BASE, 0xfffffff8, PC, pred0
+    | ldd 3, BASE, -8, PC, pred0
     | ct ctpr1, ~pred0
     | --
     | lddsm 3, RB, TAB->array, RD
     | fdtoistr 4, TMP0, CARG2
-    | std 5, BASE, 0xfffffff0, TMP0
+    | std 5, BASE, -16, TMP0
     | --
     | cmpbsb 3, CARG2, CARG3, pred0
     | sxt 4, 0x2, CARG2, CARG2
@@ -2158,7 +2158,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | // Copy array slot.
     | addd 3, 0x0, (1+2)*8, RD
-    | std 5, BASE, 0xfffffff8, RB
+    | std 5, BASE, -8, RB
     | ct ctpr3
     |1: // Check for empty hash part first. Otherwise call C function.
     | disp ctpr1, extern lj_tab_getinth     // (GCtab *t, int32_t key)
@@ -2192,14 +2192,14 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | // Copy array slot.
     | addd 3, 0x0, (1+2)*8, RD
-    | std 5, BASE, 0xfffffff8, RB
+    | std 5, BASE, -8, RB
     | ct ctpr3
     | --
     |
     |->ff_ipairs:
     | ldd 3, BASE, 0x0, RB
     | addd 4, 0x0, U64x(0x00007fff,0xffffffff), CARG2
-    | lddsm 5, BASE, 0xfffffff0, CARG1
+    | lddsm 5, BASE, -16, CARG1
     | disp ctpr1, ->fff_fallback
     | nop 2
     | --
@@ -2230,13 +2230,13 @@ static void build_subroutines(BuildCtx *ctx)
     | ct ctpr1, ~pred0
     | --
 #endif
-    | ldd 0, BASE, 0xfffffff8, PC
+    | ldd 0, BASE, -8, PC
     | ord 1, CARG2, ITYPE, CARG2
     | disp ctpr1, ->fff_res
     | --
     | addd 1, 0x0, 0x0, TMP0
-    | std 2, BASE, 0xfffffff8, TMP1
-    | std 5, BASE, 0xfffffff0, CARG2
+    | std 2, BASE, -8, TMP1
+    | std 5, BASE, -16, CARG2
     | --
     | addd 4, 0x0, (1+3)*8, RD
     | std 5, BASE, 0x0, TMP0
@@ -2266,17 +2266,17 @@ static void build_subroutines(BuildCtx *ctx)
     | addd 4, RA, RD, TMP0
     | // Note: this does a (harmless) copy of the function to the PC slot, too.
     |1:
-    | ldd 3, TMP0, 0xffffffe8, RB
+    | ldd 3, TMP0, -24, RB
     | cmpbedb 4, KBASE, 0x0, pred0
     | nop 2
     | --
     | addd 3, RA, KBASE, TMP0, ~pred0
     | subd 4, KBASE, 0x8, KBASE, ~pred0
-    | std 5, TMP0, 0xfffffff0, RB
+    | std 5, TMP0, -16, RB
     | ct ctpr2, ~pred0
     | --
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
-    | ldd 3, RA, 0xfffffff0, RB
+    | ldd 3, RA, -16, RB
     | disp ctpr1, ->vmeta_call
     | nop 2
     | --
@@ -2292,7 +2292,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldbsm 5, CARG1, 0x0, TMP1
     | ct ctpr1, ~pred0
     | --
-    | std 5, BASE, 0xfffffff8, PC
+    | std 5, BASE, -8, PC
     | nop 1
     | --
     | shld 0, TMP1, 0x3, TMP1               // jmp to [DISPATCH+OP*8]
@@ -2347,17 +2347,17 @@ static void build_subroutines(BuildCtx *ctx)
     | subd 3, KBASE, 0x8, KBASE
     | // Note: this does a (harmless) copy of the function to the PC slot, too.
     |1:
-    | ldd 3, TMP0, 0xffffffe8, RB
+    | ldd 3, TMP0, -24, RB
     | cmpbedb 4, KBASE, 0x0, pred0
     | nop 2
     | --
     | addd 3, RA, KBASE, TMP0, ~pred0
     | subd 4, KBASE, 0x8, KBASE, ~pred0
-    | std 5, TMP0, 0xfffffff0, RB
+    | std 5, TMP0, -16, RB
     | ct ctpr2, ~pred0
     | --
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
-    | ldd 3, RA, 0xfffffff0, RB
+    | ldd 3, RA, -16, RB
     | disp ctpr1, ->vmeta_call
     | nop 2
     | --
@@ -2373,7 +2373,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldbsm 5, CARG1, 0x0, TMP1
     | ct ctpr1, ~pred0
     | --
-    | std 5, BASE, 0xfffffff8, PC
+    | std 5, BASE, -8, PC
     | nop 1
     | --
     | shld 0, TMP1, 0x3, TMP1               // jmp to [DISPATCH+OP*8]
@@ -2394,7 +2394,7 @@ static void build_subroutines(BuildCtx *ctx)
     |.macro coroutine_resume_wrap, resume
     |.if resume
     |->ff_coroutine_resume:
-    | ldd 3, BASE, 0xfffffff8, PC
+    | ldd 3, BASE, -8, PC
     | ldd 5, BASE, 0x0, RB
     | disp ctpr1, ->fff_fallback
     | nop 2
@@ -2416,8 +2416,8 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |.else
     |->ff_coroutine_wrap_aux:
-    | ldd 3, BASE, 0xfffffff0, RB
-    | ldd 5, BASE, 0xfffffff8, PC
+    | ldd 3, BASE, -16, RB
+    | ldd 5, BASE, -8, PC
     | nop 2
     | --
     | andd 3, RB, U64x(0x00007fff,0xffffffff), RB
@@ -2460,7 +2460,7 @@ static void build_subroutines(BuildCtx *ctx)
     | pass p4, pred0
     | pass p5, pred1                        // Status != LUA_YIELD (i.e. 0)?
     | --
-    | ldd 3, RA, 0xfffffff8, PC, pred1      // Move initial function up.
+    | ldd 3, RA, -8, PC, pred1              // Move initial function up.
     | ct ctpr1, pred0
     | nop 2
     | --
@@ -2516,7 +2516,7 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | subd 1, PC, 0x8, PC
-    | std 2, PC, 0xfffffff8, RC
+    | std 2, PC, -8, RC
     | --
     | cmpedb 0, PC, RA, pred0
     | nop 2
@@ -2582,7 +2582,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd 3, PC, (1+1)*8, RD               // (nresults+1)*8 = (1 + true)*8 + results*8.
     | addd 4, 0x0, U64x(0xfffeffff,0xffffffff), ITYPE
     | --
-    | std 5, BASE, 0xfffffff8, ITYPE        // Prepend true to results.
+    | std 5, BASE, -8, ITYPE                // Prepend true to results.
     |.else
     | addd 3, PC, 1*8, RD                   // (nresults+1)*8 = 8 + results*8.
     |.endif
@@ -2613,7 +2613,7 @@ static void build_subroutines(BuildCtx *ctx)
     | disp ctpr1, <6
     | nop 1
     | --
-    | std 5, BASE, 0xfffffff8, ITYPE        // Prepend false to results.
+    | std 5, BASE, -8, ITYPE                // Prepend false to results.
     | --
     | subd 0, RA, 0x8, RA
     | --
@@ -2712,12 +2712,12 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ct ctpr1, ~pred0
     | --
-    | ldd 0, BASE, 0xfffffff8, PC
+    | ldd 0, BASE, -8, PC
     | disp ctpr1, ->fff_res
     | nop 4
     | --
     | addd 3, 0x0, (1+1)*8, RD
-    | std 5, BASE, 0xfffffff0, RB
+    | std 5, BASE, -16, RB
     | ct ctpr1
     | --
     |
@@ -2744,11 +2744,11 @@ static void build_subroutines(BuildCtx *ctx)
     | // fallthrough
     |
     |->fff_resb:
-    | ldd 0, BASE, 0xfffffff8, PC
+    | ldd 0, BASE, -8, PC
     | nop 2
     | --
     | addd 3, 0x0, (1+1)*8, RD
-    | std 5, BASE, 0xfffffff0, TMP0
+    | std 5, BASE, -16, TMP0
     | --
     | // fallthrough
     |
@@ -2971,11 +2971,11 @@ static void build_subroutines(BuildCtx *ctx)
     | fscaled 4, TMP0, TMP1, TMP0
     | ct ctpr1, ~pred0
     | --
-    | ldd 0, BASE, 0xfffffff8, PC
+    | ldd 0, BASE, -8, PC
     | nop 2
     | --
     | addd 3, 0x0, (1+1)*8, RD
-    | std 5, BASE, 0xfffffff0, TMP0
+    | std 5, BASE, -16, TMP0
     | ct ctpr2
     | --
     |
@@ -3002,16 +3002,16 @@ static void build_subroutines(BuildCtx *ctx)
     | addd 0, STACK, STACK_TMP, CARG2
     | call ctpr1, wbs = 0x8
     | --
-    | ldd 0, BASE, 0xfffffff8, PC
+    | ldd 0, BASE, -8, PC
     | ldw 2, STACK, STACK_TMP, TMP0
     | disp ctpr1, ->fff_res
     | nop 2
     | --
     | istofd 0, TMP0, TMP0
-    | std 5, BASE, 0xfffffff0, CRET1
+    | std 5, BASE, -16, CRET1
     | --
     | addd 3, 0x0, (1+2)*8, RD
-    | std 5, BASE, 0xfffffff8, TMP0
+    | std 5, BASE, -8, TMP0
     | ct ctpr1
     | --
     |
@@ -3038,12 +3038,12 @@ static void build_subroutines(BuildCtx *ctx)
     | subd 3, BASE, 0x10, CARG2
     | call ctpr1, wbs = 0x8
     | --
-    | ldd 0, BASE, 0xfffffff8, PC
+    | ldd 0, BASE, -8, PC
     | disp ctpr2, ->fff_res
     | nop 2
     | --
     | addd 4, 0x0, (1+2)*8, RD
-    | std 5, BASE, 0xfffffff8, CRET1
+    | std 5, BASE, -8, CRET1
     | ct ctpr2
     | --
     |
@@ -3072,7 +3072,7 @@ static void build_subroutines(BuildCtx *ctx)
     | cmpbsb 3, RA, RD, pred0
     | addd 4, BASE, RA, TMP1
     | --
-    | lddsm 3, TMP1, 0xfffffff8, TMP1
+    | lddsm 3, TMP1, -8, TMP1
     | nop 1
     | --
     | ct ctpr2, ~pred0
@@ -3117,7 +3117,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ct ctpr1, ~pred0
     | --
-    | ldd 2, BASE, 0xfffffff8, PC
+    | ldd 2, BASE, -8, PC
     | ldbsm 3, RB, STR[1], RB
     | cmpbsbsm 4, TMP0, 0x1, pred1
     | nop 2
@@ -3179,10 +3179,10 @@ static void build_subroutines(BuildCtx *ctx)
     | shld 0, ITYPE, 0x2f, ITYPE
     | --
     | ord 2, CRET1, ITYPE, CRET1
-    | ldd 3, BASE, 0xfffffff8, PC
+    | ldd 3, BASE, -8, PC
     | --
     | addd 0, 0x0, (1+1)*8, RD
-    | std 5, BASE, 0xfffffff0, CRET1
+    | std 5, BASE, -16, CRET1
     | ct ctpr1
     | --
     |
@@ -3190,7 +3190,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ffgccheck
     | lddsm 3, BASE, 0x10, TMP0
     | addd 4, 0x0, 0x0, RA
-    | adds 5, 0x0, 0xffffffff, TMP1
+    | adds 5, 0x0, -1, TMP1
     | nop 1
     | --
     | cmpbdb 3, RD, (1+2)*8, pred0
@@ -3357,10 +3357,10 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ord 0, CRET1, ITYPE, CRET1
     | --
-    | ldd 3, BASE, 0xfffffff8, PC
+    | ldd 3, BASE, -8, PC
     | --
     | addd 3, 0x0, (1+1)*8, RD
-    | std 5, BASE, 0xfffffff0, CRET1
+    | std 5, BASE, -16, CRET1
     | ct ctpr1
     | --
     |.endmacro
@@ -3445,7 +3445,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |.ffunc_bit bnot
-    | xors 3, RB, 0xffffffff, RB
+    | xors 3, RB, -1, RB
     | --
     | istofd 3, RB, TMP0
     | ct ctpr2
@@ -3500,9 +3500,9 @@ static void build_subroutines(BuildCtx *ctx)
     |->fff_fallback:                        // Call fast function fallback handler.
     | // BASE = new base, RD = (nargs+1)*8
     | ldd 0, STACK, SAVE_L, RB
-    | ldd 3, BASE, 0xfffffff8, PC           // Fallback may overwrite PC.
+    | ldd 3, BASE, -8, PC                   // Fallback may overwrite PC.
     | addd 4, BASE, RD, RD
-    | ldd 5, BASE, 0xfffffff0, TMP1
+    | ldd 5, BASE, -16, TMP1
     | disp ctpr2, >5
     | nop 2
     | --
@@ -3539,7 +3539,7 @@ static void build_subroutines(BuildCtx *ctx)
     |1:
     | ldd 3, RB, L->top, RA
     | cmpedb 4, CRET1, 0x0, pred0
-    | ldd 5, BASE, 0xfffffff0, RB
+    | ldd 5, BASE, -16, RB
     | disp ctpr1, ->vm_call_tail
     | nop 2
     | --
@@ -3559,7 +3559,7 @@ static void build_subroutines(BuildCtx *ctx)
     | disp ctpr1, >3
     | nop 2
     | --
-    | lddsm 3, RA, 0xfffffff0, TMP1
+    | lddsm 3, RA, -16, TMP1
     | subdsm 4, 0x0, RB, RB
     | disp ctpr2, ->vmeta_call
     | nop 1
@@ -3584,11 +3584,11 @@ static void build_subroutines(BuildCtx *ctx)
     | // BASE = new base, RB = func, RD = (nargs+1)*8, PC = caller PC
     |3:
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
-    | ldd 3, RA, 0xfffffff0, TMP1
+    | ldd 3, RA, -16, TMP1
     | addd 4, PC, 0x0, RB
     | nop 2
     | --
-    | andd 3, RB, 0xfffffff8, RB
+    | andd 3, RB, -8, RB
     | sard 4, TMP1, 0x2f, ITYPE
     | --
     | cmpesb 3, ITYPE, LJ_TFUNC, pred0
@@ -4170,7 +4170,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp ctpr1, >3
         | --
         | ldh 0, PC, PC_RD, CARG1
-        | ldd 3, RD, 0xfffffff8, RD
+        | ldd 3, RD, -8, RD
         | disp ctpr2, >2
         | --
         | subd 0, PC, BCBIAS_J*4, CARG2
@@ -4329,7 +4329,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | subd 1, PC, BCBIAS_J*4, CARG2
         | nop 1
         | --
-        | xord 3, RD, 0xffffffff, RD
+        | xord 3, RD, -1, RD
         | sard 4, RA, 0x2f, RA
         | --
         | shld 0, CARG1, 0x2, CARG1
@@ -4439,7 +4439,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | sard 3, RB, 0x2c, RB
         | --
         | lddsm 2, TMP1, DISPATCH, TMP1
-        | andd 3, RB, U64x(0xffffffff,0xfffffff8), RB
+        | andd 3, RB, -8, RB
         | --
         | addd 3, RB, RD, RB
         | --
@@ -4551,7 +4551,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | shld 3, CARG1, 0x2f, CARG1
         | andd 4, RD, 0x7f8, RC
         | --
-        | xord 3, CARG1, 0xffffffff, CARG1
+        | xord 3, CARG1, -1, CARG1
         | andd 4, RA, 0x7f8, RA
         | --
         | std 5, BASE, CARG3, CARG1
@@ -5007,7 +5007,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd 5, RA, 0x0, CARG3
         | nop 1
         | --
-        | ldd 3, TMP0, 0xfffffff8, TMP1
+        | ldd 3, TMP0, -8, TMP1
         | addd 4, 0x0, LJ_TSTR, ITYPE
         | --
         | shld 2, CARG2, 0x3, CARG2
@@ -5042,7 +5042,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd 4, 0x0, LJ_TCDATA, ITYPE
         | addd 5, RA, 0x0, CARG2
         | --
-        | ldd 3, CARG1, 0xfffffff8, CARG1
+        | ldd 3, CARG1, -8, CARG1
         | shld 4, ITYPE, 0x2f, ITYPE
         | nop 1
         | --
@@ -5149,7 +5149,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | movtd 0, TMP1, ctpr1
         | andd 3, RB, 0x7f8, RB
         | andd 4, RD, 0x7f8, RC
-        | xord 5, CARG1, 0xffffffff, CARG1
+        | xord 5, CARG1, -1, CARG1
         | --
         | std 5, BASE, CARG2, CARG1
         | ct ctpr1
@@ -5172,7 +5172,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldd 2, TMP1, DISPATCH, TMP1
         | --
-        | std 5, RA, 0xfffffff8, RB         // Sets minimum 2 slots
+        | std 5, RA, -8, RB         // Sets minimum 2 slots
         |1:
         | addd 3, RA, 0x8, RA
         | std 5, RA, 0x0, RB
@@ -5203,7 +5203,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
         | ldb 2, PC, 0x0, TMP1
-        | ldd 3, BASE, 0xfffffff0, RB
+        | ldd 3, BASE, -16, RB
         | addd 4, RA, 0x0, CARG4
         | nop 2
         | --
@@ -5242,7 +5242,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
         | ldb 2, PC, 0x0, TMP1
-        | ldd 3, BASE, 0xfffffff0, RB
+        | ldd 3, BASE, -16, RB
         | nop 2
         | --
         | shld 2, TMP1, 0x3, TMP1
@@ -5318,11 +5318,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
         | ldb 2, PC, 0x0, TMP1
-        | ldd 3, BASE, 0xfffffff0, CARG4
+        | ldd 3, BASE, -16, CARG4
         | subd 4, KBASE, RD, CARG2
         | addd 5, 0x0, LJ_TSTR, ITYPE
         | --
-        | ldd 3, CARG2, 0xfffffff8, CARG3
+        | ldd 3, CARG2, -8, CARG3
         | shld 4, ITYPE, 0x2f, ITYPE
         | nop 1
         | --
@@ -5388,7 +5388,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
         | ldb 2, PC, 0x0, TMP1
-        | ldd 3, BASE, 0xfffffff0, CARG2
+        | ldd 3, BASE, -16, CARG2
         | ldd 5, KBASE, RD, CARG1
         | nop 2
         | --
@@ -5423,13 +5423,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
         | ldb 2, PC, 0x0, TMP1
-        | ldd 3, BASE, 0xfffffff0, CARG1
+        | ldd 3, BASE, -16, CARG1
         | shld 4, RD, 0x2c, CARG3
         | nop 2
         | --
         | shld 2, TMP1, 0x3, TMP1
         | andd 3, CARG1, U64x(0x00007fff,0xffffffff), CARG1
-        | xord 4, CARG3, 0xffffffff, CARG3
+        | xord 4, CARG3, -1, CARG3
         | shrd 5, TMP0, 0xd, RD
         | --
         | ldd 2, TMP1, DISPATCH, TMP1
@@ -5505,11 +5505,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp ctpr1, extern lj_func_newL_gc // (lua_State *L, GCproto *pt, GCfuncL *parent)
         | --
         | ldd 0, STACK, SAVE_L, RB
-        | ldd 3, BASE, 0xfffffff0, CARG3
+        | ldd 3, BASE, -16, CARG3
         | subd 4, KBASE, RD, TMP0
         | nop 1
         | --
-        | ldd 3, TMP0, 0xfffffff8, CARG2       // Fetch GCproto *.
+        | ldd 3, TMP0, -8, CARG2       // Fetch GCproto *.
         | --
         | addd 0, RB, 0x0, CARG1
         | std 2, RB, L->base, BASE
@@ -5656,7 +5656,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | subd 3, KBASE, RD, CARG3
         | addd 4, RB, 0x0, CARG1
         | --
-        | ldd 3, CARG3, 0xfffffff8, CARG2
+        | ldd 3, CARG3, -8, CARG2
         | nop 2
         | --
         | call ctpr1, wbs = 0x8
@@ -5689,14 +5689,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_GGET:
         | // ins_AND RA = dst*8, RD = str_const*8 (~)
         | ldb 2, PC, 0x0, CARG4
-        | ldd 3, BASE, 0xfffffff0, RB
+        | ldd 3, BASE, -16, RB
         | addd 4, 0x0, LJ_TSTR, CARG1
         | subd 5, KBASE, RD, TMP0
         | nop 1
         | --
         | ldw 3, PC, 0x0, CARG3
         | --
-        | ldd 3, TMP0, 0xfffffff8, RC
+        | ldd 3, TMP0, -8, RC
         | andd 4, RB, U64x(0x00007fff,0xffffffff), RB
         | --
         | shld 0, CARG4, 0x3, CARG4
@@ -5802,13 +5802,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_AND RA = src*8, RD = str_const*8 (~)
         | ldwsm 0, PC, 0x0, CARG5
         | ldbsm 2, PC, 0x0, CARG6
-        | ldd 3, BASE, 0xfffffff0, RB
+        | ldd 3, BASE, -16, RB
         | subd 4, KBASE, RD, TMP0
         | disp ctpr1, ->BC_TSETS_Z
         | nop 2
         | --
         | shldsm 2, CARG6, 0x3, CARG6
-        | ldd 3, TMP0, 0xfffffff8, RC
+        | ldd 3, TMP0, -8, RC
         | andd 4, RB, U64x(0x00007fff,0xffffffff), RB
         | --
         | ldd 0, RB, LFUNC->env, RB
@@ -5932,7 +5932,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp ctpr1, ->vmeta_tgets
         | nop 2
         | --
-        | ldd 3, TMP0, 0xfffffff8, RC
+        | ldd 3, TMP0, -8, RC
         | sard 4, RB, 0x2f, ITYPE
         | andd 5, RB, U64x(0x00007fff,0xffffffff), RB
         | nop 1
@@ -6264,7 +6264,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | subd 4, KBASE, RC, TMP0
         | disp ctpr1, ->vmeta_tsets
         | --
-        | ldd 3, TMP0, 0xfffffff8, RC
+        | ldd 3, TMP0, -8, RC
         | nop 1
         | --
         | shldsm 2, CARG6, 0x3, CARG6
@@ -6589,7 +6589,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd 0, DISPATCH, DISPATCH_GL(gc.grayagain), CARG3
         | ldw 2, STACK, MULTRES, RD
         | ldw 3, KBASE, RD, CARG5           // Integer constant is in lo-word.
-        | ldd 5, RA, 0xfffffff8, RB         // Guaranteed to be a table.
+        | ldd 5, RA, -8, RB                 // Guaranteed to be a table.
         | disp ctpr2, >4
         | nop 2
         | --
@@ -6709,7 +6709,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldw 0, CARG2, 0x0, RA, pred0
         | addd 1, CARG2, 0x4, PC, pred0
-        | std 2, CARG1, 0xfffffff8, PC, pred0
+        | std 2, CARG1, -8, PC, pred0
         | nop 1
         | --
         | ct ctpr1, ~pred0
@@ -6756,7 +6756,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct ctpr1, ~pred0
         | --
         |->BC_CALLT_Z:
-        | ldd 3, BASE, 0xfffffff8, PC
+        | ldd 3, BASE, -8, PC
         | disp ctpr1, >3
         | nop 2
         | --
@@ -6780,10 +6780,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | subd 3, BASE, PC, BASE, pred1     // Need to relocate BASE/KBASE down.
         | subd 4, BASE, PC, KBASE, pred1
         | --
-        | ldd 3, BASE, 0xfffffff8, PC, pred1
+        | ldd 3, BASE, -8, PC, pred1
         | addd 4, PC, FRAME_VARG, PC, pred0
         | --
-        | std 5, BASE, 0xfffffff0, RB       // Copy func+tag down, reloaded below.
+        | std 5, BASE, -16, RB              // Copy func+tag down, reloaded below.
         | ct ctpr1, pred2
         |2: // Move args down.
         | ldd 3, RA, 0x0, RB
@@ -6797,7 +6797,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std 5, KBASE, 0x0, RB
         | ct ctpr2, ~pred0
         | --
-        | ldd 3, BASE, 0xfffffff0, RB
+        | ldd 3, BASE, -16, RB
         | nop 2
         |3:
         | cmpandedb 1, PC, FRAME_TYPE, pred1
@@ -6881,7 +6881,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | sard 3, CARG1, 0x2f, ITYPE
         | andd 4, CARG1, U64x(0x00007fff,0xffffffff), CARG1
-        | std 5, RA, 0xfffffff0, CARG1
+        | std 5, RA, -16, CARG1
         | --
         | cmpesb 3, ITYPE, LJ_TFUNC, pred0
         | nop 2
@@ -6890,7 +6890,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd 4, RA, 0x0, BASE, pred0
         | ct ctpr1, ~pred0
         | --
-        | std 5, BASE, 0xfffffff8, PC
+        | std 5, BASE, -8, PC
         | nop 1
         | --
         | ldw 3, CARG2, 0x0, RA
@@ -6920,8 +6920,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd 3, BASE, RA, TMP0
         | disp ctpr1, >3
         | --
-        | ldd 3, TMP0, 0xfffffff0, RB
-        | ldw 5, TMP0, 0xfffffff8, RC          // Get index from control var.
+        | ldd 3, TMP0, -16, RB
+        | ldw 5, TMP0, -8, RC               // Get index from control var.
         | disp ctpr2, >1
         | nop 2
         | --
@@ -6963,7 +6963,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std 5, TMP0, 0x0, TMP1
         | --
         | addd 0, PC, RD, PC
-        | stw 2, TMP0, 0xfffffff8, RC          // Update control var.
+        | stw 2, TMP0, -8, RC                   // Update control var.
         |2:
         | ldw 0, PC, 0x0, TMP0
         | ldb 2, PC, 0x0, TMP1
@@ -7022,7 +7022,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std 5, TMP0, 0x8, CARG3
         | --
         | addd 0, PC, RD, PC
-        | stw 5, TMP0, 0xfffffff8, TMP1
+        | stw 5, TMP0, -8, TMP1
         | ct ctpr3
         | --
         break;
@@ -7038,7 +7038,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | addd 1, PC, RD, PC
         | ldd 3, TMP0, 0xffffffe8, CARG1
-        | ldd 5, TMP0, 0xfffffff0, TMP1
+        | ldd 5, TMP0, -16, TMP1
         | --
         | ldw 0, PC, 0x0, CARG7
         | ldb 2, PC, 0x0, CARG8
@@ -7076,7 +7076,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // Despecialize bytecode if any of the checks fail.
         | shld 1, CARG5, 0x3, CARG8, ~pred0
         | stb 2, PC, 0x0, CARG5, ~pred0
-        | std 5, TMP0, 0xfffffff8, TMP1, pred0 // Initialize control var.
+        | std 5, TMP0, -8, TMP1, pred0      // Initialize control var.
         | --
         | addd 1, PC, 0x4, PC
         | ldd 2, CARG8, DISPATCH, CARG8
@@ -7102,7 +7102,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldb 2, PC, 0x0, RARG3
         | addd 3, BASE, RC, TMP1
         | cmpedb 4, RB, 0x0, pred0
-        | ldd 5, BASE, 0xfffffff8, TMP0
+        | ldd 5, BASE, -8, TMP0
         | disp ctpr1, >5
         | --
         | addd 3, TMP1, FRAME_VARG+0x10, TMP1
@@ -7123,7 +7123,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ct ctpr2, ~pred1                  // No vrarg slots?
         |1: // Copy vararg slots to destination slots.
-        | ldd 3, TMP1, 0xfffffff0, RC
+        | ldd 3, TMP1, -16, RC
         | addd 4, TMP1, 0x8, TMP1
         | addd 5, RA, 0x8, CARG3 
         | disp ctpr1, <1
@@ -7206,7 +7206,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | addd 3, TMP1, BASE, TMP1
         |6: // Copy all vararg slots.
-        | ldd 3, TMP1, 0xfffffff0, RC
+        | ldd 3, TMP1, -16, RC
         | addd 4, TMP1, 0x8, TMP1
         | --
         | cmpbdb 3, TMP1, BASE, pred0
@@ -7246,7 +7246,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_RET:
         | // ins_AD RA = results*8, RD = (nresults+1)*8
         |1:
-        | ldd 3, BASE, 0xfffffff8, PC
+        | ldd 3, BASE, -8, PC
         | disp ctpr3, ->vm_return
         | nop 2
         | --
@@ -7297,7 +7297,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | nop 3
         | --
         | addd 4, KBASE, 0x8, KBASE
-        | std 5, KBASE, 0xfffffff0, RB
+        | std 5, KBASE, -16, RB
         | ct ctpr2, ~pred0
         |3:
         | cmpbedb 0, CARG2, CARG1, pred0
@@ -7316,7 +7316,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | shrd 3, CARG4, 0x5, RA
         | andd 4, RD, 0x7fff8, RD
         | --
-        | ldd 0, BASE, 0xfffffff0, KBASE
+        | ldd 0, BASE, -16, KBASE
         | andd 3, RA, 0x7f8, RA
         | nop 2
         | --
@@ -7333,7 +7333,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |4:                                 // Fill up results with nil.
         | addd 0, CARG1, 0x8, CARG1
         | addd 4, KBASE, 0x8, KBASE
-        | std 5, KBASE, 0xfffffff0, TMP0    // Note: relies on shifted base.
+        | std 5, KBASE, -16, TMP0           // Note: relies on shifted base.
         | ct ctpr1
         | --
         break;
@@ -7341,7 +7341,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_RET0: case BC_RET1:
         | // ins_AD RA = results*8, RD = (nresults+1)*8
         |1:
-        | ldd 0, BASE, 0xfffffff8, PC
+        | ldd 0, BASE, -8, PC
         | disp ctpr3, ->vm_return
         | nop 2
         | --
@@ -7377,7 +7377,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
           | --
         }
         if (op == BC_RET1) {
-          | std 5, BASE, 0xfffffff0, RB
+          | std 5, BASE, -16, RB
           | --
         }
         |2:
@@ -7402,7 +7402,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | shrd 4, CARG1, 0xd, RD
         | shrd 5, CARG1, 0x15, RB
         | --
-        | ldd 3, BASE, 0xfffffff0, KBASE
+        | ldd 3, BASE, -16, KBASE
         | shrd 4, CARG1, 0x5, RA
         | andd 5, RD, 0x7fff8, RD
         | nop 2
@@ -7591,7 +7591,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | nop 1
         | --
         | addd 0, CARG1, RD, PC, ~pred0     // Otherwise save control var + branch.
-        | std 5, RA, 0xfffffff8, RB, ~pred0
+        | std 5, RA, -8, RB, ~pred0
         | --
         | ldw 0, PC, 0x0, TMP0
         | ldb 2, PC, 0x0, TMP1
@@ -7737,7 +7737,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_IFUNCV:
         | // ins_AD BASE = new base, RA = framesize*8, RB = LFUNC (but we need tagged), RD = (nargs+1)*8
         | ldbsm 2, PC, 0x0, CARG3
-        | ldd 3, BASE, 0xfffffff0, KBASE
+        | ldd 3, BASE, -16, KBASE
         | addd 4, RD, FRAME_VARG+0x8, TMP0
         | addd 5, RD, BASE, RD
         | disp ctpr1, ->vm_growstack_v
@@ -7749,10 +7749,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp ctpr2, >2
         | --
         | addd 3, RA, RD, RA
-        | std 5, RD, 0xfffffff8, TMP0       // Store delta + FRAME_VARG
+        | std 5, RD, -8, TMP0               // Store delta + FRAME_VARG
         | --
         | shldsm 2, CARG3, 0x3, CARG3
-        | std 5, RD, 0xfffffff0, KBASE      // Store copy of LFUNC
+        | std 5, RD, -16, KBASE             // Store copy of LFUNC
         | --
         | lddsm 2, CARG3, DISPATCH, CARG3
         | ldd 3, RB, L->maxstack, TMP0
@@ -7778,7 +7778,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | cmpbdb 3, RA, BASE, pred0
         | disp ctpr2, <1
         | --
-        | ldd 3, RA, 0xfffffff0, CARG4, pred0
+        | ldd 3, RA, -16, CARG4, pred0
         | subd 0, CARG1, 0x1, CARG1, pred0
         | wait pred0, 0, 2
         | --
@@ -7788,7 +7788,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd 3, RD, 0x8, RD
         | std 5, RD, 0x0, CARG4
         | --
-        | std 5, RA, 0xfffffff0, TMP1       // Clear old fixarg slot (help the GC).
+        | std 5, RA, -16, TMP1       // Clear old fixarg slot (help the GC).
         | ct ctpr2, ~pred0
         |2:
         | addd 1, PC, 0x4, PC
@@ -7818,7 +7818,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_FUNCC:
         | // ins_AD BASE = new base, RA = framesize*8, RD = (nargs+1)*8
-        | ldd 3, BASE, 0xfffffff0, KBASE
+        | ldd 3, BASE, -16, KBASE
         | addd 4, BASE, RD, RD
         | ldd 5, STACK, SAVE_L, RB
         | disp ctpr1, ->vm_growstack_c
@@ -7855,7 +7855,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd 3, BASE, RD, RA
         | stw 5, DISPATCH, DISPATCH_GL(vmstate), TMP0
         | --
-        | ldd 0, BASE, 0xfffffff8, PC       // Fetch PC of caller
+        | ldd 0, BASE, -8, PC               // Fetch PC of caller
         | ldd 3, RB, L->top, TMP0
         | wait_load TMP0, 0
         | --
@@ -7866,7 +7866,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_FUNCCW:
         | // ins_AD BASE = new base, RA = framesize*8, RD = (nargs+1)*8
-        | ldd 3, BASE, 0xfffffff0, CARG2
+        | ldd 3, BASE, -16, CARG2
         | addd 4, BASE, RD, RD
         | ldd 5, STACK, SAVE_L, RB
         | disp ctpr1, ->vm_growstack_c
@@ -7905,7 +7905,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd 3, BASE, RD, RA
         | stw 5, DISPATCH, DISPATCH_GL(vmstate), TMP0
         | --
-        | ldd 0, BASE, 0xfffffff8, PC       // Fetch PC of caller
+        | ldd 0, BASE, -8, PC               // Fetch PC of caller
         | ldd 3, RB, L->top, TMP0
         | nop 2
         | --
