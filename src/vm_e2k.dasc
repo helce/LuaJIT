@@ -163,6 +163,16 @@
 | wait reg, done, LOAD_LATENCY
 |.endmacro
 |
+|// Insert nops until predicate register is ready to use for conditional execution.
+|.macro wait_pred, reg, done
+| wait reg, done, 1 + 1     // 1 cycle extra delay
+|.endmacro
+|
+|// Insert nops until predicate register is ready to use by ct instruction.
+|.macro wait_pred_ct, reg, done
+| wait reg, done, 1 + 2     // 2 cycles extra delay
+|.endmacro
+|
 |//-----------------------------------------------------------------------
 |// Instruction decode+dispatch.
 |.macro ins_NEXT             // AD = {D |A|OP}, ABC = {B|C|A|OP}, AC = {lo_D|A|OP}
