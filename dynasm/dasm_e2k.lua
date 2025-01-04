@@ -126,7 +126,7 @@ end
 
 -- Add escaped word to action list.
 local function wputw(n)
-  if n >= 0xff000000 then
+  if band(sar(n, 24), 0xff) == 0xff then
     waction("ESC")
   end
   actlist[#actlist+1] = n
