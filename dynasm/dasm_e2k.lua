@@ -635,6 +635,40 @@ local function parse_label(label, def)
   werror("bad label `"..label.."'")
 end
 
+local function set_concrete_const_type(operand, raw)
+  if operand.t ~= "CONST" then return end
+
+  local error = false
+  local n = operand.n
+  if n >= 0 and n <= 0xf then
+    operand.t = "NUM_4"
+  elseif n >= 0 and n <= 0x1f then
+    operand.t = "NUM_5"
+  elseif raw then
+    if n >= 0 and n <= 0xffff then
+      operand.t = "NUM_16"
+    elseif n >= 0 and n <= 0xffffffff then
+      operand.t = "NUM_32"
+    else
+      error = true
+    end
+  else
+    if n >= -0x8000 and n <= 0x7fff then
+      operand.t = "NUM_16"
+      operand.n = band(n, 0xffff)
+    elseif n >= -0x80000000 and n <= 0x7fffffff then
+      operand.t = "NUM_32"
+      operand.n = band(n, 0xffffffff)
+    else
+      error = true
+    end
+  end
+
+  if error then
+    werror("operand: "..tohex(n).." is unsupported size")
+  end
+end
+
 local function check_operand(opnd)
   local operand = {}
   if rreg_list[opnd] then
@@ -670,29 +704,23 @@ local function check_operand(opnd)
       local u64 = {}
       for j in gmatch(opnd, "0x[%da-f]+") do u64[#u64 + 1] = j end
       operand = {t = "NUM_64", hi = tonumber(u64[1], 16), lo = tonumber(u64[2], 16)}
-    elseif tonumber(opnd) ~= nil then
-      operand = {t = "CONST", n = tonumber(opnd)}
-    elseif tonumber(opnd, 16) ~= nil then
-      operand = {t = "CONST", n = tonumber(opnd,16)}
     else
-      operand = {t = "NUM_UNDEF", n = opnd}
-    end
-  end
-  -- set concrete const type
-  if operand.t == "CONST" then
-    -- small immediates are unsigned
-    if operand.n >= 0 and operand.n <= 0xf then
-      operand.t = "NUM_4"
-    elseif operand.n >= 0 and operand.n <= 0x1f then
-      operand.t = "NUM_5"
-    elseif operand.n <= 0xffff then
-      operand.t = "NUM_16"
-      operand.n = band(operand.n, 0xffff)
-    elseif operand.n <= 0xffffffff then
-      operand.t = "NUM_32"
-      operand.n = band(operand.n, 0xffffffff)
-    else
-      werror("operand: "..tohex(operand.n).." is unsupported size")
+      local o = opnd
+      local raw = false
+      if match(o, "^raw%(.*%)$") then
+        raw = true
+        o = sub(o, 5, -2)
+      end
+
+      if tonumber(o) ~= nil then
+        operand = {t = "CONST", n = tonumber(o)}
+        set_concrete_const_type(operand, raw)
+      elseif tonumber(o, 16) ~= nil then
+        operand = {t = "CONST", n = tonumber(o, 16)}
+        set_concrete_const_type(operand, raw)
+      else
+        operand = {t = "NUM_UNDEF", n = opnd}
+      end
     end
   end
   return operand
@@ -1471,6 +1499,10 @@ local function generate_lts16()
       if not found then
         -- Try 32-bit.
         lit.t = "NUM_32"
+        if band(lit.n, 0x8000) ~= 0 then
+          -- sign-extend to 32-bit
+          lit.n = bor(lit.n, 0xffff0000)
+        end
       end
     end
   end
