@@ -99,7 +99,7 @@
 |// Stack layout while in interpreter. Must match with lj_frame.h.
 |//-----------------------------------------------------------------------
 |.define CFRAME_SPACE,  0x70                // 8*6 + 8*8
-|.define STACK_SPACE,   0xffffff90          // -(8*6 + 8*8)
+|.define STACK_SPACE,   -CFRAME_SPACE       // -(8*6 + 8*8)
 |.define STACK_TMP,     0x68
 |.define SAVE_CFRAME,   0x60
 |.define SAVE_PC,       0x58
@@ -804,8 +804,8 @@ static void build_subroutines(BuildCtx *ctx)
     | addd 5, RA, 0x0, CRET1
     | disp ctpr1, ->cont_ffi_callback
     | --
-    | ldd 0, RB, 0xffffffe8, PC             // Restore PC from [cont|PC].
-    | ldd 2, RB, 0xffffffe0, RA
+    | ldd 0, RB, -24, PC                    // Restore PC from [cont|PC].
+    | ldd 2, RB, -32, RA
     | disp ctpr3, ->vm_call_tail
     | --
     | lddsm 3, BASE, -16, CARG2
@@ -988,7 +988,7 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | addd 4, RA, FRAME_CONT, PC
-    | std 5, RA, 0xffffffe8, PC             // [RA-24] cont|PC
+    | std 5, RA, -24, PC                    // [RA-24] cont|PC
     | --
     | subd 2, PC, BASE, PC
     | ldd 3, RA, -16, RB                    // [RA-16] Guaranteed to be a function here.
@@ -1149,7 +1149,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldb 2, PC, PC_RA, RC
     | nop 2
     | --
-    | std 2, RA, 0xffffffe8, PC             // [cont|PC]
+    | std 2, RA, -24, PC                    // [cont|PC]
     | shld 3, RC, 0x3, RC
     | --
     | addd 0, RA, FRAME_CONT, PC
@@ -1159,7 +1159,7 @@ static void build_subroutines(BuildCtx *ctx)
     | subd 0, PC, BASE, PC
     | std 2, RA, 0x10, RB
     | --
-    | ldd 3, RA, -16, RB             // Guaranteed to be a function here.
+    | ldd 3, RA, -16, RB                    // Guaranteed to be a function here.
     | addd 4, 0x0, (3+1)*8, RD              // 3 args for func (t, k, v)
     | nop 3
     | --
@@ -1352,7 +1352,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd 0, STACK, SAVE_L, RB
     | subd 1, PC, 0x4, PC
     | --
-    | ldw 0, PC, 0xfffffffc, CARG2
+    | ldw 0, PC, PC_OP, CARG2
     | ldh 2, PC, PC_RD, TMP0
     | nop 1
     | --
@@ -1465,7 +1465,7 @@ static void build_subroutines(BuildCtx *ctx)
     | subd 1, CRET1, BASE, CRET1
     | --
     | addd 1, CRET1, FRAME_CONT, PC
-    | std 2, RA, 0xffffffe8, PC             // [cont|PC]
+    | std 2, RA, -24, PC                    // [cont|PC]
     | addd 3, 0x0, (2+1)*8, RD              // 2 args for func(o1, o2).
     | --
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
@@ -6840,7 +6840,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |4: // Tailcall to a fast function.
         | addd 1, PC, 0x4, PC
         | andd 2, RA, 0xff, TMP0
-        | ldd 3, CARG2, 0xffffffe0, KBASE   // Need to prepare KBASE.
+        | ldd 3, CARG2, -32, KBASE          // Need to prepare KBASE.
         | shrd 4, RA, 0x5, RA
         | --
         | shld 0, TMP0, 0x3, TMP0           // jmp to [DISPATCH+OP*8]
@@ -6869,11 +6869,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | addd 3, RA, 0x10, RA
         | --
-        | ldd 3, RA, 0xffffffe0, RB         // Copy state. fb[0] = fb[-4].
-        | ldd 5, RA, 0xffffffe8, RC         // Copy control var. fb[1] = fb[-3].
+        | ldd 3, RA, -32, RB                // Copy state. fb[0] = fb[-4].
+        | ldd 5, RA, -24, RC                // Copy control var. fb[1] = fb[-3].
         | nop 1
         | --
-        | ldd 3, RA, 0xffffffd8, CARG1            // Copy callable. fb[-2] = fb[-5]
+        | ldd 3, RA, -40, CARG1             // Copy callable. fb[-2] = fb[-5]
         | --
         | std 5, RA, 0x0, RB
         | --
@@ -7037,7 +7037,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp ctpr1, >2
         | --
         | addd 1, PC, RD, PC
-        | ldd 3, TMP0, 0xffffffe8, CARG1
+        | ldd 3, TMP0, -24, CARG1
         | ldd 5, TMP0, -16, TMP1
         | --
         | ldw 0, PC, 0x0, CARG7
