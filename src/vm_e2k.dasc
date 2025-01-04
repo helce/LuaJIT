@@ -73,6 +73,31 @@
 |.define T14,       g30
 |.define T15,       g31
 |
+|// Pipeline state.
+|.define INSN_F,      b0        // fetched instruction
+|.define INSN_S,      b2
+|.define INSN_D,      b4
+|.define INSN_L,      b6
+|.define INSN_B,      b8
+|.define INSN_E,      b10
+|.define OP_S,        b12
+|.define OP_D,        b14       // scaled opcode
+|.define OP_L,        b16       // extracted opcode
+|.define OP_B,        b18       // dispatch pointer
+|.define OP_E,        b20
+|.define RA_L,        b1
+|.define RA_B,        b3        // scaled RA
+|.define RA_E,        b5        // extracted RA
+|.define RB_L,        b7
+|.define RB_B,        b9        // scaled RB
+|.define RB_E,        b11       // extracted RB
+|.define RCD_L,       b13
+|.define RCD_B,       b15       // scaled RC/RD
+|.define RC_B,        b17
+|.define RC_E,        b19       // extracted RC
+|.define RD_B,        b21
+|.define RD_E,        b23       // extracted RD
+|
 |.macro do_fault
 | addd 0, 0x0, 0x0, RARG1
 | --
@@ -112,6 +137,13 @@
 |//-----------------------------------------------------------------------
 |// Helper macros.
 |//-----------------------------------------------------------------------
+|
+|.macro todo
+| ldd   0, 0x0, 0x0, T15
+| --
+| addd  0, T15, raw(0xdeadbeef), T15
+| --
+|.endmacro
 |
 |.macro wait_impl, n, latency
 |.if n + 1 >= latency
@@ -171,6 +203,222 @@
 |// Insert nops until predicate register is ready to use by ct instruction.
 |.macro wait_pred_ct, reg, done
 | wait reg, done, 1 + 2     // 2 cycles extra delay
+|.endmacro
+|
+|//-----------------------------------------------------------------------
+|// Instruction fetch and decode in a software pipeline.
+|//-----------------------------------------------------------------------
+|
+|// Stages:
+|//   Fetch       - fetch insn
+|//   Scale       - scale opcode
+|//   Decode      - extract opcode
+|//   Load        - load dispatch, scale other fields
+|//   Branch      - prepare and jump to dispatch, extract other fields, update pc
+|//   Execute     - execute
+|
+|// State changes:
+|//   *_F => *_S
+|//   *_S => *_D
+|//   *_D => *_L
+|//   *_L => *_B
+|//   *_B => *_E
+|//   *_E => unavaiable
+|
+|// Fetch:
+|//   | ldwsm     0, PC, 20, INSN_F             // PC + (NUM_STAGES - 1) * 4
+|//                                             // TODO: use APB for insn loading?
+|
+|// Scale:
+|//   | shldsm    0, INSN_S, 0x3, OP_S
+|
+|// Decode:
+|//   | anddsm    0, OP_D, 0x7f8, OP_D
+|
+|// Load:
+|//   | lddsm     0, OP_L, DISPATCH, OP_L
+|//   | shrdsm    1, INSN_L, 0x5, RA_L
+|//   | shrdsm    2, INSN_L, 0x15, RB_L
+|//   | shrdsm    3, INSN_L, 0xd, RCD_L
+|
+|// Branch:
+|//   | movtdsm   0, OP_B, ctpr3
+|//   | anddsm    1, RA_B, 0x7f8, RA_B
+|//   | anddsm    2, RB_B, 0x7f8, RB_B
+|//   | anddsm    3, RCD_B, 0x7f8, RC_B
+|//   | anddsm    4, RCD_B, 0x7fff8, RD_B
+|//   | --
+|//   | abnt
+|//   | addd      0, PC, 4, PC
+|//   | ct        ctpr3
+|
+|// Prologue expected state:
+|//   PC  Stage   Expect
+|//    0  E       INSN_E, OP_E, RA_E, RB_E, RC_E, RD_E
+|//    4  B       INSN_B, OP_B, RA_B, RB_B, RCD_B
+|//    8  L       INSN_L, OP_L, RA_L, RB_L, RCD_L
+|//   12  D       INSN_D, OP_D
+|//   16  S       INSN_S
+|//   20  F
+|
+|// Prologue example:
+|//   | pipe_setwd
+|//   | --
+|//   | ldwsm     0, PC, 0, INSN_E
+|//   | ldwsm     2, PC, 4, INSN_B
+|//   | ldwsm     3, PC, 8, INSN_L
+|//   | ldwsm     5, PC,12, INSN_D
+|//   | wait_load INSN_E, 0
+|//   | --
+|//   | ldwsm     0, PC,16, INSN_S
+|//   | shldsm    1, INSN_E, 0x3, OP_E
+|//   | shldsm    2, INSN_B, 0x3, OP_B
+|//   | shldsm    3, INSN_L, 0x3, OP_L
+|//   | shldsm    5, INSN_D, 0x3, OP_D
+|//   | --
+|//   | anddsm    0, OP_E, 0x7f8, OP_E
+|//   | anddsm    2, OP_B, 0x7f8, OP_B
+|//   | anddsm    3, OP_L, 0x7f8, OP_L
+|//   | --
+|//   | lddsm     0, OP_E, DISPATCH, OP_E
+|//   | lddsm     2, OP_B, DISPATCH, OP_B
+|//   | shrdsm    1, INSN_E, 0x5, RA_E
+|//   | shrdsm    3, INSN_E, 0x15, RB_E
+|//   | shrdsm    4, INSN_E, 0xd, T0
+|//   | --
+|//   | anddsm    1, RA_E, 0x7f8, RA_E
+|//   | anddsm    3, RB_E, 0x7f8, RB_E
+|//   | anddsm    4, T0, 0x7f8, RC_E
+|//   | anddsm    5, T0, 0x7fff8, RD_E
+|//   | --
+|//   | shrdsm    0, INSN_B, 0x5, RA_B
+|//   | shrdsm    1, INSN_B, 0x15, RB_B
+|//   | shrdsm    2, INSN_B, 0xd, RCD_B
+|//   | wait_load OP_E, 2
+|//   | --
+|//   |.if isa > 6
+|//   | ibranchd  0, OP_E, empty
+|//   | --
+|//   |.else
+|//   | movtdsm   0, OP_E, ctpr3
+|//   | --
+|//   | ct        ctpr3
+|//   | --
+|//   |.endif
+|
+|// Pipeline example with helper macros:
+|//   | pipe_dispatch_prep 0, ctpr3
+|//   | pipe_fetch 2
+|//   | pipe_dispatch_load 3
+|//   | --
+|//   | pipe_scale 0, 1, 2, 3
+|//   | --
+|//   | pipe_extract 0, 1, 2, 3, 4
+|//   | --
+|//   | pipe_dispatch 0, ctpr3
+|//   | --
+|
+|//-----------------------------------------------------------------------
+|// Helper macros for software pipelining.
+|//-----------------------------------------------------------------------
+|
+|// Setup register window for the software pipeline.
+|//   r0..r15 - window registers
+|//   b0..b23 - pipeline (based/rotating) registers
+|.macro pipe_setwd
+| setwd     wsz = 0x14, nfx = 0x1, dbl = 0x0
+| setbn     rsz = 0xb, rbs = 0x8, rcur = 0x0
+|.endmacro
+|
+|// Stage F
+|.macro pipe_fetch, ch
+| ldwsm     ch, PC, 20, INSN_F
+|.endmacro
+|
+|// Stage S
+|.macro pipe_scale_op, ch
+| shldsm    ch, INSN_S, 0x3, OP_S
+|.endmacro
+|
+|// Stage L
+|.macro pipe_scale_a, ch
+| shrdsm    ch, INSN_L, 0x5, RA_L
+|.endmacro
+|
+|// Stage L
+|.macro pipe_scale_b, ch
+| shrdsm    ch, INSN_L, 0x15, RB_L
+|.endmacro
+|
+|// Stage L
+|.macro pipe_scale_cd, ch
+| shrdsm    ch, INSN_L, 0xd, RCD_L
+|.endmacro
+|
+|// Stage S/L
+|.macro pipe_scale, ch0, ch1, ch2, ch3
+| pipe_scale_op ch0
+| pipe_scale_a ch1
+| pipe_scale_b ch2
+| pipe_scale_cd ch3
+|.endmacro
+|
+|// Stage D
+|.macro pipe_extract_op, ch
+| anddsm    ch, OP_D, 0x7f8, OP_D
+|.endmacro
+|
+|// Stage B
+|.macro pipe_extract_a, ch
+| anddsm    ch, RA_B, 0x7f8, RA_B
+|.endmacro
+|
+|// Stage B
+|.macro pipe_extract_b, ch
+| anddsm    2, RB_B, 0x7f8, RB_B
+|.endmacro
+|
+|// Stage B
+|.macro pipe_extract_c, ch
+| anddsm    ch, RCD_B, 0x7f8, RC_B
+|.endmacro
+|
+|// Stage B
+|.macro pipe_extract_d, ch
+| anddsm    ch, RCD_B, 0x7fff8, RD_B
+|.endmacro
+|
+|// Stage D/B
+|.macro pipe_extract, ch0, ch1, ch2, ch3, ch4
+| pipe_extract_op ch0
+| pipe_extract_a ch1
+| pipe_extract_b ch2
+| pipe_extract_c ch3
+| pipe_extract_d ch4
+|.endmacro
+|
+|// Stage L
+|.macro pipe_dispatch_load, ch
+| lddsm     ch, OP_L, DISPATCH, OP_L
+|.endmacro
+|
+|// Stage B
+|.macro pipe_dispatch_prep, ch, ctpr
+| movtdsm   ch, OP_B, ctpr
+|.endmacro
+|
+|// Stage B
+|.macro pipe_dispatch, ch, ctpr
+| abnt
+| addd      ch, PC, 4, PC
+| ct        ctpr
+|.endmacro
+|
+|// Stage B
+|.macro pipe_dispatch_if, ch, ctpr, pred
+| abnt
+| addd      ch, PC, 4, PC, pred
+| ct        ctpr, pred
 |.endmacro
 |
 |//-----------------------------------------------------------------------
@@ -740,6 +988,84 @@ static void build_subroutines(BuildCtx *ctx)
     | andd 3, RA, 0x7f8, RA
     | --
     | ct ctpr1
+    | --
+    |
+    |->vm_enter_pipeline:
+    | pipe_setwd
+    | --
+    | ldwsm     0, PC, 0, INSN_E            // Load insns.
+    | ldwsm     2, PC, 4, INSN_B
+    | ldwsm     3, PC, 8, INSN_L
+    | ldwsm     5, PC,12, INSN_D
+    | --
+    | ldwsm     0, PC,16, INSN_S
+    | wait_load INSN_E, 1
+    | --
+    | shldsm    0, INSN_E, 0x3, OP_E        // Scale opcode fields.
+    | shldsm    2, INSN_B, 0x3, OP_B
+    | shldsm    3, INSN_L, 0x3, OP_L
+    | shldsm    5, INSN_D, 0x3, OP_D
+    | --
+    | anddsm    0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | anddsm    2, OP_B, 0x7f8, OP_B
+    | anddsm    3, OP_L, 0x7f8, OP_L
+    | --
+    | lddsm     0, OP_E, DISPATCH, OP_E     // Load pointers to insn handlers.
+    | lddsm     2, OP_B, DISPATCH, OP_B
+    | shrdsm    1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
+    | --
+    | anddsm    1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
+    | ldbsm     0, 0, 0, RC_E
+    | addd      3, RARG3, 0, RD_E
+    | ldbsm     2, 0, 0, RB_E
+    | wait_load OP_E, 1
+    | --
+    | movtdsm   0, OP_E, ctpr3              // Prepare an insn handler for stage E.
+    | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
+    | shrdsm    4, INSN_B, 0x15, RB_B
+    | shrdsm    5, INSN_B, 0xd, RCD_B
+    | --
+    | ct        ctpr3                       // Jump to the insn handler for stage E.
+    | --
+    |
+    |->vm_restart_pipeline:
+    | pipe_setwd
+    | --
+    | ldwsm     0, PC, 0, INSN_E            // Load insns.
+    | ldwsm     2, PC, 4, INSN_B
+    | ldwsm     3, PC, 8, INSN_L
+    | ldwsm     5, PC,12, INSN_D
+    | --
+    | ldwsm     0, PC,16, INSN_S
+    | wait_load INSN_E, 1
+    | --
+    | shldsm    0, INSN_E, 0x3, OP_E        // Scale opcode fields.
+    | shldsm    2, INSN_B, 0x3, OP_B
+    | shldsm    3, INSN_L, 0x3, OP_L
+    | shldsm    5, INSN_D, 0x3, OP_D
+    | --
+    | anddsm    0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | anddsm    2, OP_B, 0x7f8, OP_B
+    | anddsm    3, OP_L, 0x7f8, OP_L
+    | --
+    | lddsm     0, OP_E, DISPATCH, OP_E     // Load pointers to insn handlers.
+    | lddsm     2, OP_B, DISPATCH, OP_B
+    | shrdsm    1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
+    | shrdsm    3, INSN_E, 0x15, RB_E
+    | shrdsm    4, INSN_E, 0xd, T0
+    | --
+    | anddsm    1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
+    | anddsm    3, RB_E, 0x7f8, RB_E
+    | anddsm    4, T0, 0x7f8, RC_E
+    | anddsm    5, T0, 0x7fff8, RD_E
+    | wait_load OP_E, 1
+    | --
+    | movtdsm   0, OP_E, ctpr3              // Prepare an insn handler for stage E.
+    | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
+    | shrdsm    4, INSN_B, 0x15, RB_B
+    | shrdsm    5, INSN_B, 0xd, RCD_B
+    | --
+    | ct        ctpr3                       // Jump to the insn handler for stage E.
     | --
     |
     |->vm_cpcall:                           // Setup protected C frame, call C.
@@ -4530,6 +4856,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | andd 3, RA, 0x7f8, RA
         | ct ctpr1
+        | --
+        | // TODO: use pipelined version
+        | // ins_AD RA_E = dst*8, RD_E = src*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | ldd 5, BASE, RD_E, T0
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load T0, 2
+        | --
+        | pipe_dispatch 0, ctpr3
+        | std 5, BASE, RA_E, T0
         | --
         break;
 
