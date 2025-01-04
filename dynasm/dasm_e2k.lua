@@ -124,6 +124,14 @@ local function wflush(term)
   secpos = 1 -- The actionlist offset occupies a buffer position, too.
 end
 
+-- Add escaped word to action list.
+local function wputw(n)
+  if n >= 0xff000000 then
+    waction("ESC")
+  end
+  actlist[#actlist+1] = n
+end
+
 ------------------------------------------------------------------------------
 
 -- Global label name -> global label number. With auto assignment on 1st use.
@@ -1763,14 +1771,14 @@ local function wide_gen(force)
   -- Stop capturing bundle instructions.
   wide_capture = false
   if wide_instr["FAPB0"] ~= nil then
-    wputxw(wide_instr["FAPB0"].lo)
-    wputxw(wide_instr["FAPB0"].hi)
+    wputw(wide_instr["FAPB0"].lo)
+    wputw(wide_instr["FAPB0"].hi)
     if wide_instr["FAPB1"] ~= nil then
-      wputxw(wide_instr["FAPB1"].lo)
-      wputxw(wide_instr["FAPB1"].hi)
+      wputw(wide_instr["FAPB1"].lo)
+      wputw(wide_instr["FAPB1"].hi)
     else
-      wputxw(0)
-      wputxw(0)
+      wputw(0)
+      wputw(0)
     end
   else
     generate_lts()
@@ -1778,8 +1786,8 @@ local function wide_gen(force)
     local code = generate_ins_code(hs_code, is_notaligned)
     local actions = {}
     for i,j in ipairs(code) do
-      wputxw(j.value)
       if j.action then
+        wputxw(j.value)
         if j.action == "LABEL" then
           local mode, n, s = parse_label(j.lit, false)
           local ofs_e = #code - i + 1
@@ -1793,6 +1801,8 @@ local function wide_gen(force)
         else
           werror("Incompatible action")
         end
+      else
+        wputw(j.value)
       end
     end
     for i,j in ipairs(actions) do
@@ -1803,11 +1813,11 @@ local function wide_gen(force)
       local nops = wide_instr["NOP"].value
       while nops > 0 do
         if nops < 8 then
-          wputxw(shl(nops - 1, 7))
+          wputw(shl(nops - 1, 7))
         else
-          wputxw(shl(7, 7))
+          wputw(shl(7, 7))
         end
-        wputxw(0)
+        wputw(0)
         nops = nops - 8
       end
     end
