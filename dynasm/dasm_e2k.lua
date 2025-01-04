@@ -1786,8 +1786,8 @@ local function wide_gen(force)
     local code = generate_ins_code(hs_code, is_notaligned)
     local actions = {}
     for i,j in ipairs(code) do
+      wputw(j.value)
       if j.action then
-        wputxw(j.value)
         if j.action == "LABEL" then
           local mode, n, s = parse_label(j.lit, false)
           local ofs_e = #code - i + 1
@@ -1801,8 +1801,6 @@ local function wide_gen(force)
         else
           werror("Incompatible action")
         end
-      else
-        wputw(j.value)
       end
     end
     for i,j in ipairs(actions) do
