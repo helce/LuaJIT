@@ -5300,60 +5300,52 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_CAT:
-        | todo
-        | // ins_ABC // RA = dst*8, RB = src_start*8, RC = src_end*8
-        | ldd 0, STACK, SAVE_L, CARG1
-        | addd 3, BASE, RC, CARG2
-        | addd 4, RC, 0x0, CARG3
+        | // ins_ABC // RA_E = dst*8, RB_E = src_start*8, RC_E = src_end*8
+        | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
+        | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+        | addd      0, RA_E, 0, RA          // TODO: remove me
+        | addd      1, RB_E, 0, RB          // TODO: remove me
+        | addd      3, RC_E, 0, RC          // TODO: remove me
         | --
-        | subd 3, CARG3, RB, CARG3
+        | ldd       0, STACK, SAVE_L, CARG1
+        | addd      3, BASE, RC, CARG2
+        | addd      4, RC, 0x0, CARG3
         | --
-        | shrd 0, CARG3, 0x3, CARG3
-        | std 2, CARG1, L->base, BASE
+        | subd      3, CARG3, RB, CARG3
+        | wait_load CARG3, 1
+        | --
+        | shrd      0, CARG3, 0x3, CARG3
+        | std       2, CARG1, L->base, BASE
         | --
         |->BC_CAT_Z:
-        | disp ctpr1, extern lj_meta_cat    // (lua_State *L, TValue *top, int left)
+        | disp      ctpr1, extern lj_meta_cat
         | --
-        | std 2, STACK, SAVE_PC, PC
-        | addd 3, CARG1, 0x0, RB
-        | nop 3
+        | std       2, STACK, SAVE_PC, PC
+        | addd      3, CARG1, 0x0, RB
         | --
-        | call ctpr1, wbs = 0x8
+        | call      ctpr1, wbs = 0x8        // lj_meta_cat(lua_State *L, TValue *top, int left)
         | --
         | // NULL (finished) or TValue * (metamethod) returned.
-        | ldwsm 0, PC, 0x0, TMP0
-        | ldbsm 2, PC, 0x0, TMP1
-        | ldb 3, PC, PREV_PC_RB, CARG2
-        | ldb 5, PC, PREV_PC_RA, CARG3
-        | disp ctpr2, ->vmeta_binop
-        | nop 2
+        | ldb       3, PC, PREV_PC_RB, T2
+        | ldb       5, PC, PREV_PC_RA, T3
+        | disp      ctpr1, ->vmeta_binop
         | --
-        | cmpedb 0, CRET1, 0x0, pred0
-        | shldsm 2, TMP1, 0x3, TMP1
-        | ldd 3, RB, L->base, BASE
-        | shld 4, CARG2, 0x3, CARG2
-        | shld 5, CARG3, 0x3, CARG3
-        | nop 1
+        | disp      ctpr2, ->vm_restart_pipeline
+        | wait_load T2, 1
         | --
-        | lddsm 2, TMP1, DISPATCH, TMP1
-        | ct ctpr2, ~pred0
+        | cmpedb    0, CRET1, 0x0, pred0
+        | ldd       3, RB, L->base, BASE
+        | shld      4, T2, 0x3, T2
+        | shld      5, T3, 0x3, T3
+        | wait_pred_ct pred0, 0
         | --
-        | addd 1, PC, 0x4, PC
-        | ldd 3, BASE, CARG2, CARG4
-        | nop 1
+        | ct        ctpr1, ~pred0           // vmeta_binop(TODO)
         | --
-        | movtd 0, TMP1, ctpr1
-        | shrd 3, TMP0, 0xd, RD
-        | shrd 4, TMP0, 0x15, RB
-        | shrd 5, TMP0, 0x5, RA
+        | ldd       5, BASE, T2, T4
+        | wait_load T4, 1
         | --
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
-        | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | std 5, BASE, CARG3, CARG4            // Copy result to Stk[RA] from Stk[RB].
-        | ct ctpr1
+        | std       5, BASE, T3, T4         // Copy result to Stk[RA] from Stk[RB].
+        | ct        ctpr2                   // vm_restart_pipeline
         | --
         break;
 
