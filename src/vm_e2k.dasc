@@ -982,7 +982,7 @@ static void build_subroutines(BuildCtx *ctx)
     | getfd 1, RB, (47 << 6), RB
     | subd 3, RD, CARG2, RD
     | --
-    | lddsm 0, RB, LFUNC->pc, T0
+    | lddsm 0, RB, LFUNC->pc, RARG1
     | cmpesb 1, ITYPE, LJ_TFUNC, pred0
     | addd 3, RD, 0x8, RD                   // RD = (nargs+1)*8
     |                                       // used in insn handler
@@ -997,13 +997,13 @@ static void build_subroutines(BuildCtx *ctx)
     |->vm_enter_pipeline:
     | pipe_setwd
     | --
-    | ldw       0, T0, 0, INSN_E            // Load insns.
-    | ldwsm     2, T0, 4, INSN_B
-    | ldwsm     3, T0, 8, INSN_L
-    | ldwsm     5, T0,12, INSN_D
+    | ldw       0, RARG1, 0, INSN_E         // Load insns.
+    | ldwsm     2, RARG1, 4, INSN_B
+    | ldwsm     3, RARG1, 8, INSN_L
+    | ldwsm     5, RARG1,12, INSN_D
     | --
-    | ldwsm     0, T0,16, INSN_S
-    | addd      1, T0, 0x4, PC              // FIXME: insn hanlders expect it to be NPC but not current PC
+    | ldwsm     0, RARG1,16, INSN_S
+    | addd      1, RARG1, 0x4, PC           // FIXME: insn hanlders expect it to be NPC but not current PC
     | wait_load INSN_E, 1
     | --
     | shld      0, INSN_E, 0x3, OP_E        // Scale opcode fields.
@@ -7023,53 +7023,33 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Calls and vararg handling ----------------------------------------- */
 
     case BC_CALL: case BC_CALLM:
-        | todo
-        | // ins_A_C  RA = base*8, (RB = (nresults+1)*8,) RD = (nargs+1)*8 | extra_nargs*8
-        | ldd 0, BASE, RA, RB
-        | addd 1, RA, 0x10, RA
-        | ldw 2, STACK, MULTRES, TMP0
-        | disp ctpr1, ->vmeta_call
-        | nop 1
+        | // ins_A_C  RA_E = base*8, (RB_E = (nresults+1)*8,) RD_E = (nargs+1)*8 | extra_nargs*8
+        | ldd       0, BASE, RA_E, RB
+        | addd      1, RA_E, 0x10, RA
+        | ldw       2, STACK, MULTRES, TMP0
+        | andd      3, RD_E, 0x7f8, RD
+        | disp      ctpr1, ->vmeta_call
+        | wait_load RB, 0
         | --
-        | andd 0, RD, 0x7f8, RD
-        | --
+        | sard      0, RB, 0x2f, ITYPE
+        | getfd     1, RB, (47 << 6), RB
         if (op == BC_CALLM) {
-          | sard 0, RB, 0x2f, ITYPE
-          | getfd 1, RB, (47 << 6), RB
-          | addd 2, RD, TMP0, RD
-          | --
-        } else {
-          | sard 0, RB, 0x2f, ITYPE
-          | getfd 1, RB, (47 << 6), RB
-          | --
+          | addd    2, RD, TMP0, RD
         }
-        | lddsm 0, RB, LFUNC->pc, CARG2
-        | cmpesb 1, ITYPE, LJ_TFUNC, pred0
-        | addd 2, BASE, RA, CARG1
-        | nop 1
+        | disp      ctpr2, ->vm_enter_pipeline // TODO: inline
         | --
-        | addd 0, BASE, RA, BASE, pred0
-        | addd 1, BASE, RA, RA, ~pred0
+        | lddsm     0, RB, LFUNC->pc, T2
+        | cmpesb    1, ITYPE, LJ_TFUNC, pred0
+        | addd      2, BASE, RA, T1
+        | wait_load T2, 1
         | --
-        | ldw 0, CARG2, 0x0, RA, pred0
-        | addd 1, CARG2, 0x4, PC, pred0
-        | std 2, CARG1, -8, PC, pred0
-        | nop 1
+        | addd      1, BASE, RA, RA, ~pred0
+        | ct        ctpr1, ~pred0           // vmeta_call(TODO)
         | --
-        | ct ctpr1, ~pred0
-        | --
-        | andd 0, RA, 0xff, TMP0
-        | shrd 1, RA, 0x5, RA
-        | --
-        | shld 0, TMP0, 0x3, TMP0                      // jmp to [DISPATCH+OP*8]
-        | andd 1, RA, 0x7f8, RA
-        | --
-        | ldd 0, TMP0, DISPATCH, TMP0
-        | nop 2
-        | --
-        | movtd 0, TMP0, ctpr1
-        | --
-        | ct ctpr1
+        | addd      0, BASE, RA, BASE, pred0
+        | addd      1, T2, 0, RARG1
+        | std       2, T1, -8, PC
+        | ct        ctpr2                   // vm_enter_pipeline
         | --
         break;
 
