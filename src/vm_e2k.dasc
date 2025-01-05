@@ -471,32 +471,23 @@
 |.macro ins_callt
 | todo
 | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8, [BASE-8] = PC
-| ldd 3, RB, LFUNC->pc, PC
-| nop 2
+| ldd       0, RB, LFUNC->pc, RARG1
+| disp      ctpr1, ->vm_enter_pipeline      // TODO: optimize
 | --
-| ldw 3, PC, 0x0, RA
-| ldb 5, PC, 0x0, TMP0
-| nop 2
-| --
-| shld 0, TMP0, 0x3, TMP0                   // jmp to [DISPATCH+OP*8]
-| addd 1, PC, 0x4, PC
-| shrd 3, RA, 0x5, RA
-| --
-| ldd 0, TMP0, DISPATCH, TMP0
-| andd 3, RA, 0x7f8, RA
-| nop 2
-| --
-| movtd 0, TMP0, ctpr1
-| --
-| ct ctpr1
+| ct        ctpr1
+| wait_load RARG1, 1
 | --
 |.endmacro
 |
 |.macro ins_call
 | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8, PC = caller PC
-| std 5, BASE, -8, PC
+| ldd       0, RB, LFUNC->pc, RARG1
+| std       2, BASE, -8, PC
+| disp      ctpr1, ->vm_enter_pipeline      // TODO: optimize
 | --
-| ins_callt
+| ct        ctpr1
+| wait_load RARG1, 1
+| --
 |.endmacro
 |
 |//-----------------------------------------------------------------------
@@ -3863,6 +3854,8 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->fff_fallback:                        // Call fast function fallback handler.
     | // BASE = new base, RD = (nargs+1)*8
+    | setwd     wsz = 0xc, nfx = 0x1, dbl = 0x0
+    | setbn     rsz = 0x3, rbs = 0x8, rcur = 0x0
     | ldd 0, STACK, SAVE_L, RB
     | ldd 3, BASE, -8, PC                   // Fallback may overwrite PC.
     | addd 4, BASE, RD, RD
