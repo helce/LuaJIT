@@ -986,6 +986,9 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vm_enter_pipeline:
+    | // (PC)
+    | // RD = (nargs+1)*8
+    | // RB
     | pipe_setwd
     | --
     | ldw       0, RARG1, 0, INSN_E         // Load insns.
@@ -1407,127 +1410,97 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vmeta_tsetb:
-    | todo
-    | ldb 0, PC, PREV_PC_RC, TMP0
-    | ldb 2, PC, PREV_PC_RB, RB             // Reload TValue *t from RB.
-    | disp ctpr1, >1
-    | nop 2
+    | setwd     wsz = 0xc, nfx = 0x1, dbl = 0x0
+    | setbn     rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | ldb       0, PC, PREV_PC_RC, TMP0
+    | ldb       2, PC, PREV_PC_RB, RB       // Reload TValue *t from RB.
+    | disp      ctpr1, >1
+    | wait_load TMP0, 0
     | --
-    | istofd 0, TMP0, TMP0
-    | shld 1, RB, 0x3, RB
-    | nop 1
+    | istofd    0, TMP0, TMP0
+    | shld      1, RB, 0x3, RB
+    | wait      TMP0, 0, 2
     | --
-    | addd 0, STACK, STACK_TMP, CARG3
-    | addd 1, BASE, RB, CARG2
-    | std 2, STACK, STACK_TMP, TMP0
-    | ct ctpr1
+    | addd      0, STACK, STACK_TMP, CARG3
+    | addd      1, BASE, RB, CARG2
+    | std       2, STACK, STACK_TMP, TMP0
+    | ct        ctpr1                       // >1
     | --
     |
     |->vmeta_tsetv:
-    | todo
-    | ldb 0, PC, PREV_PC_RC, RC             // Reload TValue *k from RC.
-    | ldb 2, PC, PREV_PC_RB, RB             // Reload TValue *t from RB.
-    | nop 2
+    | setwd     wsz = 0xc, nfx = 0x1, dbl = 0x0
+    | setbn     rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | ldb       0, PC, PREV_PC_RC, RC       // Reload TValue *k from RC.
+    | ldb       2, PC, PREV_PC_RB, RB       // Reload TValue *t from RB.
+    | wait_load RC, 0
     | --
-    | shld 0, RC, 0x3, RC
-    | shld 1, RB, 0x3, RB
+    | shld      0, RC, 0x3, RC
+    | shld      1, RB, 0x3, RB
     | --
-    | addd 0, BASE, RC, CARG3
-    | addd 1, BASE, RB, CARG2
-    |1:
-    | todo
-    | disp ctpr1, extern lj_meta_tset      // (lua_State *L, TValue *o, TValue *k)
+    | addd      0, BASE, RC, CARG3
+    | addd      1, BASE, RB, CARG2
+    |1:                                     // entry point for vmeta_tsets and vmeta_tsetb
+    | disp      ctpr1, extern lj_meta_tset
     | --
-    | ldd 0, STACK, SAVE_L, CARG1
-    | nop 2
+    | ldd       0, STACK, SAVE_L, CARG1
     | --
-    | std 2, STACK, SAVE_PC, PC
+    | std       2, STACK, SAVE_PC, PC
     | --
-    | std 2, CARG1, L->base, BASE
-    | addd 0, CARG1, 0x0, RB
-    | call ctpr1, wbs = 0x8
+    | std       2, CARG1, L->base, BASE
+    | addd      0, CARG1, 0x0, RB
+    | call      ctpr1, wbs = 0x8            // lj_meta_tset(lua_State *L, TValue *o, TValue *k)
     | --
     | // TValue * (finished) or NULL (metamethod) returned.
-    | cmpedb 0, CRET1, 0x0, pred0
-    | disp ctpr1, >2
-    | nop 4
+    | cmpedb    0, CRET1, 0x0, pred0
+    | disp      ctpr1, >2
+    | wait_pred_ct pred0, 0
     | --
-    | ldd 3, RB, L->base, BASE
-    | ct ctpr1, pred0
+    | ldd       3, RB, L->base, BASE
+    | ct        ctpr1, pred0                // >2
     | --
     | // NOBARRIER: lj_meta_tset ensures the table is not black.
-    | ldw 0, PC, 0x0, TMP0
-    | ldb 2, PC, 0x0, TMP1
+    | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline
+    | ldb       0, PC, PREV_PC_RA, T2
+    | wait_load T2, 0
     | --
-    | ldb 0, PC, PREV_PC_RA, CARG2
-    | nop 2
+    | shld      0, T2, 0x3, T2
     | --
-    | shld 0, CARG2, 0x3, CARG2
-    | addd 1, PC, 0x4, PC
-    | shld 2, TMP1, 0x3, TMP1
-    | shrd 3, TMP0, 0xd, RD
-    | shrd 4, TMP0, 0x15, RB
-    | shrd 5, TMP0, 0x5, RA
+    | ldd       0, BASE, T2, T3
+    | wait_load T3, 0
     | --
-    | ldd 0, BASE, CARG2, CARG3
-    | ldd 2, TMP1, DISPATCH, TMP1
-    | nop 2
-    | --
-    | movtd 0, TMP1, ctpr1
-    | andd 3, RD, 0x7fff8, RD
-    | andd 4, RA, 0x7f8, RA
-    | --
-    | std 2, CRET1, 0x0, CARG3
-    | andd 3, RB, 0x7f8, RB
-    | andd 4, RD, 0x7f8, RC
-    | ct ctpr1
+    | std       2, CRET1, 0x0, T3
+    | ct        ctpr1                       // vm_restart_pipeline
     |
     |2: // Call __newindex metamethod
     | // BASE = base, L->top = new base, stack = cont/func/t/k/(v)
     | // Copy value to third argument.
-    | ldd 0, RB, L->top, RA
-    | ldb 2, PC, PREV_PC_RA, RC
-    | nop 2
+    | ldd       0, RB, L->top, RA
+    | ldb       2, PC, PREV_PC_RA, RC
+    | disp      ctpr1, ->vm_enter_pipeline
+    | wait_load RA, 0
     | --
-    | std 2, RA, -24, PC                    // [cont|PC]
-    | shld 3, RC, 0x3, RC
+    | std       2, RA, -24, PC              // [cont|PC]
+    | shld      3, RC, 0x3, RC
     | --
-    | addd 0, RA, FRAME_CONT, PC
-    | ldd 3, BASE, RC, RB
-    | nop 2
+    | addd      0, RA, FRAME_CONT, PC
+    | ldd       3, BASE, RC, RB
+    | wait_load RB, 0
     | --
-    | subd 0, PC, BASE, PC
-    | std 2, RA, 0x10, RB
+    | subd      0, PC, BASE, PC
+    | std       2, RA, 0x10, RB
     | --
-    | ldd 3, RA, -16, RB                    // Guaranteed to be a function here.
-    | addd 4, 0x0, (3+1)*8, RD              // 3 args for func (t, k, v)
-    | nop 3
+    | ldd       3, RA, -16, RB              // Guaranteed to be a function here.
+    | addd      4, 0x0, (3+1)*8, RD         // 3 args for func (t, k, v)
+    | wait_load RB, 0
     | --
-    | getfd 3, RB, (47 << 6), RB
-    | addd 4, RA, 0x0, BASE
+    | getfd     3, RB, (47 << 6), RB
+    | addd      4, RA, 0x0, BASE
     | --
     | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8, PC = caller PC
-    | ldd 0, RB, LFUNC->pc, PC
-    | addd 1, PC, 0x0, TMP1
-    | nop 2
-    | --
-    | ldw 0, PC, 0x0, RA
-    | nop 2
-    | --
-    | andd 0, RA, 0xff, TMP0
-    | addd 1, PC, 0x4, PC
-    | std 5, BASE, -8, TMP1
-    | --
-    | shld 0, TMP0, 0x3, TMP0               // jmp to [DISPATCH+OP*8]
-    | --
-    | ldd 0, TMP0, DISPATCH, TMP0
-    | shrd 3, RA, 0x5, RA
-    | nop 2
-    | --
-    | movtd 0, TMP0, ctpr1
-    | andd 3, RA, 0x7f8, RA
-    | --
-    | ct ctpr1
+    | ldd       0, RB, LFUNC->pc, RARG1
+    | std       5, BASE, -8, PC
+    | wait_load RARG1, 0
+    | ct        ctpr1                       // vm_enter_pipeline
     | --
     |
     |->vmeta_tsetr:
@@ -5915,12 +5888,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | call      ctpr1, wbs = 0x8        // lj_tab_new(lua_State *L, int32_t asize, uint32_t hbits)
         | --
         | // Table * returned.
-        | shld      0, ITYPE, 0x2f, ITYPE
+        | addd      0, 0x0, LJ_TTAB, ITYPE
         | ldb       2, PC, PREV_PC_RA, T2
         | ldd       3, RB, L->base, BASE
         | disp      ctpr3, ->vm_restart_pipeline
         | --
-        | addd      0, 0x0, LJ_TTAB, ITYPE
+        | shld      0, ITYPE, 0x2f, ITYPE
         | wait_load T2, 1
         | --
         | shld      0, T2, 0x3, T2
@@ -6706,86 +6679,72 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TSETB:
-        | todo
-        | // ins_ABC RA = src*8, RB = table*8, RC = byte_literal*8
-        | ldwsm 0, PC, 0x0, CARG5
-        | ldbsm 2, PC, 0x0, CARG6
-        | ldd 3, BASE, RB, RB
-        | disp ctpr1, ->vmeta_tsetb
-        | nop 2
+        | // ins_ABC RA_E = src*8, RB_E = table*8, RC_E = byte_literal*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | addd      4, RC_E, 0, RC
+        | ldd       5, BASE, RB_E, RB
+        | disp      ctpr1, ->vmeta_tsetb
         | --
-        | sard 3, RB, 0x2f, ITYPE
-        | getfd 4, RB, (47 << 6), RB
-        | disp ctpr2, >2
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load RB, 1
         | --
-        | ldwsm 3, RB, TAB->asize, TMP1
-        | cmpesb 4, ITYPE, LJ_TTAB, pred0
-        | lddsm 5, RB, TAB->array, TMP0
-        | disp ctpr3, >1
-        | nop 1
+        | pipe_scale 0, 1, 2, 3
+        | sard      4, RB, 0x2f, ITYPE
+        | getfd     5, RB, (47 << 6), RB
         | --
-        | lddsm 3, RB, TAB->metatable, CARG2
-        | ldbsm 5, RB, TAB->marked, CARG4
+        | ldwsm     3, RB, TAB->asize, TMP1
+        | cmpesb    4, ITYPE, LJ_TTAB, pred0
+        | lddsm     5, RB, TAB->array, TMP0
         | --
-        | shld 3, TMP1, 0x3, TMP1, pred0
-        | ct ctpr1, ~pred0
+        | lddsm     3, RB, TAB->metatable, T2
+        | ldbsm     5, RB, TAB->marked, T4
+        | wait_pred_ct pred0, 1
         | --
-        | cmpbdb 3, RC, TMP1, pred0
-        | nop 2
+        | shld      3, TMP1, 0x3, TMP1, pred0
+        | ct        ctpr1, ~pred0           // vmeta_tsetb(TODO)
         | --
-        | shldsm 2, CARG6, 0x3, CARG6
-        | cmpedbsm 3, CARG2, 0x0, pred1
-        | addd 4, RC, TMP0, RC, pred0
-        | ldbsm 5, CARG2, TAB->nomm, CARG3
-        | ct ctpr1, ~pred0
+        | cmpbdb    3, RC, TMP1, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | lddsm 2, CARG6, DISPATCH, CARG6
-        | ldd 3, RC, 0x0, TMP0
-        | cmpandedbsm 4, CARG4, LJ_GC_BLACK, pred3
-        | nop 2
+        | cmpedbsm  3, T2, 0x0, pred1
+        | addd      4, RC, TMP0, RC, pred0
+        | ldbsm     5, T2, TAB->nomm, T3
+        | ct        ctpr1, ~pred0           // vmeta_tsetb(TODO)
         | --
-        | cmpedb 3, TMP0, LJ_TNIL, pred0    // Previous value is nil?
-        | cmpandedbsm 4, CARG3, 1<<MM_newindex, pred2 // 'no __newindex' flag NOT set: check.
-        | nop 1
+        | ldd       3, RC, 0x0, TMP0
+        | cmpandedbsm 4, T4, LJ_GC_BLACK, pred3
         | --
-        | pass pred0, p0
-        | pass pred1, p1
-        | pass pred2, p2
-        | landp p0, ~p1, p4
-        | landp p4, p2, p5
-        | pass p5, pred0
+        | cmpedb    3, TMP0, LJ_TNIL, pred0 // Previous value is nil?
+        | cmpandedbsm 4, T3, 1<<MM_newindex, pred2 // 'no __newindex' flag NOT set: check.
+        | lddsm     5, BASE, RA_E, ITYPE
         | --
-        | ct ctpr1, pred0
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | pass      pred2, p2
+        | landp     p0, ~p1, p4
+        | landp     p4, p2, p5
+        | pass      p5, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | ct ctpr2, ~pred3                  // isblack(table)?
-        |1: // Set array slot.
-        | movtd 0, CARG6, ctpr1
-        | addd 1, PC, 0x4, PC
-        | ldd 3, BASE, RA, ITYPE
-        | shrd 4, CARG5, 0xd, RD
-        | shrd 5, CARG5, 0x15, RB
+        | ct        ctpr1, pred0            // vmeta_tsetb(TODO)
         | --
-        | shrd 3, CARG5, 0x5, RA
-        | addd 4, RC, 0x0, CARG1
+        | std       5, RC, 0x0, ITYPE, pred3
+        | pipe_dispatch_if 0, ctpr3, pred3
         | --
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
+        | // Possible table write barrier for the value. Skip valiswhite check.
+        | ldd       3, DISPATCH, DISPATCH_GL(gc.grayagain), T0
+        | ldb       5, RB, TAB->marked, T1
+        | wait_load T0, 0
         | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | std 5, CARG1, 0x0, ITYPE
-        | ct ctpr1
-        |2: // Possible table write barrier for the value. Skip valiswhite check.
-        | ldd 0, DISPATCH, DISPATCH_GL(gc.grayagain), TMP1
-        | ldb 3, RB, TAB->marked, CARG1
-        | nop 2
+        | std       2, DISPATCH, DISPATCH_GL(gc.grayagain), RB
+        | andd      3, T1, ~LJ_GC_BLACK, T1 // black2gray(tab)
+        | std       5, RB, TAB->gclist, T0
         | --
-        | std 2, DISPATCH, DISPATCH_GL(gc.grayagain), RB
-        | andd 3, CARG1, ~LJ_GC_BLACK, CARG1 // black2gray(tab)
-        | std 5, RB, TAB->gclist, TMP1
-        | --
-        | stb 5, RB, TAB->marked, CARG1
-        | ct ctpr3
+        | std       2, RC, 0x0, ITYPE
+        | stb       5, RB, TAB->marked, T1
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
