@@ -74,8 +74,8 @@
 |.define T15,       g31
 |
 |// Pipeline state.
-|.define INSN_F,      b0        // fetched instruction
-|.define INSN_S,      b2
+|.define INSN_F,      b0
+|.define INSN_S,      b2        // fetched instruction
 |.define INSN_D,      b4
 |.define INSN_L,      b6
 |.define INSN_B,      b8
@@ -332,7 +332,8 @@
 |
 |// Stage F
 |.macro pipe_fetch, ch
-| ldwsm     ch, PC, 20, INSN_F
+| //ldwsm     ch, PC, 20, INSN_F
+| ldwsm     ch, PC, 16, INSN_F          // FIXME: PC is NPC!!!
 |.endmacro
 |
 |// Stage S
@@ -424,6 +425,7 @@
 |//-----------------------------------------------------------------------
 |// Instruction decode+dispatch.
 |.macro ins_NEXT             // AD = {D |A|OP}, ABC = {B|C|A|OP}, AC = {lo_D|A|OP}
+| todo
 | ldw 0, PC, 0x0, TMP0
 | ldb 2, PC, 0x0, TMP1
 | addd 1, PC, 0x4, PC
@@ -467,6 +469,7 @@
 | 
 |// Call decode and dispatch.
 |.macro ins_callt
+| todo
 | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8, [BASE-8] = PC
 | ldd 3, RB, LFUNC->pc, PC
 | nop 2
@@ -547,22 +550,28 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vm_returnc:
-    | addd 0, 0x0, LUA_YIELD, CRET1
-    | addd 3, RD, 0x8, RD                   // RD = (nresults+1)*8
-    | disp ctpr1, ->vm_unwind_c_eh
+    | // RD = nresults*8
+    | addd      0, 0x0, LUA_YIELD, CRET1    // used in vm_unwind_c_eh
+    | addd      1, RD, 0x8, RD              // RD = (nresults+1)*8
+    | disp      ctpr1, ->vm_unwind_c_eh
     | --
     | cmpandedb 0, PC, FRAME_TYPE, pred1
-    | cmpedb 3, RD, 0x0, pred0
-    | disp ctpr2, ->BC_RET_Z
+    | cmpedb    1, RD, 0x0, pred0
+    | disp      ctpr2, ->BC_RET_Z
+    | wait_pred_ct pred0, 0
     | --
-    | stw 2, STACK, MULTRES, RD, ~pred0
-    | ct ctpr1, pred0
+    | stw       2, STACK, MULTRES, RD, ~pred0
+    | ct        ctpr1, pred0                // vm_unwind_c_eh(TODO)
     | --
-    | ct ctpr2, pred1                       // Handle regular return to Lua.
+    | ct        ctpr2, pred1                // BC_RET_Z(TODO)
+    |                                       // Handle regular return to Lua.
     | --
     |
     |->vm_return:
     | // BASE = base, RA = resultofs, RD/MULTRES = (nresults+1)*8, PC = return
+    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
+    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | --
     | xord 1, PC, FRAME_C, PC
     | subd 2, 0x0, 0x8, TMP1
     | addd 3, RA, 0x0, CARG4
@@ -579,7 +588,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldw 0, STACK, SAVE_NRES, RA, pred0
     | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0, pred0
     | subd 3, TMP1, BASE, PC, pred0
-    | ct ctpr1, ~pred0
+    | ct        ctpr1, ~pred0               // vm_returnp(TODO)
     | --
     | return ctpr3
     | --
@@ -589,23 +598,25 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | shld 0, RA, 0x3, RA                   // RA = wanted (nresults+1)*8
     | std 5, RB, L->base, PC
-    | ct ctpr2, pred1
+    | ct        ctpr2, pred1                // >2
     |1:                                     // Move results down.
     | ldd 3, BASE, CARG4, TMP1
     | subd 4, CARG3, 0x8, CARG3
-    | nop 1
     | --
     | cmpedb 4, CARG3, 0x0, pred0
+    | wait_pred_ct pred0, 0
+    | wait_load TMP1, 1
     | --
     | addd 3, BASE, 0x8, BASE
     | std 5, BASE, -16, TMP1
-    | ct ctpr1, ~pred0
+    | ct        ctpr1, ~pred0               // <1
     |2:
     | disp ctpr1, >4
     | --
     | cmpesb 0, RA, RD, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr1, ~pred0                      // More/less results wanted?
+    | ct        ctpr1, ~pred0               // >4, More/less results wanted?
     |3:
     | addd 2, 0x0, 0x0, RRET1               // Ok return status for vm_pcall.
     | ldd 3, STACK, SAVE_CFRAME, TMP0       // Restore previous C frame.
@@ -615,7 +626,7 @@ static void build_subroutines(BuildCtx *ctx)
     | std 5, RB, L->top, BASE
     | --
     | std 5, RB, L->cframe, TMP0
-    | ct ctpr3
+    | ct        ctpr3                       // return
     |4:
     | ldd 3, RB, L->maxstack, TMP0
     | addd 4, 0x0, LJ_TNIL, TMP1
@@ -628,12 +639,12 @@ static void build_subroutines(BuildCtx *ctx)
     | cmpbedb 3, BASE, TMP0, pred1
     | nop 1
     | --
-    | ct ctpr1, pred0                       // Less results wanted?
+    | ct        ctpr1, pred0                // >5, Less results wanted?
     | --
     | disp ctpr1, <4
     | --
     | subd 3, BASE, 0x10, TMP0, pred1
-    | ct ctpr2, ~pred1                      // Need to grow stack?
+    | ct        ctpr2, ~pred1               // >6, Need to grow stack?
     | --
     | addd 3, BASE, 0x8, BASE
     | adds 4, RD, 0x8, RD
@@ -645,24 +656,25 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ldd 3, STACK, SAVE_CFRAME, TMP0, pred0 // Restore previous C frame.
     | subd 4, BASE, 0x10, BASE, pred0
-    | ct ctpr1, ~pred0                      // More/less results wanted?
+    | ct        ctpr1, ~pred0               // <4, More/less results wanted?
     | --
     | addd 0, 0x0, 0x0, RRET1               // Ok return status for vm_pcall.
     | std 5, RB, L->top, BASE
     | nop 1
     | --
     | std 5, RB, L->cframe, TMP0
-    | ct ctpr3
+    | ct        ctpr3                       // return
     |5:                                     // Less results wanted.
     | disp ctpr1, <3
     | --
-    | cmpesb 0, RA, 0x0, pred0
+    | cmpesb    0, RA, 0x0, pred0
+    | wait_pred pred0, 0
     | --
-    | subd 0, RA, RD, RA, ~pred0            // Negative result!
-    | ct ctpr1, pred0
+    | subd      0, RA, RD, RA, ~pred0       // Negative result!
     | --
-    | addd 0, BASE, RA, BASE                // Correct top.
-    | ct ctpr1
+    | addd      0, BASE, RA, BASE, ~pred0   // Correct top.
+    | ct        ctpr1                       // <3
+    | --
     |
     |6:
     | // Corner case: need to grow stack for filling up results.
@@ -671,14 +683,14 @@ static void build_subroutines(BuildCtx *ctx)
     | // - The GC shrinks the stack in between.
     | // - A return back from a lua_call() with (high) nresults adjustment.
     |
-    | disp ctpr1, extern lj_state_growstack // (lua_State *L, int n)
+    | disp ctpr1, extern lj_state_growstack
     | --
     | adds 0, RA, 0x0, CARG2
     | addd 1, RB, 0x0, CARG1
     | stw 2, STACK, MULTRES, RD
     | std 5, RB, L->top, BASE               // Save current top held in BASE (yes).
     | --
-    | call ctpr1, wbs = 0x8
+    | call      ctpr1, wbs = 0x8            // lj_state_growstack (lua_State *L, int n)
     | --
     | ldw 0, STACK, MULTRES, RD
     | ldw 2, STACK, SAVE_NRES, RA
@@ -694,11 +706,11 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | addd 0, 0x0, 0x0, RRET1, pred0        // Ok return status for vm_pcall.
     | subd 3, BASE, 0x10, BASE, pred0
-    | ct ctpr1, ~pred0                      // More/less results wanted?
+    | ct        ctpr1, ~pred0               // <4, More/less results wanted?
     | --
     | std 2, RB, L->cframe, TMP0
     | std 5, RB, L->top, BASE
-    | ct ctpr3
+    | ct        ctpr3                       // return
     | --
     |
     |->vm_unwind_c:                         // Unwind C stack, return from vm_pcall.
@@ -970,63 +982,50 @@ static void build_subroutines(BuildCtx *ctx)
     | getfd 1, RB, (47 << 6), RB
     | subd 3, RD, CARG2, RD
     | --
-    | lddsm 0, RB, LFUNC->pc, CARG1
+    | lddsm 0, RB, LFUNC->pc, T0
     | cmpesb 1, ITYPE, LJ_TFUNC, pred0
     | addd 3, RD, 0x8, RD                   // RD = (nargs+1)*8
+    |                                       // used in insn handler
     | nop 1
     | --
     | addd 3, CARG2, 0x0, BASE, pred0       // BASE = new base
     | ct ctpr1, ~pred0
     | --
-    | ldb 2, CARG1, 0x0, TMP1
-    | ldw 3, CARG1, 0x0, RA
-    | nop 2
-    | --
-    | shld 0, TMP1, 0x3, TMP1               // jmp to [DISPATCH+OP*8]
     | std 2, BASE, -8, PC                   // [BASE-8] = PC
-    | --
-    | ldd 0, TMP1, DISPATCH, TMP1
-    | addd 1, CARG1, 0x4, PC
-    | shrd 3, RA, 0x5, RA
-    | nop 2
-    | --
-    | movtd 0, TMP1, ctpr1
-    | andd 3, RA, 0x7f8, RA
-    | --
-    | ct ctpr1
     | --
     |
     |->vm_enter_pipeline:
     | pipe_setwd
     | --
-    | ldwsm     0, PC, 0, INSN_E            // Load insns.
-    | ldwsm     2, PC, 4, INSN_B
-    | ldwsm     3, PC, 8, INSN_L
-    | ldwsm     5, PC,12, INSN_D
+    | ldw       0, T0, 0, INSN_E            // Load insns.
+    | ldwsm     2, T0, 4, INSN_B
+    | ldwsm     3, T0, 8, INSN_L
+    | ldwsm     5, T0,12, INSN_D
     | --
-    | ldwsm     0, PC,16, INSN_S
+    | ldwsm     0, T0,16, INSN_S
+    | addd      1, T0, 0x4, PC              // FIXME: insn hanlders expect it to be NPC but not current PC
     | wait_load INSN_E, 1
     | --
-    | shldsm    0, INSN_E, 0x3, OP_E        // Scale opcode fields.
+    | shld      0, INSN_E, 0x3, OP_E        // Scale opcode fields.
     | shldsm    2, INSN_B, 0x3, OP_B
     | shldsm    3, INSN_L, 0x3, OP_L
     | shldsm    5, INSN_D, 0x3, OP_D
     | --
-    | anddsm    0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | andd      0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
     | anddsm    2, OP_B, 0x7f8, OP_B
     | anddsm    3, OP_L, 0x7f8, OP_L
     | --
-    | lddsm     0, OP_E, DISPATCH, OP_E     // Load pointers to insn handlers.
+    | ldd       0, OP_E, DISPATCH, OP_E     // Load pointers to insn handlers.
     | lddsm     2, OP_B, DISPATCH, OP_B
-    | shrdsm    1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
+    | shrd      1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
     | --
-    | anddsm    1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
+    | andd      1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
     | ldbsm     0, 0, 0, RC_E
-    | addd      3, RARG3, 0, RD_E
-    | ldbsm     2, 0, 0, RB_E
+    | addd      3, RD, 0, RD_E
+    | addd      4, RB, 0, RB_E
     | wait_load OP_E, 1
     | --
-    | movtdsm   0, OP_E, ctpr3              // Prepare an insn handler for stage E.
+    | movtd     0, OP_E, ctpr3              // Prepare an insn handler for stage E.
     | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
     | shrdsm    4, INSN_B, 0x15, RB_B
     | shrdsm    5, INSN_B, 0xd, RCD_B
@@ -1037,36 +1036,37 @@ static void build_subroutines(BuildCtx *ctx)
     |->vm_restart_pipeline:
     | pipe_setwd
     | --
-    | ldwsm     0, PC, 0, INSN_E            // Load insns.
+    | ldw       0, PC, 0, INSN_E            // Load insns.
     | ldwsm     2, PC, 4, INSN_B
     | ldwsm     3, PC, 8, INSN_L
     | ldwsm     5, PC,12, INSN_D
     | --
     | ldwsm     0, PC,16, INSN_S
+    | addd      1, PC, 4, PC                // FIXME: insn hanlders expect it to be NPC but not current PC
     | wait_load INSN_E, 1
     | --
-    | shldsm    0, INSN_E, 0x3, OP_E        // Scale opcode fields.
+    | shld      0, INSN_E, 0x3, OP_E        // Scale opcode fields.
     | shldsm    2, INSN_B, 0x3, OP_B
     | shldsm    3, INSN_L, 0x3, OP_L
     | shldsm    5, INSN_D, 0x3, OP_D
     | --
-    | anddsm    0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | andd      0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
     | anddsm    2, OP_B, 0x7f8, OP_B
     | anddsm    3, OP_L, 0x7f8, OP_L
     | --
-    | lddsm     0, OP_E, DISPATCH, OP_E     // Load pointers to insn handlers.
+    | ldd       0, OP_E, DISPATCH, OP_E     // Load pointers to insn handlers.
     | lddsm     2, OP_B, DISPATCH, OP_B
-    | shrdsm    1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
-    | shrdsm    3, INSN_E, 0x15, RB_E
-    | shrdsm    4, INSN_E, 0xd, T0
+    | shrd      1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
+    | shrd      3, INSN_E, 0x15, RB_E
+    | shrd      4, INSN_E, 0xd, T0
     | --
-    | anddsm    1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
-    | anddsm    3, RB_E, 0x7f8, RB_E
-    | anddsm    4, T0, 0x7f8, RC_E
-    | anddsm    5, T0, 0x7fff8, RD_E
+    | andd      1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
+    | andd      3, RB_E, 0x7f8, RB_E
+    | andd      4, T0, 0x7f8, RC_E
+    | andd      5, T0, 0x7fff8, RD_E
     | wait_load OP_E, 1
     | --
-    | movtdsm   0, OP_E, ctpr3              // Prepare an insn handler for stage E.
+    | movtd     0, OP_E, ctpr3              // Prepare an insn handler for stage E.
     | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
     | shrdsm    4, INSN_B, 0x15, RB_B
     | shrdsm    5, INSN_B, 0xd, RCD_B
@@ -1297,6 +1297,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->cont_ra:                             // BASE = base, CRET1 = result
+    | todo
     | ldw 0, PC, 0x0, TMP0
     | ldb 2, PC, 0x0, TMP1
     | nop 1
@@ -1344,6 +1345,7 @@ static void build_subroutines(BuildCtx *ctx)
     | // BASE = new base, RB = func, RD = (nargs+1)*8, PC = caller PC
     |
     |->vmeta_tgetr:
+    | todo
     | disp ctpr1, extern lj_tab_getinth     // // (GCtab *t, int32_t key)
     | --
     | addd 0, RB, 0x0, CARG1
@@ -1386,6 +1388,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-----------------------------------------------------------------------
     |
     |->vmeta_tsets:
+    | todo
     | ldb 0, PC, PREV_PC_OP, TMP0
     | addd 1, 0x0, LJ_TSTR, ITYPE
     | ldbsm 2, PC, PREV_PC_RB, CARG1        // Reload TValue *t from RB.
@@ -1412,6 +1415,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vmeta_tsetb:
+    | todo
     | ldb 0, PC, PREV_PC_RC, TMP0
     | ldb 2, PC, PREV_PC_RB, RB             // Reload TValue *t from RB.
     | disp ctpr1, >1
@@ -1428,6 +1432,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vmeta_tsetv:
+    | todo
     | ldb 0, PC, PREV_PC_RC, RC             // Reload TValue *k from RC.
     | ldb 2, PC, PREV_PC_RB, RB             // Reload TValue *t from RB.
     | nop 2
@@ -1438,6 +1443,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd 0, BASE, RC, CARG3
     | addd 1, BASE, RB, CARG2
     |1:
+    | todo
     | disp ctpr1, extern lj_meta_tset      // (lua_State *L, TValue *o, TValue *k)
     | --
     | ldd 0, STACK, SAVE_L, CARG1
@@ -1533,6 +1539,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vmeta_tsetr:
+    | todo
     | disp ctpr1, extern lj_tab_setinth     // (lua_State *L, GCtab *t, int32_t key)
     | --
     | ldd 0, STACK, SAVE_L, CARG1
@@ -1576,6 +1583,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Comparison metamethods ---------------------------------------------
     |
     |->vmeta_comp:
+    | todo
     | disp ctpr1, extern lj_meta_comp       // (lua_State *L, TValue *o1, *o2, int op)
     | --
     | ldh 0, PC, PREV_PC_RD, RD
@@ -1615,6 +1623,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ins_next
     |
     |->cont_condt:
+    | todo
     | // BASE = base, CRET1 = result
     | ldd 0, CRET1, 0x0, ITYPE
     | addd 1, PC, 0x4, PC
@@ -1634,6 +1643,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ins_next
     |
     |->cont_condf:                          // BASE = base, CRET1 = result
+    | todo
     | ldd 0, CRET1, 0x0, ITYPE
     | addd 1, PC, 0x4, PC
     | --
@@ -1652,6 +1662,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ins_next
     |
     |->vmeta_equal:
+    | todo
     | disp ctpr1, extern lj_meta_equal      // (lua_State *L, GCobj *o1, *o2, int ne)
     | --
     | ldd 0, STACK, SAVE_L, RB
@@ -1688,6 +1699,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ins_next
     |
     |->vmeta_equal_cd:
+    | todo
     |.if FFI
     | disp ctpr1, extern lj_meta_equal_cd   // (lua_State *L, BCIns ins)
     | --
@@ -1723,6 +1735,7 @@ static void build_subroutines(BuildCtx *ctx)
     |.endif
     |
     |->vmeta_istype:
+    | todo
     | disp ctpr1, extern lj_meta_istype     // (lua_State *L, BCReg ra, BCReg tp)
     | --
     | ldd 0, STACK, SAVE_L, RB
@@ -1743,6 +1756,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Arithmetic metamethods ---------------------------------------------
     |
     |.macro vmeta_arith_base
+    | todo
     | disp ctpr1, extern lj_meta_arith      // (lua_State *L, TValue *ra, *rb, *rc, BCReg op)
     | --
     | ldb 0, PC, PREV_PC_OP, CARG5
@@ -1802,6 +1816,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     | // Call metamethod for binary op.
     |->vmeta_binop:
+    | todo
     | // BASE = old base, CRET1 = new base, stack = cont/func/o1/o2
     | addd 0, CRET1, 0x0, RA
     | subd 1, CRET1, BASE, CRET1
@@ -1827,6 +1842,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ins_call
     |
     |->vmeta_len:
+    | todo
     | disp ctpr1, extern lj_meta_len        // (lua_State *L, TValue *o)
     | --
     | ldh 0, PC, PREV_PC_RD, RD
@@ -1865,6 +1881,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Call metamethod ----------------------------------------------------
     |
     |->vmeta_call:                          // Resolve and call __call metamethod.
+    | todo
     | // BASE = old base, RA = new base, RD = (nargs+1)*8
     | disp ctpr1, extern lj_meta_call       // (lua_State *L, TValue *func, TValue *top)
     | --
@@ -1901,6 +1918,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Argument coercion for 'for' statement ------------------------------
     |
     |->vmeta_for:
+    | todo
     | disp ctpr1, extern lj_meta_for        // (lua_State *L, TValue *base)
     | --
     | ldd 0, STACK, SAVE_L, RB
@@ -2588,6 +2606,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Base library: catch errors ----------------------------------------
     |
     |->ff_pcall:
+    | todo
     | ldbsm 2, DISPATCH, DISPATCH_GL(hookmask), RB
     | cmpbdb 3, RD, (1+1)*8, pred0
     | disp ctpr1, ->fff_fallback
@@ -2651,6 +2670,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_xpcall:
+    | todo
     | ldd 3, BASE, 0x8, RA
     | ldd 5, BASE, 0x0, RB
     | disp ctpr1, ->fff_fallback
@@ -3095,6 +3115,7 @@ static void build_subroutines(BuildCtx *ctx)
     | // fallthrough
     |
     |->fff_res:
+    | todo
     | cmpandedb 0, PC, FRAME_TYPE, pred0
     | ldbsm 2, PC, 0x0, CARG4
     | stw 5, STACK, MULTRES, RD
@@ -3978,6 +3999,7 @@ static void build_subroutines(BuildCtx *ctx)
     | .wide on
     |
     |->vm_inshook:                          // Dispatch target for instr/line hooks.
+    | todo
     | .wide off
     | ldb 0, DISPATCH, DISPATCH_GL(hookmask), RD
     | cmpandedb 0, RD, HOOK_ACTIVE, pred0
@@ -4300,6 +4322,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* Remember: all ops branch for a true comparison, fall through otherwise. */
 
     case BC_ISLT: case BC_ISGE: case BC_ISLE: case BC_ISGT:
+        | todo
         | // ins_AD RA = src1*8, RD = src2*8, JMP with RD = target
         | // To preserve NaN semantics GE/GT branch on unordered, but LT/LE don't.
         | addd 0, PC, 0x4, CARG3
@@ -4381,6 +4404,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ISEQV: case BC_ISNEV:
+        | todo
         vk = op == BC_ISEQV;
         | // ins_AD RA = src1*8, RD = src2*8, JMP with RD = target
         | addd 0, PC, 0x4, PC
@@ -4504,6 +4528,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ISEQS: case BC_ISNES:
+        | todo
         vk = op == BC_ISEQS;
         | // ins_AND RA = src*8, RD = str_const*8, JMP with RD = target
         | addd 0, PC, 0x4, PC
@@ -4580,6 +4605,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ISEQN: case BC_ISNEN:
+        | todo
         vk = op == BC_ISEQN;
         | // ins_AD RA = src*8, RD = num_const*8, JMP with RD = target
         | addd 0, PC, 0x4, PC
@@ -4660,6 +4686,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ISEQP: case BC_ISNEP:
+        | todo
         vk = op == BC_ISEQP;
         | // ins_AND RA = src*8, RD = primitive_type*8 (~), JMP with RD = target
         | addd 0, PC, 0x4, PC
@@ -4721,6 +4748,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Unary test and copy ops ------------------------------------------- */
 
     case BC_ISTC: case BC_ISFC: case BC_IST: case BC_ISF:
+        | todo
         | // ins_AD RA = dst*8 or unused, RD = src*8, JMP with RD = target
         | addd 0, PC, 0x4, PC
         | ldd 3, BASE, RD, RD
@@ -4770,6 +4798,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ISTYPE:
+        | todo
         | // ins_AD RA = src*8, RD = -type*8
         | ldwsm 0, PC, 0x0, TMP0
         | ldbsm 2, PC, 0x0, TMP1
@@ -4806,6 +4835,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ISNUM:
+        | todo
         | // ins_AD RA = src*8, RD = -(TISNUM-1)*8
         | ldwsm 0, PC, 0x0, TMP0
         | ldbsm 2, PC, 0x0, TMP1
@@ -4839,31 +4869,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Unary ops --------------------------------------------------------- */
 
     case BC_MOV:
-        | // ins_AD RA = dst*8, RD = src*8
-        | addd 1, PC, 0x4, PC
-        | ldb 2, PC, 0x0, TMP1
-        | ldd 3, BASE, RD, CARG1
-        | ldw 5, PC, 0x0, TMP0
-        | nop 2
-        | --
-        | shld 2, TMP1, 0x3, TMP1
-        | shrd 3, TMP0, 0xd, RD
-        | shrd 4, TMP0, 0x5, RA
-        | std 5, BASE, RA, CARG1
-        | --
-        | ldd 2, TMP1, DISPATCH, TMP1
-        | andd 3, RD, 0x7fff8, RD
-        | shrd 4, TMP0, 0x15, RB
-        | nop 2
-        | --
-        | movtd 0, TMP1, ctpr1
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | --
-        | andd 3, RA, 0x7f8, RA
-        | ct ctpr1
-        | --
-        | // TODO: use pipelined version
         | // ins_AD RA_E = dst*8, RD_E = src*8
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
@@ -4881,6 +4886,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_NOT:
+        | todo
         | // ins_AD RA = dst*8, RD = src*8
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
@@ -4917,6 +4923,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_UNM:
+        | todo
         | // ins_AD RA = dst*8, RD = src*8
         | ldwsm 0, PC, 0x0, TMP0
         | ldbsm 2, PC, 0x0, TMP1
@@ -4952,6 +4959,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_LEN:
+        | todo
         | // ins_AD RA = dst*8, RD = src*8
         | ldd 3, BASE, RD, RD
         | ldwsm 0, PC, 0x0, TMP0
@@ -5049,6 +5057,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Binary ops -------------------------------------------------------- */
 
     |.macro ins_arith_opt, ins, ch
+    | todo
     || vk = ((int)op - BC_ADDVN) / (BC_ADDNV-BC_ADDVN);
     || switch (vk) {
     ||  case 0:
@@ -5158,6 +5167,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_MODVN: case BC_MODNV: case BC_MODVV:
+        | todo
         | // ins_ABC RA = dst*8, RB = src1*8, RC = src2*8 or num_const*8
         switch (op) {
         case BC_MODVN:
@@ -5248,6 +5258,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_POW:
+        | todo
         | // ins_ABC RA = dst*8, RB = src1*8, RC = src2*8 or num_const*8
         | ldw 0, PC, 0x0, TMP0
         | ldb 2, PC, 0x0, TMP1
@@ -5297,6 +5308,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_CAT:
+        | todo
         | // ins_ABC // RA = dst*8, RB = src_start*8, RC = src_end*8
         | ldd 0, STACK, SAVE_L, CARG1
         | addd 3, BASE, RC, CARG2
@@ -5356,6 +5368,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Constant ops ------------------------------------------------------ */
 
     case BC_KSTR:
+        | todo
         | // ins_AND RA = dst*8, RD = str_const*8 (~)
         | ldb 0, PC, 0x0, CARG2
         | addd 2, PC, 0x4, PC
@@ -5390,6 +5403,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_KCDATA:
+        | todo
         |.if FFI
         | // ins_AND RA = dst*8, RD = cdata_const*8 (~)
         | ldw 0, PC, 0x0, TMP0
@@ -5426,6 +5440,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_KSHORT:
+        | todo
         | // ins_AD RA = dst*8, RD = int16_literal*8
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
@@ -5457,6 +5472,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_KNUM:
+        | todo
         | // ins_AD RA = dst*8, RD = num_const*8
         | addd 1, PC, 0x4, PC
         | ldb 2, PC, 0x0, TMP1
@@ -5485,6 +5501,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_KPRI:
+        | todo
         | // ins_AD RA = dst*8, RD = primitive_type*8 (~)
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
@@ -5514,6 +5531,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_KNIL:
+        | todo
         | // ins_AD RA = dst_start*8, RD = dst_end*8
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
@@ -5556,6 +5574,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Upvalue and function ops ------------------------------------------ */
 
     case BC_UGET:
+        | todo
         | // ins_AD RA = dst*8, RD = upvalue*8
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
@@ -5593,6 +5612,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_USETV:
+        | todo
 #define TV2MARKOFS \
  ((int32_t)offsetof(GCupval, marked)-(int32_t)offsetof(GCupval, tv))
         | // ins_AD RA = upvalue*8, RD = src*8
@@ -5671,6 +5691,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 #undef TV2MARKOFS
 
     case BC_USETS:
+        | todo
         | // ins_AND RA = upvalue*8, RD = str_const*8 (~)
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
@@ -5741,6 +5762,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_USETN:
+        | todo
         | // ins_AD RA = upvalue*8, RD = num_const*8
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
@@ -5776,6 +5798,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_USETP:
+        | todo
         | // ins_AD RA = upvalue*8, RD = primitive_type*8 (~)
         | ldw 0, PC, 0x0, TMP0
         | addd 1, PC, 0x4, PC
@@ -5812,6 +5835,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_UCLO:
+        | todo
         | // ins_AD RA = level*8, RD = target*8
         | subd 0, PC, BCBIAS_J*4, PC
         | shrd 1, RD, 0x1, RD
@@ -5858,6 +5882,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_FNEW:
+        | todo
         | // ins_AND RA = dst*8, RD = proto_const*8 (~) (holding function prototype)
         | disp ctpr1, extern lj_func_newL_gc // (lua_State *L, GCproto *pt, GCfuncL *parent)
         | --
@@ -5910,6 +5935,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Table ops --------------------------------------------------------- */
 
     case BC_TNEW:
+        | todo
         | // ins_AD RA = dst*8, RD = (hbits|asize)*8
         | ldw 0, PC, 0x0, TMP0
         | ldb 2, PC, 0x0, TMP1
@@ -5978,6 +6004,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TDUP:
+        | todo
         | // ins_AND RA = dst*8, RD = table_const*8 (~)
         | ldw 0, PC, 0x0, TMP0
         | ldb 2, PC, 0x0, TMP1
@@ -6044,6 +6071,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_GGET:
+        | todo
         | // ins_AND RA = dst*8, RD = str_const*8 (~)
         | ldb 2, PC, 0x0, CARG4
         | ldd 3, BASE, -16, RB
@@ -6156,6 +6184,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_GSET:
+        | todo
         | // ins_AND RA = src*8, RD = str_const*8 (~)
         | ldwsm 0, PC, 0x0, CARG5
         | ldbsm 2, PC, 0x0, CARG6
@@ -6177,6 +6206,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TGETV:
+        | todo
         | // ins_ABC RA = dst*8, RB = table*8, RC = key*8
         | ldw 0, PC, 0x0, CARG3
         | ldb 2, PC, 0x0, CARG4
@@ -6281,6 +6311,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TGETS:
+        | todo
         | // ins_ABC RA = dst*8, RB = table*8, RC = str_const*8 (~)
         | ldb 2, PC, 0x0, CARG4
         | ldd 3, BASE, RB, RB
@@ -6396,6 +6427,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TGETB:
+        | todo
         | // ins_ABC RA = dst*8, RB = table*8, RC = index*8
         | ldw 0, PC, 0x0, TMP0
         | ldb 2, PC, 0x0, TMP1
@@ -6464,6 +6496,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TGETR:
+        | todo
         | // ins_ABC RA = dst*8, RB = table*8, RC = key*8
         | ldw 0, PC, 0x0, TMP0
         | ldb 2, PC, 0x0, TMP1
@@ -6510,6 +6543,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TSETV:
+        | todo
         | // ins_ABC RA = src*8, RB = table*8, RC = key*8
         | ldwsm 0, PC, 0x0, CARG5
         | ldbsm 2, PC, 0x0, CARG6
@@ -6614,6 +6648,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TSETS:
+        | todo
         | // ins_ABC  RA = src*8, RB = table*8, RC = str_const*8 (~)
         | ldwsm 0, PC, 0x0, CARG5
         | ldbsm 2, PC, 0x0, CARG6
@@ -6800,6 +6835,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TSETB:
+        | todo
         | // ins_ABC RA = src*8, RB = table*8, RC = byte_literal*8
         | ldwsm 0, PC, 0x0, CARG5
         | ldbsm 2, PC, 0x0, CARG6
@@ -6883,6 +6919,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TSETR:
+        | todo
         | // ins_ABC RA = src*8, RB = table*8, RC = key*8
         | ldw 0, PC, 0x0, TMP0
         | ldb 2, PC, 0x0, TMP1
@@ -6936,6 +6973,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TSETM:
+        | todo
         | // ins_AD RA = base*8 (table at base-1), RD = num_const*8 (start_index)
         |1:
         | ldw 0, PC, 0x0, TMP0
@@ -7037,6 +7075,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Calls and vararg handling ----------------------------------------- */
 
     case BC_CALL: case BC_CALLM:
+        | todo
         | // ins_A_C  RA = base*8, (RB = (nresults+1)*8,) RD = (nargs+1)*8 | extra_nargs*8
         | ldd 0, BASE, RA, RB
         | addd 1, RA, 0x10, RA
@@ -7087,6 +7126,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_CALLMT:
+        | todo
         | // ins_AD RA = base*8, RD = extra_nargs*8
         | ldw 0, STACK, MULTRES, TMP0
         | nop 2
@@ -7097,6 +7137,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_CALLT:
+        | todo
         | // ins_AD RA = base*8, RD = (nargs+1)*8
         | ldd 3, BASE, RA, RB
         | addd 4, BASE, RA, RA
@@ -7219,6 +7260,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ITERC:
+        | todo
         | // ins_A RA = base*8, (RB = nresults+1)*8, RD=(nargs+1)*8 (2+1)*8
         | addd 3, BASE, RA, RA              // fb = base+2
         | addd 0, 0x0, 0x18, RD             // Handle like a regular 2-arg call.
@@ -7270,6 +7312,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ITERN:
+        | todo
         | // ins_A RA = base*8, (RB = (nresults+1)*8, RC = (nargs+1)*8 (2+1)*8)
         | // Unsupported. Just label for compatibility
         |->vm_IITERN:
@@ -7385,6 +7428,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ISNEXT:
+        | todo
         | // ins_AD RA = base*8, RD = target*8 (points to ITERN)
         | addd 0, 0x0, BC_JMP, CARG4
         | addd 1, PC, 0x0, CARG3 
@@ -7454,6 +7498,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_VARG:
+        | todo
         | // ins_ABC RA = base*8, RB = (nresults+1)*8, RC = numparams*8
         | ldw 0, PC, 0x0, RARG2
         | ldb 2, PC, 0x0, RARG3
@@ -7591,6 +7636,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Returns ----------------------------------------------------------- */
 
     case BC_RETM:
+        | todo
         | // ins_AD RA = results*8, RD = extra_nresults*8
         | ldw 0, STACK, MULTRES, TMP0
         | nop 2
@@ -7601,6 +7647,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_RET:
+        | todo
         | // ins_AD RA = results*8, RD = (nresults+1)*8
         |1:
         | ldd 3, BASE, -8, PC
@@ -7628,6 +7675,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct ctpr1, ~pred0
         | --
         |->BC_RET_Z:
+        | todo
         | // BASE = base, RA = resultptr, RD = (nresults+1)*8, PC = return
         | ldb 0, PC, PREV_PC_RB, CARG2
         | ldw 2, STACK, MULTRES, CARG1      // Note: MULTRES may be >255.
@@ -7697,6 +7745,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_RET0: case BC_RET1:
         | // ins_AD RA = results*8, RD = (nresults+1)*8
+        | addd      3, RA_E, 0, RA          // TODO: remove me
+        | addd      4, RD_E, 0, RD          // TODO: remove me
+        | --
         |1:
         | ldd 0, BASE, -8, PC
         | disp ctpr3, ->vm_return
@@ -7705,9 +7756,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | stw 2, STACK, MULTRES, RD            // Save (nresults+1)*8.
         | disp ctpr1, <1
         | --
-        | ldbsm 0, PC, 0x0, CARG2
         | cmpandedb 1, PC, FRAME_TYPE, pred0   // Check frame type marker.
-        | ldwsm 3, PC, 0x0, CARG1
         | subdsm 4, PC, FRAME_VARG, RB
         | disp ctpr2, >3
         | --
@@ -7718,21 +7767,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | landp ~p0, ~p1, p4
         | pass p4, pred1
         | --
-        | ct ctpr3, pred1
+        | ct        ctpr3, pred1            // vm_return(TODO)
         | --
+        | subd 3, BASE, RB, BASE, ~pred0    // Return from vararg function: relocate BASE down and RA up.
         if (op == BC_RET1) {
-          | shld 2, CARG2, 0x3, CARG2, pred0
-          | subd 3, BASE, RB, BASE, ~pred0    // Return from vararg function: relocate BASE down and RA up.
           | addd 4, RA, RB, RA, ~pred0
           | ldd 5, BASE, RA, RB, pred0
-          | ct ctpr1, ~pred0
-          | --
-        } else {
-          | shld 2, CARG2, 0x3, CARG2, pred0
-          | subd 3, BASE, RB, BASE, ~pred0    // Return from vararg function: relocate BASE down and RA up.
-          | ct ctpr1, ~pred0
-          | --
         }
+        | ct        ctpr1, ~pred0           // <1
+        | --
         if (op == BC_RET1) {
           | std 5, BASE, -16, RB
           | --
@@ -7741,48 +7784,39 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldb 0, PC, PREV_PC_RB, TMP0
         | ldb 3, PC, PREV_PC_RA, RA
         | disp ctpr1, <2
-        | nop 1
         | --
         | andd 4, RD, 0x7f8, TMP1
+        | wait_load TMP0, 1
         | --
         | shld 0, TMP0, 0x3, TMP0
         | --
         | cmpbedb 0, TMP0, TMP1, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | ldd 2, CARG2, DISPATCH, CARG2, pred0
         | shld 3, RA, 0x3, RA, pred0
         | subd 4, BASE, 0x10, BASE, pred0
-        | ct ctpr2, ~pred0                  // More results expected?
+        | ct        ctpr2, ~pred0           // >3, More results expected?
         | --
-        | addd 1, PC, 0x4, PC
         | subd 3, BASE, RA, BASE            // base = base - (RA+2)*8
-        | shrd 4, CARG1, 0xd, RD
-        | shrd 5, CARG1, 0x15, RB
+        | disp   ctpr1, ->vm_restart_pipeline // TODO: inline
         | --
         | ldd 3, BASE, -16, KBASE
-        | shrd 4, CARG1, 0x5, RA
-        | andd 5, RD, 0x7fff8, RD
-        | nop 2
+        | wait_load KBASE, 0
         | --
-        | movtd 0, CARG2, ctpr1
         | getfd 3, KBASE, (47 << 6), KBASE
         | --
         | ldd 3, KBASE, LFUNC->pc, KBASE
-        | andd 4, RB, 0x7f8, RB
-        | nop 2
-        | --
-        | andd 5, RA, 0x7f8, RA
+        | wait_load KBASE, 0
         | --
         | ldd 3, KBASE, PC2PROTO(k), KBASE
-        | andd 4, RD, 0x7f8, RC
-        | ct ctpr1
+        | ct        ctpr1                   // vm_restart_pipeline
         |3:                                 // Fill up results with nil.
         | subd 3, BASE, 0x18, TMP0
         | addd 4, 0x0, LJ_TNIL, TMP1
         | --
         | addd 3, RD, 0x8, RD
         | std 5, TMP0, RD, TMP1
-        | ct ctpr1
+        | ct        ctpr1                   // <2
         | --
         break;
 
@@ -7797,6 +7831,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_IFORL:
+        | todo
         | // ins_AJ RA = base*8, RD = target*8 (after end of loop or start of loop)
         | shrd 0, RD, 0x1, CARG2
         | subd 1, PC, BCBIAS_J*4, CARG3
@@ -7856,6 +7891,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_FORI:
+        | todo
         | // ins_AJ RA = base*8, RD = target*8 (after end of loop or start of loop)
         | subd 2, PC, BCBIAS_J*4, CARG3
         | addd 3, BASE, RA, RA
@@ -7936,6 +7972,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_IITERL:
+        | todo
         | // ins_AJ RA = base*8, RD = target*8
         | subd 2, PC, BCBIAS_J*4, CARG1
         | addd 3, BASE, RA, RA
@@ -7990,6 +8027,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_JMP:
+        | todo
         | // ins_AJ RA = unused, RD = target*8
         | subd 0, PC, BCBIAS_J*4, PC
         | shrd 3, RD, 0x1, CARG1
@@ -8037,6 +8075,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_IFUNCF:
+        | todo
         | // ins_AD BASE = new_base*8, RA = framesize*8, RD = (nargs+1)*8
         | ldb 2, PC, 0x0, CARG2
         | ldd 3, PC, PC2PROTO(k)-4, KBASE
@@ -8092,8 +8131,23 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_IFUNCV:
-        | // ins_AD BASE = new base, RA = framesize*8, RB = LFUNC (but we need tagged), RD = (nargs+1)*8
-        | ldbsm 2, PC, 0x0, CARG3
+        | // ins_AD
+        | // BASE = new base
+        | // RA_E = framesize*8
+        | // RB_E = LFUNC (but we need tagged)
+        | // RD_E = (nargs+1)*8
+        | addd      3, RA_E, 0, RA          // TODO: remove me
+        | addd      4, RD_E, 0, RD          // TODO: remove me
+        | addd      5, RB_E, 0, RB          // TODO: remove me
+        | --
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | --
         | ldd 3, BASE, -16, KBASE
         | addd 4, RD, FRAME_VARG+0x8, TMP0
         | addd 5, RD, BASE, RD
@@ -8102,31 +8156,26 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldbsm 0, PC, PC2PROTO(numparams)-4, CARG1
         | ldd 3, STACK, SAVE_L, RB
         | addd 4, RD, 0x8, RD
-        | ldwsm 5, PC, 0x0, CARG2
-        | disp ctpr2, >2
         | --
         | addd 3, RA, RD, RA
         | std 5, RD, -8, TMP0               // Store delta + FRAME_VARG
         | --
-        | shldsm 2, CARG3, 0x3, CARG3
         | std 5, RD, -16, KBASE             // Store copy of LFUNC
         | --
-        | lddsm 2, CARG3, DISPATCH, CARG3
         | ldd 3, RB, L->maxstack, TMP0
-        | wait_load CARG3, 0
+        | wait_load TMP0, 0
         | --
-        | movtdsm 0, CARG3, ctpr3
         | cmpedbsm 1, CARG1, 0x0, pred1
         | cmpbedb 3, RA, TMP0, pred0
         | --
         | addd 3, BASE, 0x0, RA, pred0
         | addd 0, RD, 0x0, BASE, pred0
-        | ct ctpr1, ~pred0                  // Need to grow stack?
+        | ct        ctpr1, ~pred0           // vm_growstack_v(TODO)
+        |                                   // Need to grow stack?
         | --
         | addd 3, RA, 0x8, RA, ~pred1
-        | shrd 4, CARG2, 0x15, RB
         | ldd 5, PC, PC2PROTO(k)-4, KBASE
-        | ct ctpr2, pred1
+        | pipe_dispatch_if 0, ctpr3, pred1
         |1:                                 // Copy fixarg slots up to new frame.
         | addd 3, RA, 0x8, RA
         | addd 4, 0x0, LJ_TNIL, TMP1
@@ -8134,30 +8183,22 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | cmpbdb 3, RA, BASE, pred0
         | disp ctpr2, <1
+        | wait_pred pred0, 0
         | --
         | ldd 3, RA, -16, CARG4, pred0
         | subd 0, CARG1, 0x1, CARG1, pred0
-        | wait pred0, 0, 2
         | --
-        | ct ctpr1, ~pred0                  // Less args than parameters?
+        | ct        ctpr1, ~pred0           // >3, Less args than parameters?
         | --
         | cmpedb 0, CARG1, 0x0, pred0
         | addd 3, RD, 0x8, RD
         | std 5, RD, 0x0, CARG4
+        | wait_pred_ct pred0, 0
         | --
-        | std 5, RA, -16, TMP1       // Clear old fixarg slot (help the GC).
-        | ct ctpr2, ~pred0
-        |2:
-        | addd 1, PC, 0x4, PC
-        | shrd 3, CARG2, 0xd, RD
-        | andd 4, RB, 0x7f8, RB
-        | shrd 5, CARG2, 0x5, RA
+        | std 5, RA, -16, TMP1              // Clear old fixarg slot (help the GC).
+        | ct        ctpr2, ~pred0           // <1
         | --
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
-        | --
-        | andd 4, RD, 0x7f8, RC
-        | ct ctpr3
+        | pipe_dispatch 0, ctpr3
         |3:                                 // Clear missing parameters.
         | subd 0, CARG1, 0x1, CARG1
         | addd 3, RD, 0x8, RD
@@ -8165,16 +8206,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp ctpr2, <2
         | --
         | cmpedb 0, CARG1, 0x0, pred0
-        | wait pred0, 0, 2
+        | wait_pred_ct prd0, 0
         | --
-        | ct ctpr1, ~pred0
+        | ct        ctpr1, ~pred0           // <3
         | --
-        | ct ctpr2
+        | ct        ctpr2                   // <2
         | --
         break;
 
     case BC_FUNCC:
-        | // ins_AD BASE = new base, RA = framesize*8, RD = (nargs+1)*8
+        | // ins_AD BASE = new base, RA_E = framesize*8, RD_E = (nargs+1)*8
+        | addd      3, RA_E, 0, RA          // TODO: remove me
+        | addd      4, RD_E, 0, RD          // TODO: remove me
+        | --
+        | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
+        | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
         | ldd 3, BASE, -16, KBASE
         | addd 4, BASE, RD, RD
         | ldd 5, STACK, SAVE_L, RB
@@ -8197,11 +8243,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std 5, RB, L->top, RD
         | --
         | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0, pred0
-        | ct ctpr1, ~pred0                  // Need to grow stack?
+        | ct        ctpr1, ~pred0           // vm_growstack_c(TODO)
+        |                                   // Need to grow stack?
         | --
-        | movtd 0, KBASE, ctpr1             // (lua_State *L)
+        | movtd     0, KBASE, ctpr1
         | --
-        | call ctpr1, wbs = 0x8
+        | call      ctpr1, wbs = 0x8        // (lua_State *L)
         | --
         | ldd 3, RB, L->base, BASE
         | shld 4, CRET1, 0x3, RD            // return nsresult
@@ -8217,11 +8264,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load TMP0, 0
         | --
         | subd 3, TMP0, RA, RA              // RA = (L->top - (L->base+nresults))*8
-        | ct ctpr1
+        | ct        ctpr1                   // vm_returnc(TODO)
         | --
         break;
 
     case BC_FUNCCW:
+        | todo
         | // ins_AD BASE = new base, RA = framesize*8, RD = (nargs+1)*8
         | ldd 3, BASE, -16, CARG2
         | addd 4, BASE, RD, RD
