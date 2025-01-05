@@ -5440,34 +5440,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_KSHORT:
-        | todo
         | // ins_AD RA = dst*8, RD = int16_literal*8
-        | ldw 0, PC, 0x0, TMP0
-        | addd 1, PC, 0x4, PC
-        | ldb 2, PC, 0x0, TMP1
-        | shrd 3, RD, 0x3, CARG1
-        | nop 2
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | shrd 4, RD_E, 0x3, T0
         | --
-        | shld 2, TMP1, 0x3, TMP1
-        | sxt 3, 0x1, CARG1, CARG1          // Sign-extend literal.
-        | shrd 4, TMP0, 0xd, RD
-        | addd 5, RA, 0x0, CARG2
+        | pipe_scale 0, 1, 2, 3
+        | sxt 4, 0x1, T0, T0        // Sign-extend literal.
         | --
-        | ldd 2, TMP1, DISPATCH, TMP1
-        | idtofd 3, CARG1, CARG1
-        | shrd 4, TMP0, 0x15, RB
-        | shrd 5, TMP0, 0x5, RA
-        | nop 2
+        | pipe_extract 0, 1, 2, 4, 5
+        | idtofd 3, T0, T0
+        | wait T0, 0, 3
         | --
-        | movtd 0, TMP1, ctpr1
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
-        | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | --
-        | std 5, BASE, CARG2, CARG1
-        | ct ctpr1
+        | std 5, BASE, RA_E, T0
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
