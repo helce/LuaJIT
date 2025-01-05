@@ -5360,37 +5360,24 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Constant ops ------------------------------------------------------ */
 
     case BC_KSTR:
-        | todo
-        | // ins_AND RA = dst*8, RD = str_const*8 (~)
-        | ldb 0, PC, 0x0, CARG2
-        | addd 2, PC, 0x4, PC
-        | ldw 3, PC, 0x0, CARG1
-        | subd 4, KBASE, RD, TMP0
-        | addd 5, RA, 0x0, CARG3
-        | nop 1
+        | // ins_AND RA_E = dst*8, RD_E = str_const*8 (~)
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | subd      4, KBASE, RD_E, T0
         | --
-        | ldd 3, TMP0, -8, TMP1
-        | addd 4, 0x0, LJ_TSTR, ITYPE
+        | pipe_scale 0, 1, 2, 3
+        | addd      4, 0x0, LJ_TSTR, T1
+        | ldd       5, T0, -8, T0
         | --
-        | shld 2, CARG2, 0x3, CARG2
-        | shrd 3, CARG1, 0xd, RD
-        | shrd 4, CARG1, 0x15, RB
-        | shrd 5, CARG1, 0x5, RA
+        | pipe_extract 0, 1, 2, 3, 4
+        | shld      5, T1, 0x2f, T1
+        | wait_load T0, 1
         | --
-        | ldd 2, CARG2, DISPATCH, CARG2
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
+        | ord       5, T0, T1, T0
         | --
-        | shld 3, ITYPE, 0x2f, ITYPE
-        | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | ord 5, TMP1, ITYPE, TMP1
-        | --
-        | movtd 0, CARG2, ctpr1
-        | std 5, BASE, CARG3, TMP1
-        | --
-        | ct ctpr1
+        | pipe_dispatch 0, ctpr3
+        | std       5, BASE, RA_E, T0
         | --
         break;
 
