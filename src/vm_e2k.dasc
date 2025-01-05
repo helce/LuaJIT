@@ -7564,110 +7564,97 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Returns ----------------------------------------------------------- */
 
     case BC_RETM:
-        | todo
-        | // ins_AD RA = results*8, RD = extra_nresults*8
-        | ldw 0, STACK, MULTRES, TMP0
-        | nop 2
+        | // ins_AD RA_E = results*8, RD_E = extra_nresults*8
+        | ldw       0, STACK, MULTRES, T0
+        | wait_load T0, 0
         | --
-        | addd 3, RD, TMP0, RD                 // MULTRES >=8, so RD >= 8
+        | addd      0, RD_E, T0, RD_E       // MULTRES >=8, so RD_E >= 8
         | --
         | // Fall through. Assumes BC_RET follows and ins_AD is a no-op.
         break;
 
     case BC_RET:
-        | todo
-        | // ins_AD RA = results*8, RD = (nresults+1)*8
+        | // ins_AD RA_E = results*8, RD_E = (nresults+1)*8
+        | addd      0, RA_E, 0, RA          // TODO: remove me
+        | addd      1, RD_E, 0, RD          // TODO: remove me
         |1:
-        | ldd 3, BASE, -8, PC
-        | disp ctpr3, ->vm_return
-        | nop 2
-        | --
-        | stw 2, STACK, MULTRES, RD            // Save (nresults+1)*8.
-        | disp ctpr1, <1
+        | stw       2, STACK, MULTRES, RD_E // Save (nresults+1)*8.
+        | ldd       3, BASE, -8, PC
+        | disp      ctpr3, ->vm_return
+        | wait_load PC, 0
         | --
         | cmpandedb 3, PC, FRAME_TYPE, pred0   // Check frame type marker.
-        | subdsm 4, PC, FRAME_VARG, RB
+        | subdsm    4, PC, FRAME_VARG, RB
+        | disp      ctpr1, <1
         | --
         | cmpandedbsm 3, RB, FRAME_TYPEP, pred1
-        | nop 1
         | --
-        | pass pred0, p0
-        | pass pred1, p1
-        | landp ~p0, ~p1, p4
-        | pass p4, pred1
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | landp     ~p0, ~p1, p4
+        | pass      p4, pred1
+        | wait_pred_ct pred1, 0
         | --
-        | ct ctpr3, pred1
+        | ct        ctpr3, pred1            // vm_return(TODO)
         | --
-        | subd 3, BASE, RB, BASE, ~pred0    // Return from vararg function: relocate BASE down and RA up.
-        | addd 4, RA, RB, RA, ~pred0
-        | ct ctpr1, ~pred0
+        | subd      3, BASE, RB, BASE, ~pred0 // Return from vararg function: relocate BASE down and RA up.
+        | addd      4, RA, RB, RA, ~pred0
+        | ct        ctpr1, ~pred0           // <1
         | --
         |->BC_RET_Z:
-        | todo
         | // BASE = base, RA = resultptr, RD = (nresults+1)*8, PC = return
-        | ldb 0, PC, PREV_PC_RB, CARG2
-        | ldw 2, STACK, MULTRES, CARG1      // Note: MULTRES may be >255.
-        | addd 3, BASE, 0x0, KBASE          // Use KBASE for result move.
-        | subd 4, RD, 0x8, RD
-        | ldb 5, PC, PREV_PC_RA, CARG3
+        | ldb       0, PC, PREV_PC_RB, T2
+        | ldw       2, STACK, MULTRES, T1   // Note: MULTRES may be >255.
+        | addd      3, BASE, 0x0, KBASE     // Use KBASE for result move.
+        | subd      4, RD, 0x8, RD
+        | ldb       5, PC, PREV_PC_RA, T3
         | disp ctpr1, >3
         | --
-        | ldw 0, PC, 0x0, CARG4
-        | ldb 2, PC, 0x0, CARG5
-        | cmpedb 3, RD, 0x0, pred0
-        | addd 4, 0x0, LJ_TNIL, TMP0
-        | disp ctpr2, >2
-        | nop 1
+        | cmpedb    3, RD, 0x0, pred0
+        | addd      4, 0x0, LJ_TNIL, T0
+        | disp      ctpr2, >2
+        | wait_pred_ct pred0, 0
         | --
-        | shld 0, CARG2, 0x3, CARG2
-        | shld 3, CARG3, 0x3, CARG3
-        | ct ctpr1, pred0
+        | shld      0, T2, 0x3, T2
+        | shld      3, T3, 0x3, T3
+        | ct        ctpr1, pred0            // >3
         |2:                                 // Move results down.
-        | ldd 3, KBASE, RA, RB
-        | subd 4, RD, 0x8, RD
+        | ldd       3, KBASE, RA, RB
+        | subd      4, RD, 0x8, RD
         | --
-        | cmpedb 3, RD, 0x0, pred0
-        | nop 3
+        | cmpedb    3, RD, 0x0, pred0
+        | wait_load RB, 1
         | --
-        | addd 4, KBASE, 0x8, KBASE
-        | std 5, KBASE, -16, RB
-        | ct ctpr2, ~pred0
+        | addd      4, KBASE, 0x8, KBASE
+        | std       5, KBASE, -16, RB
+        | ct        ctpr2, ~pred0           // <2
         |3:
-        | cmpbedb 0, CARG2, CARG1, pred0
-        | disp ctpr2, >4
-        | nop 2
+        | cmpbedb   0, T2, T1, pred0
+        | disp      ctpr2, >4
+        | wait_pred_ct pred0, 0
         | --
-        | shld 2, CARG5, 0x3, CARG5, pred0
-        | subd 3, BASE, CARG3, BASE, pred0
-        | shrd 4, CARG4, 0xd, RD, pred0
-        | shrd 5, CARG4, 0x15, RB, pred0
-        | ct ctpr2, ~pred0                  // More results expected?
+        | subd      3, BASE, T3, BASE, pred0
+        | ct        ctpr2, ~pred0           // >4, More results expected?
         | --
-        | subd 0, BASE, 0x10, BASE          // base = base - (RA+2)*8
-        | addd 1, PC, 0x4, PC
-        | ldd 2, CARG5, DISPATCH, CARG5
-        | shrd 3, CARG4, 0x5, RA
-        | andd 4, RD, 0x7fff8, RD
+        | subd      0, BASE, 0x10, BASE     // base = base - (RA+2)*8
+        | disp      ctpr3, ->vm_restart_pipeline
         | --
-        | ldd 0, BASE, -16, KBASE
-        | andd 3, RA, 0x7f8, RA
-        | nop 2
+        | ldd       0, BASE, -16, KBASE
+        | wait_load KBASE, 0
         | --
-        | movtd 0, CARG5, ctpr1
-        | getfd 3, KBASE, (47 << 6), KBASE
+        | getfd     3, KBASE, (47 << 6), KBASE
         | --
-        | ldd 3, KBASE, LFUNC->pc, KBASE
-        | nop 2
+        | ldd       3, KBASE, LFUNC->pc, KBASE
+        | wait_load KBASE, 0
         | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | ldd 5, KBASE, PC2PROTO(k), KBASE
-        | ct ctpr1
+        | ldd       5, KBASE, PC2PROTO(k), KBASE
+        | ct        ctpr3                   // vm_restart_pipeline
+        | --
         |4:                                 // Fill up results with nil.
-        | addd 0, CARG1, 0x8, CARG1
-        | addd 4, KBASE, 0x8, KBASE
-        | std 5, KBASE, -16, TMP0           // Note: relies on shifted base.
-        | ct ctpr1
+        | addd      0, T1, 0x8, T1
+        | addd      4, KBASE, 0x8, KBASE
+        | std       5, KBASE, -16, T0       // Note: relies on shifted base.
+        | ct        ctpr1                   // <3
         | --
         break;
 
