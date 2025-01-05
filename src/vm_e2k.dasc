@@ -5056,114 +5056,106 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     /* -- Binary ops -------------------------------------------------------- */
 
-    |.macro ins_arith_opt, ins, ch
-    | todo
+    |.macro ins_arith_opt, ins, ch, latency
     || vk = ((int)op - BC_ADDVN) / (BC_ADDNV-BC_ADDVN);
     || switch (vk) {
     ||  case 0:
-    | ldbsm 2, PC, 0x0, CARG3
-    | ldd 3, KBASE, RC, TMP1
-    | addd 4, RA, 0x0, CARG1
-    | ldd 5, BASE, RB, TMP0
-    | disp ctpr1, ->vmeta_arith_vn
+    | pipe_dispatch_prep 0, ctpr3
+    | pipe_dispatch_load 2
+    | ldd       3, KBASE, RC_E, T1
+    | ldd       5, BASE, RB_E, T0
+    | disp      ctpr1, ->vmeta_arith_vn
     | --
-    | addd 3, PC, 0x0, CARG2
+    | pipe_fetch 0
+    | pipe_scale 1, 2, 3, 4
     | --
-    | ldwsm 5, CARG2, 0x0, CARG5
+    | pipe_extract 0, 1, 2, 3, 4
+    | wait_load T0, 2
     | --
-    | shld 2, CARG3, 0x3, CARG3
-    | sard 3, TMP0, 0x2f, ITYPE
-    | ins ch, TMP0, TMP1, CARG2
+    | sard      3, T0, 0x2f, T3
+    | ins       ch, T0, T1, T2
     | --
-    | lddsm 2, CARG3, DISPATCH, CARG3
-    | cmpbsb 3, ITYPE, LJ_TISNUM, pred0
-    | nop 2
+    | cmpbsb    3, T3, LJ_TISNUM, pred0
+    | wait_pred_ct pred0, 0
+    | wait      T2, 1, latency
     | --
     ||   break;
     ||  case 1:
-    | ldbsm 2, PC, 0x0, CARG3
-    | ldd 3, KBASE, RC, TMP1
-    | addd 4, RA, 0x0, CARG1
-    | ldd 5, BASE, RB, TMP0
-    | disp ctpr1, ->vmeta_arith_nv
+    | pipe_dispatch_prep 0, ctpr3
+    | pipe_dispatch_load 2
+    | ldd       3, KBASE, RC_E, T1
+    | ldd       5, BASE, RB_E, T0
+    | disp      ctpr1, ->vmeta_arith_nv
     | --
-    | addd 3, PC, 0x0, CARG2
+    | pipe_fetch 0
+    | pipe_scale 1, 2, 3, 4
     | --
-    | ldwsm 5, CARG2, 0x0, CARG5
+    | pipe_extract 0, 1, 2, 3, 4
+    | wait_load T0, 2
     | --
-    | shld 2, CARG3, 0x3, CARG3
-    | sard 3, TMP0, 0x2f, ITYPE
-    | ins ch, TMP1, TMP0, CARG2
+    | sard      3, T0, 0x2f, T3
+    | ins       ch, T1, T0, T2
     | --
-    | lddsm 2, CARG3, DISPATCH, CARG3
-    | cmpbsb 3, ITYPE, LJ_TISNUM, pred0
-    | nop 2
+    | cmpbsb    3, T3, LJ_TISNUM, pred0
+    | wait_pred_ct pred0, 0
+    | wait      T2, 1, latency
     | --
     ||   break;
     ||  default:
-    | ldbsm 2, PC, 0x0, CARG3
-    | ldd 3, BASE, RC, TMP1
-    | addd 4, RA, 0x0, CARG1
-    | ldd 5, BASE, RB, TMP0
-    | disp ctpr1, ->vmeta_arith_vv
+    | pipe_dispatch_prep 0, ctpr3
+    | pipe_dispatch_load 2
+    | ldd       3, BASE, RC_E, T1
+    | ldd       5, BASE, RB_E, T0
+    | disp      ctpr1, ->vmeta_arith_vv
     | --
-    | addd 3, PC, 0x0, CARG2
+    | pipe_fetch 0
+    | pipe_scale 1, 2, 3, 4
     | --
-    | ldwsm 5, CARG2, 0x0, CARG5
+    | pipe_extract 0, 1, 2, 3, 4
+    | wait_load T0, 2
     | --
-    | shld 0, CARG3, 0x3, CARG3
-    | sard 3, TMP0, 0x2f, ITYPE
-    | ins ch, TMP0, TMP1, CARG2
+    | ins       ch, T0, T1, T2
     | --
-    | lddsm 2, CARG3, DISPATCH, CARG3
-    | sard 3, TMP1, 0x2f, CARG4
+    | sard      3, T0, 0x2f, T3
+    | sard      4, T1, 0x2f, T4
     | --
-    | cmpbsb 3, CARG4, LJ_TISNUM, pred1
-    | cmpbsb 4, ITYPE, LJ_TISNUM, pred0
+    | cmpbsb    3, T3, LJ_TISNUM, pred0
+    | cmpbsb    4, T4, LJ_TISNUM, pred1
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp p0, p1, p4
-    | pass p4, pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
+    | wait      T2, 3, latency
     | --
     ||  break;
     || }
-    | movtd 0, CARG3, ctpr2
+    | pipe_dispatch_if 0, ctpr3, pred0          // next insn
+    | std       5, BASE, RA_E, T2, pred0
     | --
-    | addd 1, PC, 0x4, PC, pred0
-    | shrd 3, CARG5, 0xd, RD, pred0
-    | shrd 4, CARG5, 0x15, RB, pred0
-    | shrd 5, CARG5, 0x5, RA, pred0
-    | ct ctpr1, ~pred0
-    | --
-    | andd 3, RD, 0x7fff8, RD
-    | andd 4, RA, 0x7f8, RA
-    | --
-    | andd 3, RB, 0x7f8, RB
-    | andd 4, RD, 0x7f8, RC
-    | std 5, BASE, CARG1, CARG2
-    | ct ctpr2
+    | ct        ctpr1                           // vmeta_arith_*
     | --
     |.endmacro
 
     case BC_ADDVN: case BC_ADDNV: case BC_ADDVV:
         | // ins_ABC RA = dst*8, RB = src1*8, RC = src2*8 or num_const*8
-        | ins_arith_opt faddd, 4
+        | ins_arith_opt faddd, 4, 4
         break;
 
     case BC_SUBVN: case BC_SUBNV: case BC_SUBVV:
         | // ins_ABC RA = dst*8, RB = src1*8, RC = src2*8 or num_const*8
-        | ins_arith_opt fsubd, 4
+        | ins_arith_opt fsubd, 4, 4
         break;
 
     case BC_MULVN: case BC_MULNV: case BC_MULVV:
         | // ins_ABC RA = dst*8, RB = src1*8, RC = src2*8 or num_const*8
-        | ins_arith_opt fmuld, 4
+        | ins_arith_opt fmuld, 4, 4
         break;
 
     case BC_DIVVN: case BC_DIVNV: case BC_DIVVV:
         | // ins_ABC RA = dst*8, RB = src1*8, RC = src2*8 or num_const*8
-        | ins_arith_opt fdivd, 5
+        | ins_arith_opt fdivd, 5, 14 // FIXME: latency depends on inputs
         break;
 
     case BC_MODVN: case BC_MODNV: case BC_MODVV:
