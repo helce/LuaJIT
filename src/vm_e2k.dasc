@@ -3107,57 +3107,44 @@ static void build_subroutines(BuildCtx *ctx)
     | // fallthrough
     |
     |->fff_res:
-    | todo
     | cmpandedb 0, PC, FRAME_TYPE, pred0
-    | ldbsm 2, PC, 0x0, CARG4
-    | stw 5, STACK, MULTRES, RD
-    | disp ctpr1, ->vm_return
+    | stw       5, STACK, MULTRES, RD
+    | disp      ctpr1, ->vm_return
     | --
-    | addd 4, 0x0, LJ_TNIL, TMP1
-    | disp ctpr2, >2
+    | addd      4, 0x0, LJ_TNIL, TMP1
+    | disp      ctpr2, >2
     | --
-    | ldb 3, PC, PREV_PC_RB, RB, pred0
-    | ldw 5, PC, 0x0, CARG3, pred0
+    | ldb       3, PC, PREV_PC_RB, RB, pred0
     | --
-    | ldb 3, PC, PREV_PC_RA, RA, pred0
-    | subd 4, 0x0, 0x10, RA, ~pred0         // Results start at BASE+RA = BASE-16
-    | nop 1
+    | ldb       3, PC, PREV_PC_RA, RA, pred0
+    | subd      4, 0x0, 0x10, RA, ~pred0    // Results start at BASE+RA = BASE-16
+    | wait_load RB, 1
     | --
-    | shld 0, CARG4, 0x3, CARG4, pred0
-    | addd 1, PC, 0x4, PC, pred0
-    | shld 4, RB, 0x3, RB, pred0
-    | disp ctpr3, >1
+    | addd      1, PC, 0x4, PC, pred0
+    | shld      4, RB, 0x3, RB, pred0
+    | disp      ctpr3, >1
     | --
-    | ldd 0, CARG4, DISPATCH, CARG4, pred0
     | cmpbedbsm 3, RB, RD, pred1            // More results expected?
-    | ct ctpr1, ~pred0                      // Non-standard return case.
-    | nop 2
+    | ct        ctpr1, ~pred0               // vm_return, Non-standard return case.
+    | wait_pred_ct pred1, 0
     | --
-    | shld 3, RA, 0x3, CARG5
-    | ct ctpr2, pred1
+    | shld      3, RA, 0x3, T5
+    | ct        ctpr2, pred1                // >2
     |1:                                     // Fill up results with nil.
-    | subd 3, RD, 0x18, TMP0
-    | addd 4, RD, 0x8, RD
+    | subd      3, RD, 0x18, TMP0
+    | addd      4, RD, 0x8, RD
     | --
-    | cmpbedb 3, RB, RD, pred1
-    | std 5, BASE, TMP0, TMP1
+    | cmpbedb   3, RB, RD, pred1
+    | std       5, BASE, TMP0, TMP1
+    | wait_pred_ct pred1, 0
     | --
-    | ct ctpr3, ~pred1
+    | ct        ctpr3, ~pred1               // <1
     |2:
-    | movtd 0, CARG4, ctpr1
-    | subd 3, BASE, 0x10, BASE
+    | subd      3, BASE, 0x10, BASE
+    | disp      ctpr1, ->vm_restart_pipeline    // TODO: opmitize
     | --
-    | shrd 3, CARG3, 0x5, RA
-    | shrd 4, CARG3, 0x15, RB
-    | shrd 5, CARG3, 0xd, RD
-    | --
-    | subd 3, BASE, CARG5, BASE                   // base = base - (RA+2)*8
-    | andd 4, RD, 0x7fff8, RD
-    | andd 5, RA, 0x7f8, RA
-    | --
-    | andd 3, RB, 0x7f8, RB
-    | andd 4, RD, 0x7f8, RC
-    | ct ctpr1
+    | subd      3, BASE, T5, BASE           // base = base - (RA+2)*8
+    | ct        ctpr1                       // vm_restart_pipeline
     | --
     |
     |.macro math_round, func
