@@ -6059,24 +6059,24 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_GSET:
-        | todo
-        | // ins_AND RA = src*8, RD = str_const*8 (~)
-        | ldwsm 0, PC, 0x0, CARG5
-        | ldbsm 2, PC, 0x0, CARG6
-        | ldd 3, BASE, -16, RB
-        | subd 4, KBASE, RD, TMP0
-        | disp ctpr1, ->BC_TSETS_Z
-        | nop 2
+        | // ins_AND RA_E = src*8, RD_E = str_const*8 (~)
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | subd      4, KBASE, RD_E, T0
+        | ldd       5, BASE, -16, RB
+        | disp      ctpr1, ->BC_TSETS_Z
+        | wait_load RB, 0
         | --
-        | shldsm 2, CARG6, 0x3, CARG6
-        | ldd 3, TMP0, -8, RC
-        | getfd 4, RB, (47 << 6), RB
+        | pipe_extract 0, 1, 2, 3, 4
+        | getfd     5, RB, (47 << 6), RB
         | --
-        | ldd 0, RB, LFUNC->env, RB
-        | lddsm 2, CARG6, DISPATCH, CARG6
-        | nop 1
-        | --
-        | ct ctpr1
+        | pipe_scale 0, 1, 2, 4
+        | ldd       3, RB, LFUNC->env, RB
+        | ldd       5, T0, -8, RC
+        | wait_load RB, 0
+        | wait_load RC, 0
+        | ct        ctpr1                   // BC_TSETS_Z(RB, RC)
         | --
         break;
 
