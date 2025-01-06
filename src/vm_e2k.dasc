@@ -546,7 +546,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vm_returnc:
-    | // RD = nresults*8
+    | // BASE = base, RA = resultptr, RD = nresults*8, PC = return
     | addd      0, 0x0, LUA_YIELD, CRET1    // used in vm_unwind_c_eh
     | addd      1, RD, 0x8, RD              // RD = (nresults+1)*8
     | disp      ctpr1, ->vm_unwind_c_eh
@@ -559,7 +559,7 @@ static void build_subroutines(BuildCtx *ctx)
     | stw       2, STACK, MULTRES, RD, ~pred0
     | ct        ctpr1, pred0                // vm_unwind_c_eh(TODO)
     | --
-    | ct        ctpr2, pred1                // BC_RET_Z(TODO)
+    | ct        ctpr2, pred1                // BC_RET_Z(RA, RD, PC)
     |                                       // Handle regular return to Lua.
     | --
     |
@@ -6854,7 +6854,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Calls and vararg handling ----------------------------------------- */
 
     case BC_CALL: case BC_CALLM:
-        | // ins_A_C  RA_E = base*8, (RB_E = (nresults+1)*8,) RD_E = (nargs+1)*8 | extra_nargs*8
+        | // ins_A_C  RA_E = base*8, (RB_E = (nresults+1)*8,) RC_E = (nargs+1)*8 | extra_nargs*8
         | ldd       0, BASE, RA_E, RB
         | addd      1, RA_E, 0x10, RA
         | ldw       2, STACK, MULTRES, TMP0
@@ -6862,25 +6862,30 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp      ctpr1, ->vmeta_call
         | wait_load RB, 0
         | --
-        | sard      0, RB, 0x2f, ITYPE
-        | getfd     1, RB, (47 << 6), RB
         if (op == BC_CALLM) {
+          | sard    0, RB, 0x2f, ITYPE
+          | getfd   1, RB, (47 << 6), RB
           | addd    2, RD, TMP0, RD
+          | disp    ctpr2, ->vm_enter_pipeline // TODO: inline
+          | --
+        } else {
+          | sard    0, RB, 0x2f, ITYPE
+          | getfd   1, RB, (47 << 6), RB
+          | disp    ctpr2, ->vm_enter_pipeline // TODO: inline
+          | --
         }
-        | disp      ctpr2, ->vm_enter_pipeline // TODO: inline
-        | --
-        | lddsm     0, RB, LFUNC->pc, T2
+        | lddsm     0, RB, LFUNC->pc, RARG1
         | cmpesb    1, ITYPE, LJ_TFUNC, pred0
         | addd      2, BASE, RA, T1
-        | wait_load T2, 1
+        | wait_pred_ct pred0, 0
         | --
+        | addd      0, BASE, RA, BASE, pred0
         | addd      1, BASE, RA, RA, ~pred0
         | ct        ctpr1, ~pred0           // vmeta_call(BASE, RA, RD)
         | --
-        | addd      0, BASE, RA, BASE, pred0
-        | addd      1, T2, 0, RARG1
         | std       2, T1, -8, PC
         | ct        ctpr2                   // vm_enter_pipeline
+        | wait_load RARG1, 2
         | --
         break;
 
@@ -7984,7 +7989,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | call      ctpr2, wbs = 0x8        // (lua_State *L)
         | --
         | ldd       3, RB, L->base, BASE
-        | shld      4, CRET1, 0x3, RD       // return nsresult
+        | shld      4, CRET1, 0x3, RD       // return nresults
         | addd      5, 0x0, ~LJ_VMST_INTERP, TMP0
         | disp      ctpr1, ->vm_returnc
         | --
@@ -7997,7 +8002,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load TMP0, 0
         | --
         | subd      3, TMP0, RA, RA         // RA = (L->top - (L->base+nresults))*8
-        | ct        ctpr1                   // vm_returnc(RD)
+        | ct        ctpr1                   // vm_returnc(RA, RD, PC)
         | --
         break;
 
