@@ -469,7 +469,6 @@
 | 
 |// Call decode and dispatch.
 |.macro ins_callt
-| todo
 | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8, [BASE-8] = PC
 | ldd       0, RB, LFUNC->pc, RARG1
 | disp      ctpr1, ->vm_enter_pipeline      // TODO: optimize
@@ -1846,9 +1845,11 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Call metamethod ----------------------------------------------------
     |
     |->vmeta_call:                          // Resolve and call __call metamethod.
-    | todo
     | // BASE = old base, RA = new base, RD = (nargs+1)*8
     | disp ctpr1, extern lj_meta_call       // (lua_State *L, TValue *func, TValue *top)
+    | --
+    | setwd     wsz = 0xc, nfx = 0x1, dbl = 0x0
+    | setbn     rsz = 0x3, rbs = 0x8, rcur = 0x0
     | --
     | ldd 0, STACK, SAVE_L, CARG1
     | subd 1, RA, 0x10, CARG2
@@ -6081,107 +6082,99 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TGETV:
-        | todo
-        | // ins_ABC RA = dst*8, RB = table*8, RC = key*8
-        | ldw 0, PC, 0x0, CARG3
-        | ldb 2, PC, 0x0, CARG4
-        | ldd 3, BASE, RB, RB
-        | ldd 5, BASE, RC, RC
-        | disp ctpr1, ->vmeta_tgetv
-        | nop 2
+        | // ins_ABC RA_E = dst*8, RB_E = table*8, RC_E = key*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | ldd       3, BASE, RB_E, RB
+        | ldd       5, BASE, RC_E, RC
+        | disp      ctpr1, ->vmeta_tgetv
         | --
-        | fdtoistr 3, RC, TMP0
-        | disp ctpr3, >1
+        | pipe_scale 0, 1, 2, 3
+        | pipe_dispatch_load 5
+        | disp      ctpr2, >2
+        | wait_load RC, 1
         | --
-        | sard 3, RB, 0x2f, CARG1
-        | sard 4, RC, 0x2f, ITYPE
-        | getfd 5, RB, (47 << 6), RB
-        | disp ctpr2, >2
-        | nop 2
+        | pipe_extract 0, 1, 2, 4, 5
+        | fdtoistr  3, RC, TMP0
         | --
-        | istofd 3, TMP0, TMP1
-        | cmpesb 4, CARG1, LJ_TTAB, pred0
-        | nop 3
+        | sard      3, RB, 0x2f, T1
+        | sard      4, RC, 0x2f, ITYPE
+        | getfd     5, RB, (47 << 6), RB
+        | wait      TMP0, 1, 4              // fp domain
         | --
-        | cmpbsb 1, ITYPE, LJ_TISNUM, pred1
-        | shld 2, CARG4, 0x3, CARG4
-        | ldwsm 3, RB, TAB->asize, CARG2
-        | fcmpeqdb 4, RC, TMP1, pred2       // Convert number to int and back and compare.
-        | ldd 5, RB, TAB->array, CARG5
+        | istofd    3, TMP0, TMP1
+        | cmpesb    4, T1, LJ_TTAB, pred0
+        | wait      TMP1, 0, 4              // fp domain
         | --
-        | ldd 2, CARG4, DISPATCH, CARG4
+        | cmpbsb    1, ITYPE, LJ_TISNUM, pred1
+        | ldwsm     3, RB, TAB->asize, T2
+        | fcmpeqdb  4, RC, TMP1, pred2      // Convert number to int and back and compare.
+        | ldd       5, RB, TAB->array, T5
         | --
-        | ct ctpr1, ~pred0
+        | ct        ctpr1, ~pred0           // vmeta_tgetv(TODO)
+        | wait_pred_ct pred1, 1
         | --
-        | ct ctpr2, ~pred1                  // Integer key?
+        | ct        ctpr2, ~pred1           // >2, Integer key?
         | --
-        | sxt 3, 0x2, TMP0, RC, pred2
-        | ct ctpr1, ~pred2                  // Generic numeric key? Use fallback.
+        | sxt       3, 0x2, TMP0, RC, pred2
+        | ct        ctpr1, ~pred2           // vmeta_tgetv(TODO), Generic numeric key? Use fallback.
         | --
-        | cmpbsb 3, RC, CARG2, pred0
-        | shld 4, RC, 0x3, TMP1
-        | nop 2
+        | cmpbsb    3, RC, T2, pred0
+        | shld      4, RC, 0x3, TMP1
+        | wait_pred_ct pred0, 0
         | --
-        | addd 3, TMP1, CARG5, RC, pred0
-        | ct ctpr1, ~pred0
+        | addd      3, TMP1, T5, RC, pred0
+        | ct        ctpr1, ~pred0           // vmeta_tgetv(TODO)
         | --
-        | ldd 3, RC, 0x0, ITYPE
-        | nop 2
+        | ldd       3, RC, 0x0, ITYPE
+        | wait_load ITYPE, 0
         | --
-        | cmpedb 3, ITYPE, LJ_TNIL, pred0
-        | nop 2
+        | cmpedb    3, ITYPE, LJ_TNIL, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | ct ctpr3, ~pred0
+        | ldd       3, RB, TAB->metatable, TMP0, pred0
+        | std       5, BASE, RA_E, ITYPE, ~pred0
+        | pipe_dispatch_if 0, ctpr3, ~pred0
+        | --
+        | wait_load TMP0, 1
         | --
         | // Check for __index if table value is nil.
-        | ldd 3, RB, TAB->metatable, TMP0
-        | nop 2
-        | --
-        | cmpedb 3, TMP0, 0x0, pred0
-        | ldbsm 5, TMP0, TAB->nomm, TMP0
-        | nop 2
+        | cmpedb    3, TMP0, 0x0, pred0
+        | ldbsm     5, TMP0, TAB->nomm, TMP0
+        | wait_load TMP0, 0
         | --
         | cmpandedbsm 0, TMP0, 1<<MM_index, pred1
-        | nop 1
         | --
-        | pass pred0, p0
-        | pass pred1, p1
-        | landp ~p0, p1, p4
-        | pass p4, pred0
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | landp     ~p0, p1, p4
+        | pass      p4, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | ct ctpr1, pred0                   // 'no __index' flag NOT set: check.
-        |1:
-        | movtd 0, CARG4, ctpr1
-        | std 5, BASE, RA, ITYPE
+        | std       5, BASE, RA_E, ITYPE, ~pred0
+        | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
-        | addd 1, PC, 0x4, PC
-        | shrd 3, CARG3, 0xd, RD
-        | shrd 4, CARG3, 0x15, RB
-        | shrd 5, CARG3, 0x5, RA
+        | ct        ctpr1                   // vmeta_tgetv(TODO), 'no __index' flag NOT set: check.
         | --
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
-        | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | ct ctpr1
         |2: // String key?
-        | cmpesb 3, ITYPE, LJ_TSTR, pred0
-        | addd 4, 0x0, LJ_TSTR, CARG1
-        | disp ctpr2, ->BC_TGETS_Z
-        | nop 1
+        | cmpesb    3, ITYPE, LJ_TSTR, pred0
+        | addd      4, 0x0, LJ_TSTR, T1
+        | disp      ctpr2, ->BC_TGETS_Z
+        | wait_pred pred0, 0
         | --
-        | ldd 3, RB, TAB->node, CARG2
-        | getfd 4, RC, (47 << 6), RC, pred0
+        | ldd       3, RB, TAB->node, T2
+        | getfd     4, RC, (47 << 6), RC, pred0
         | --
-        | ldw 3, RB, TAB->hmask, TMP0, pred0 // RB = GCtab *, RC = GCstr *
-        | shld 4, CARG1, 0x2f, CARG1
-        | ldw 5, RC, STR->sid, TMP1, pred0
-        | ct ctpr1, ~pred0
-        | nop 2
+        | ldw       3, RB, TAB->hmask, TMP0, pred0 // RB = GCtab *, RC = GCstr *
+        | shld      4, T1, 0x2f, T1
+        | ldw       5, RC, STR->sid, TMP1, pred0
+        | ct        ctpr1, ~pred0           // vmeta_tgetv(TODO)
         | --
-        | andd 4, TMP0, TMP1, TMP1   // idx = str->sid & tab->hmask
-        | ct ctpr2
+        | wait_load TMP0, 1
+        | wait_load TMP1, 1
+        | --
+        | andd      4, TMP0, TMP1, TMP1     // idx = str->sid & tab->hmask
+        | ct        ctpr2                   // BC_TGETS_Z(TMP1, RA_E, RC, T1, T2)
         | --
         break;
 
@@ -6214,6 +6207,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct        ctpr1, ~pred0
         | --
         |->BC_TGETS_Z:
+        | // (TMP1, RA_E, RC, T2, T1)
+        | // TODO: convert to standard calling convention
         | shld      3, TMP1, 0x5, TMP0
         | shld      4, TMP1, 0x3, TMP1
         | --
@@ -6226,7 +6221,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | lddsm     5, TMP0, NODE->next, T5
         | wait_load T5, 0
         |1:
-        | disp ctpr2, <1
+        | disp      ctpr2, <1
         | cmpedbsm  3, T5, 0x0, pred2
         | cmpedb    4, TMP1, ITYPE, pred3
         | lddsm     5, TMP0, NODE->val, T4  // Get node value.
@@ -6911,7 +6906,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load T2, 1
         | --
         | addd      1, BASE, RA, RA, ~pred0
-        | ct        ctpr1, ~pred0           // vmeta_call(TODO)
+        | ct        ctpr1, ~pred0           // vmeta_call(BASE, RA, RD)
         | --
         | addd      0, BASE, RA, BASE, pred0
         | addd      1, T2, 0, RARG1
