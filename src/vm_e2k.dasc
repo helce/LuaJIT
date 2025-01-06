@@ -382,7 +382,7 @@
 |
 |// Stage B
 |.macro pipe_extract_b, ch
-| anddsm    2, RB_B, 0x7f8, RB_B
+| anddsm    ch, RB_B, 0x7f8, RB_B
 |.endmacro
 |
 |// Stage B
@@ -7899,81 +7899,77 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // RA_E = framesize*8
         | // RB_E = LFUNC (but we need tagged)
         | // RD_E = (nargs+1)*8
-        | addd      3, RA_E, 0, RA          // TODO: remove me
-        | addd      4, RD_E, 0, RD          // TODO: remove me
-        | addd      5, RB_E, 0, RB          // TODO: remove me
-        | --
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | ldd       5, BASE, -16, KBASE
+        | disp      ctpr1, ->vm_growstack_v
         | --
         | pipe_scale 0, 1, 2, 3
+        | addd      4, RD_E, FRAME_VARG+0x8, TMP0
+        | addd      5, RD_E, BASE, RD
         | --
-        | pipe_extract 0, 1, 2, 3, 4
+        | pipe_extract 1, 2, 3, 4, 5
+        | ldbsm     0, PC, PC2PROTO(numparams)-4, T1
         | --
-        | ldd 3, BASE, -16, KBASE
-        | addd 4, RD, FRAME_VARG+0x8, TMP0
-        | addd 5, RD, BASE, RD
-        | disp ctpr1, ->vm_growstack_v
+        | ldd       3, STACK, SAVE_L, RB
+        | addd      4, RD, 0x8, RD
         | --
-        | ldbsm 0, PC, PC2PROTO(numparams)-4, CARG1
-        | ldd 3, STACK, SAVE_L, RB
-        | addd 4, RD, 0x8, RD
+        | addd      3, RA_E, RD, RA
+        | std       5, RD, -8, TMP0         // Store delta + FRAME_VARG
         | --
-        | addd 3, RA, RD, RA
-        | std 5, RD, -8, TMP0               // Store delta + FRAME_VARG
+        | std       5, RD, -16, KBASE       // Store copy of LFUNC
         | --
-        | std 5, RD, -16, KBASE             // Store copy of LFUNC
-        | --
-        | ldd 3, RB, L->maxstack, TMP0
+        | ldd       3, RB, L->maxstack, TMP0
         | wait_load TMP0, 0
         | --
-        | cmpedbsm 1, CARG1, 0x0, pred1
-        | cmpbedb 3, RA, TMP0, pred0
+        | cmpedbsm  1, T1, 0x0, pred1
+        | cmpbedb   3, RA, TMP0, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | addd 3, BASE, 0x0, RA, pred0
-        | addd 0, RD, 0x0, BASE, pred0
+        | addd      3, BASE, 0x0, RA, pred0
+        | addd      0, RD, 0x0, BASE, pred0
         | ct        ctpr1, ~pred0           // vm_growstack_v(TODO)
         |                                   // Need to grow stack?
         | --
-        | addd 3, RA, 0x8, RA, ~pred1
-        | ldd 5, PC, PC2PROTO(k)-4, KBASE
+        | addd      3, RA, 0x8, RA, ~pred1
+        | ldd       5, PC, PC2PROTO(k)-4, KBASE
         | pipe_dispatch_if 0, ctpr3, pred1
         |1:                                 // Copy fixarg slots up to new frame.
-        | addd 3, RA, 0x8, RA
-        | addd 4, 0x0, LJ_TNIL, TMP1
-        | disp ctpr1, >3
+        | addd      3, RA, 0x8, RA
+        | addd      4, 0x0, LJ_TNIL, TMP1
+        | disp      ctpr1, >3
         | --
-        | cmpbdb 3, RA, BASE, pred0
-        | disp ctpr2, <1
+        | cmpbdb    3, RA, BASE, pred0
+        | disp      ctpr2, <1
         | wait_pred pred0, 0
         | --
-        | ldd 3, RA, -16, CARG4, pred0
-        | subd 0, CARG1, 0x1, CARG1, pred0
+        | ldd       3, RA, -16, T4, pred0
+        | subd      0, T1, 0x1, T1, pred0
         | --
         | ct        ctpr1, ~pred0           // >3, Less args than parameters?
         | --
-        | cmpedb 0, CARG1, 0x0, pred0
-        | addd 3, RD, 0x8, RD
-        | std 5, RD, 0x0, CARG4
+        | cmpedb    0, T1, 0x0, pred0
+        | addd      3, RD, 0x8, RD
+        | std       5, RD, 0x0, T4
         | wait_pred_ct pred0, 0
         | --
-        | std 5, RA, -16, TMP1              // Clear old fixarg slot (help the GC).
+        | std       5, RA, -16, TMP1        // Clear old fixarg slot (help the GC).
         | ct        ctpr2, ~pred0           // <1
         | --
         | pipe_dispatch 0, ctpr3
-        |3:                                 // Clear missing parameters.
-        | subd 0, CARG1, 0x1, CARG1
-        | addd 3, RD, 0x8, RD
-        | std 5, RD, 0x0, TMP1
-        | disp ctpr2, <2
         | --
-        | cmpedb 0, CARG1, 0x0, pred0
+        |3:                                 // Clear missing parameters.
+        | subd      0, T1, 0x1, T1
+        | addd      3, RD, 0x8, RD
+        | std       5, RD, 0x0, TMP1
+        | --
+        | cmpedb    0, T1, 0x0, pred0
         | wait_pred_ct pred0, 0
         | --
         | ct        ctpr1, ~pred0           // <3
         | --
-        | ct        ctpr2                   // <2
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
