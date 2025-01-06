@@ -6862,6 +6862,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp      ctpr1, ->vmeta_call
         | wait_load RB, 0
         | --
+        |// XXX: DO NOT USE IF INSIDE A BUNDLE!!!
         if (op == BC_CALLM) {
           | sard    0, RB, 0x2f, ITYPE
           | getfd   1, RB, (47 << 6), RB
@@ -7520,13 +7521,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ct        ctpr3, pred1            // vm_return(TODO)
         | --
-        | subd 3, BASE, RB, BASE, ~pred0    // Return from vararg function: relocate BASE down and RA up.
+        |// XXX: DO NOT USE IF INSIDE A BUNDLE!!!
         if (op == BC_RET1) {
-          | addd 4, RA, RB, RA, ~pred0
-          | ldd 5, BASE, RA, RB, pred0
+          | subd    3, BASE, RB, BASE, ~pred0   // Return from vararg function: relocate BASE down and RA up.
+          | addd    4, RA, RB, RA, ~pred0
+          | ldd     5, BASE, RA, RB, pred0
+          | ct      ctpr1, ~pred0           // <1
+          | --
+        } else {
+          | subd    3, BASE, RB, BASE, ~pred0   // Return from vararg function: relocate BASE down and RA up.
+          | ct      ctpr1, ~pred0           // <1
+          | --
         }
-        | ct        ctpr1, ~pred0           // <1
-        | --
         if (op == BC_RET1) {
           | std 5, BASE, -16, RB
           | --
