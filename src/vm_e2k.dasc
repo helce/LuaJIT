@@ -7843,54 +7843,49 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_IFUNCF:
-        | todo
-        | // ins_AD BASE = new_base*8, RA = framesize*8, RD = (nargs+1)*8
-        | ldb 2, PC, 0x0, CARG2
-        | ldd 3, PC, PC2PROTO(k)-4, KBASE
-        | addd 4, BASE, RA, RA              // Top of frame.
-        | ldd 5, STACK, SAVE_L, RB
-        | disp ctpr1, ->vm_growstack_f
-        | nop 1
+        | // ins_AD BASE = new_base*8, RA_E = framesize*8, RD_E = (nargs+1)*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_dispatch_load 2
+        | ldd       3, PC, PC2PROTO(k)-4, KBASE
+        | addd      4, BASE, RA_E, RA       // Top of frame.
+        | ldd       5, STACK, SAVE_L, RB
+        | disp      ctpr1, ->vm_growstack_f
         | --
-        | shld 2, CARG2, 0x3, CARG2
-        | ldbsm 3, PC, PC2PROTO(numparams)-4, CARG6
-        | addd 4, 0x0, LJ_TNIL, TMP1
+        | pipe_scale 0, 1, 2, 4
+        | pipe_fetch 5
+        | ldbsm     3, PC, PC2PROTO(numparams)-4, T6
+        | disp      ctpr2, >1
         | --
-        | ldd 2, CARG2, DISPATCH, CARG2
-        | ldd 3, RB, L->maxstack, TMP0
-        | ldw 5, PC, 0x0, CARG1
-        | disp ctpr2, >2
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load RB, 2
+        | --
+        | addd      0, RD_E, 0, RD          // TODO: remove me
+        | ldd       3, RB, L->maxstack, TMP0
         | wait_load TMP0, 0
         | --
-        | movtd 0, CARG2, ctpr3
-        | cmpbedb 3, RA, TMP0, pred0
-        | shrd 4, CARG1, 0xd, CARG3
-        | shrd 5, CARG1, 0x15, CARG4
+        | cmpbedb   3, RA, TMP0, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | ct ctpr1, ~pred0
+        | shld      3, T6, 0x3, RA, pred0
+        | ct        ctpr1, ~pred0           // vm_growstack_f(TODO)
         | --
-        | shld 3, CARG6, 0x3, RA
-        | shrd 4, CARG1, 0x5, CARG5
-        | disp ctpr1, >1
+        | cmpbedb   3, RD, RA, pred1        // Check for missing parameters.
+        | wait_pred_ct pred1, 0
         | --
-        | addd 2, PC, 0x4, PC
-        | cmpbedb 3, RD, RA, pred0
-        | ct ctpr2, ~pred0                  // Check for missing parameters.
+        | addd      1, 0x0, LJ_TNIL, TMP1, pred1
+        | pipe_dispatch_if 0, ctpr3, ~pred1
+        | --
         |1: // Clear missing parameters.
-        | subd 3, RD, 0x8, TMP0
-        | addd 4, RD, 0x8, RD
+        | subd      3, RD, 0x8, TMP0
+        | addd      4, RD, 0x8, RD
         | --
-        | cmpbedb 3, RD, RA, pred0
+        | cmpbedb   3, RD, RA, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | std 5, BASE, TMP0, TMP1
-        | ct ctpr1, pred0
-        |2:
-        | andd 3, CARG3, 0x7fff8, RD
-        | andd 4, CARG5, 0x7f8, RA
+        | std       5, BASE, TMP0, TMP1
+        | ct        ctpr2, pred0            // <1
         | --
-        | andd 3, CARG4, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | ct ctpr3
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
