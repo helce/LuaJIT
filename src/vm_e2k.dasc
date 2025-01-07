@@ -4368,126 +4368,114 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ISEQV: case BC_ISNEV:
-        | todo
         vk = op == BC_ISEQV;
-        | // ins_AD RA = src1*8, RD = src2*8, JMP with RD = target
-        | addd 0, PC, 0x4, PC
-        | ldd 3, BASE, RD, RD
-        | ldd 5, BASE, RA, RA
-        | disp ctpr1, >3
-        | nop 1
+        | // ins_AD RA_E = src1*8, RD_E = src2*8, JMP with RD = target
+        | addd      0, PC, 0x4, PC
+        | subd      1, PC, BCBIAS_J*4 - 4, T2
+        | shrd      2, INSN_B, 0xe, T1      // JMP.RD*4
+        | ldd       3, BASE, RD_E, RD
+        | ldd       5, BASE, RA_E, RA
+        | disp      ctpr1, >3
         | --
-        | ldh 0, PC, PREV_PC_RD, CARG1
-        | subd 2, PC, BCBIAS_J*4, CARG2
+        | andd      0, T1, 0x3fffc, T1      // extract JMP.RD*4 (18 bits)
+        | disp      ctpr2, >2
+        | --
+        | disp      ctpr3, >1
+        | wait_load RA, 2
         | --
         | fcmpuoddb 3, RA, RD, pred2
-        | fcmpeqdb 4, RA, RD, pred3
-        | disp ctpr2, >2
+        | fcmpeqdb  4, RA, RD, pred3
         | --
-        | sard 4, RA, 0x2f, ITYPE
-        | sard 5, RD, 0x2f, RB
-        | disp ctpr3, >1
+        | sard      4, RA, 0x2f, ITYPE
+        | sard      5, RD, 0x2f, RB
         | --
-        | shld 0, CARG1, 0x2, CARG1
-        | cmpbsb 3, RB, LJ_TISNUM, pred0
-        | cmpbsb 4, ITYPE, LJ_TISNUM, pred1
-        | nop 1
+        | cmpbsb    3, RB, LJ_TISNUM, pred0
+        | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
         | --
-        | pass pred0, p0
-        | pass pred1, p1
-        | landp p0, p1, p4
-        | pass p4, pred0
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | landp     p0, p1, p4
+        | pass      p4, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | pass pred2, p0
-        | pass pred3, p1
-        | landp ~p0, p1, p4
-        | pass p4, pred1
-        | ct ctpr1, ~pred0
+        | pass      pred2, p0
+        | pass      pred3, p1
+        | landp     ~p0, p1, p4
+        | pass      p4, pred1
+        | ct        ctpr1, ~pred0           // >3
+        | --
+        | wait_pred_ct pred1, 1
         | --
         if (vk) {
-        | ct ctpr2, ~pred1
-        |1: // EQ: Branch to the target.
-        | addd 0, CARG2, CARG1, PC
-        |2: // NE: Fallthrough to next instruction.
+          | ct      ctpr2, ~pred1           // >2
+          |1: // EQ: Branch to the target.
+          | addd    0, T2, T1, PC
+          |2: // NE: Fallthrough to next instruction.
         } else {
-        | ct ctpr3, pred1
-        |2: // NE: Branch to the target.
-        | addd 0, CARG2, CARG1, PC
-        |1: // EQ: Fallthrough to next instruction.
+          | ct      ctpr3, pred1            // >1
+          |2: // NE: Branch to the target.
+          | addd    0, T2, T1, PC
+          |1: // EQ: Fallthrough to next instruction.
         }
-        | ldw 0, PC, 0x0, TMP0
-        | ldb 2, PC, 0x0, TMP1
-        | addd 1, PC, 0x4, PC
-        | nop 2
+        | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline/optimize
         | --
-        | shld 2, TMP1, 0x3, TMP1
-        | shrd 3, TMP0, 0xd, RD
-        | shrd 4, TMP0, 0x15, RB
-        | shrd 5, TMP0, 0x5, RA
+        | ct        ctpr1                   // vm_restart_pipeline
         | --
-        | ldd 2, TMP1, DISPATCH, TMP1
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
-        | nop 2
-        | --
-        | movtd 0, TMP1, ctpr1
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | --
-        | ct ctpr1
         |3: // Either or both types are not numbers.
         |.if FFI
-        | disp ctpr1, ->vmeta_equal_cd
+        | cmpesb    3, RB, LJ_TCDATA, pred0
+        | cmpesb    4, ITYPE, LJ_TCDATA, pred1
+        | disp      ctpr1, ->vmeta_equal_cd
         | --
-        | cmpesb 3, RB, LJ_TCDATA, pred0
-        | cmpesb 4, ITYPE, LJ_TCDATA, pred1
-        | nop 2
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | landp     ~p0, ~p1, p4
+        | pass      p4, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | pass pred0, p0
-        | pass pred1, p1
-        | landp ~p0, ~p1, p4
-        | pass p4, pred0
-        | --
-        | ct ctpr1, ~pred0
+        | ct        ctpr1, ~pred0           // vmeta_equal_cd
         | --
         |.endif
-        | cmpbesb 1, RB, LJ_TISTABUD, pred2
-        | cmpedb 3, RA, RD, pred0
-        | cmpesb 4, RB, ITYPE, pred1
-        | getfd 5, RA, (47 << 6), RA
-        | disp ctpr1, ->vmeta_equal
+        | cmpbesb   1, RB, LJ_TISTABUD, pred2
+        | cmpedb    3, RA, RD, pred0
+        | cmpesb    4, RB, ITYPE, pred1
+        | getfd     5, RA, (47 << 6), RA
+        | disp      ctpr1, ->vmeta_equal
         | --
-        | lddsm 3, RA, TAB->metatable, RB
-        | nop 1
+        | lddsm     3, RA, TAB->metatable, RB
+        | wait_pred_ct pred0, 1
         | --
-        | pass pred1, p0
-        | pass pred2, p1
-        | landp p0, p1, p4
-        | pass p4, pred1
-        | ct ctpr3, pred0                   // Same GCobjs or pvalues?
+        | pass      pred1, p0
+        | pass      pred2, p1
+        | landp     p0, p1, p4
+        | pass      p4, pred1
+        | ct        ctpr3, pred0            // Same GCobjs or pvalues?
         | --
-        | ldbsm 3, RB, TAB->nomm, TMP0
-        | cmpedbsm 4, RB, 0x0, pred0
-        | ct ctpr2, ~pred1                  // Not the same type? or Different objects and not table/ud?
+        | wait_pred_ct pred1, 1
+        | --
+        | ldbsm     3, RB, TAB->nomm, TMP0
+        | cmpedbsm  4, RB, 0x0, pred0
+        | ct        ctpr2, ~pred1           // <2, Not the same type? or Different objects and not table/ud?
+        | --
+        | wait_pred_ct pred0, 1
         | --
         | // Different tables or userdatas. Need to check __eq metamethod.
         | // Field metatable must be at same offset for GCtab and GCudata!
-        | ct ctpr2, pred0                   // No metatable?
-        | nop 1
+        | ct        ctpr2, pred0            // <2, No metatable?
         | --
         | cmpandedb 3, TMP0, 1<<MM_eq, pred0
-        | nop 2
+        | wait_pred_ct pred0, 0
         | --
-        | ct ctpr2, ~pred0                  //  Or 'no __eq' flag set?
+        | ct        ctpr2, ~pred0           // <2, Or 'no __eq' flag set?
         | --
         if (vk) {
-        | addd 3, 0x0, 0x0, RB              // ne = 0
-        | ct ctpr1                          // Handle __eq metamethod.
-        | --
+          | addd    3, 0x0, 0x0, RB         // ne = 0
+          | ct      ctpr1                   // vmeta_equal(TODO), Handle __eq metamethod.
+          | --
         } else {
-        | addd 3, 0x0, 0x1, RB              // ne = 1
-        | ct ctpr1                          // Handle __eq metamethod.
-        | --
+          | addd    3, 0x0, 0x1, RB         // ne = 1
+          | ct      ctpr1                   // vmeta_equal(TODO), Handle __eq metamethod.
+          | --
         }
         break;
 
