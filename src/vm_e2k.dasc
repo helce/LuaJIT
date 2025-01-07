@@ -1926,38 +1926,42 @@ static void build_subroutines(BuildCtx *ctx)
     |//-----------------------------------------------------------------------
     |
     |// Inlined GC threshold check.
+    |// RD = (nargs+1)*8
+    |// Setup the registers window for a call.
+    |// Invalidate ctpr1 and ctpr2. Prepare ctpr3 to ->fff_fallback.
     |.macro ffgccheck
-    | ldd 0, DISPATCH, DISPATCH_GL(gc.total), TMP1
-    | ldd 2, DISPATCH, DISPATCH_GL(gc.threshold), TMP0
-    | disp ctpr2, >1
+    | setwd_call
+    | ldd       0, DISPATCH, DISPATCH_GL(gc.total), TMP1
+    | ldd       2, DISPATCH, DISPATCH_GL(gc.threshold), TMP0
+    | ldd       3, STACK, SAVE_L, T1
+    | disp      ctpr2, >1
     | --
-    | ldd 0, STACK, SAVE_L, CARG1
+    | disp      ctpr1, extern lj_gc_step
+    | wait_load TMP0, 1
     | --
-    | disp ctpr1, extern lj_gc_step         // (lua_State *L)
+    | cmpbdb    0, TMP1, TMP0, pred0
+    | disp      ctpr3, ->fff_fallback
+    | wait_pred_ct pred0, 0
     | --
-    | cmpbdb 0, TMP1, TMP0, pred0
-    | disp ctpr3, ->fff_fallback
-    | nop 2
+    | std       2, STACK, SAVE_PC, PC, ~pred0
+    | addd      3, BASE, RD, RD, ~pred0
+    | addd      4, T1, 0x0, RB, ~pred0
+    | ct        ctpr2, pred0                // >1
     | --
-    | ct ctpr2, pred0
-    | std 2, STACK, SAVE_PC, PC, ~pred0
-    | addd 3, BASE, RD, RD, ~pred0
-    | addd 4, CARG1, 0x0, RB, ~pred0
+    | std       2, T1, L->base, BASE
+    | subd      3, RD, 0x8, RD
     | --
-    | std 2, CARG1, L->base, BASE
-    | subd 3, RD, 0x8, RD
+    | std       2, T1, L->top, RD
+    | call      ctpr1, wbs = 0x8            // lj_gc_step(lua_State *L)
     | --
-    | std 2, CARG1, L->top, RD
-    | call ctpr1, wbs = 0x8
+    | ldd       3, RB, L->base, BASE
+    | ldd       5, RB, L->top, RD
+    | disp      ctpr3, ->fff_fallback
+    | wait_load RD, 0
     | --
-    | ldd 3, RB, L->base, BASE
-    | ldd 5, RB, L->top, RD
-    | disp ctpr3, ->fff_fallback
-    | nop 2
+    | subd      3, RD, BASE, RD
     | --
-    | subd 3, RD, BASE, RD
-    | --
-    | addd 3, RD, 0x8, RD
+    | addd      3, RD, 0x8, RD
     |1:
     |.endmacro
     |
@@ -2273,66 +2277,70 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_tostring:
-    | ldd 0, BASE, -8, PC
-    | ldd 2, DISPATCH, DISPATCH_GL(gcroot[GCROOT_BASEMT_NUM]), TMP0
-    | ldd 3, BASE, 0x0, RB
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E = (nargs+1)*8
+    | ldd       0, BASE, -8, PC
+    | addd      1, RD_E, 0, RD
+    | ldd       2, DISPATCH, DISPATCH_GL(gcroot[GCROOT_BASEMT_NUM]), TMP0
+    | ldd       3, BASE, 0x0, RB
+    | disp      ctpr1, ->fff_fallback
     | --
-    | cmpedb 3, TMP0, 0x0, pred3
-    | cmpbdb 4, RD, (1+1)*8, pred0
-    | sard 5, RB, 0x2f, ITYPE
-    | disp ctpr2, ->fff_res
+    | disp      ctpr2, ->fff_res
+    | wait_load TMP0, 1
     | --
-    | cmpesb 3, ITYPE, LJ_TSTR, pred1
-    | cmpbesb 4, ITYPE, LJ_TISNUM, pred2
-    | nop 1
+    | cmpedb    3, TMP0, 0x0, pred3
+    | cmpbdb    4, RD, (1+1)*8, pred0
+    | sard      5, RB, 0x2f, ITYPE
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | pass pred2, p2
-    | pass pred3, p3
-    | landp ~p0, p2, p4
-    | landp p4, p3, p5
-    | landp ~p1, p2, p6
-    | pass p5, pred0
-    | pass p6, pred2
+    | cmpesb    3, ITYPE, LJ_TSTR, pred1
+    | cmpbesb   4, ITYPE, LJ_TISNUM, pred2
     | --
-    | ct ctpr1, ~pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | pass      pred2, p2
+    | pass      pred3, p3
+    | landp     ~p0, p2, p4
+    | landp     p4, p3, p5
+    | landp     ~p1, p2, p6
+    | pass      p5, pred0
+    | pass      p6, pred2
+    | wait_pred_ct pred0, 0
+    | --
+    | ct        ctpr1, ~pred0               // fff_fallback(BASE, RD)
     | --
     | // Only handles the string or number case inline.
     | // A __tostring method in the string base metatable is ignored.
-    | addd 4, 0x0, (1+1)*8, RD, ~pred2
-    | std 5, BASE, -16, RB, pred1
-    | ct ctpr2, pred1
+    | addd      4, 0x0, (1+1)*8, RD, ~pred2
+    | std       5, BASE, -16, RB, pred1
+    | ct        ctpr2, pred1                // fff_res(BASE, RD)
     | --
     | // Handle numbers inline, unless a number base metatable is present.
     | ffgccheck
-    | disp ctpr1, extern lj_strfmt_num      // (lua_State *L, lua_Number *np)
     | --
-    | ldd 3, STACK, SAVE_L, RB
-    | nop 3
+    | disp      ctpr1, extern lj_strfmt_num
     | --
-    | addd 1, BASE, 0x0, CARG2
-    | std 2, STACK, SAVE_PC, PC             // Redundant (but a defined value).
-    | addd 3, RB, 0x0, CARG1
-    | std 5, RB, L->base, BASE              // Add frame since C call can throw.
-    | call ctpr1, wbs = 0x8
+    | ldd       3, STACK, SAVE_L, RB
+    | wait_load RB, 0
+    | --
+    | addd      1, BASE, 0x0, CARG2
+    | std       2, STACK, SAVE_PC, PC       // Redundant (but a defined value).
+    | addd      3, RB, 0x0, CARG1
+    | std       5, RB, L->base, BASE        // Add frame since C call can throw.
+    | call      ctpr1, wbs = 0x8            // lj_strfmt_num(lua_State *L, lua_Number *np)
     | --
     | // GCstr returned.
-    | addd 2, 0x0, LJ_TSTR, TMP1
-    | ldd 3, RB, L->base, BASE
-    | disp ctpr2, ->fff_res
+    | addd      2, 0x0, LJ_TSTR, TMP1
+    | ldd       3, RB, L->base, BASE
+    | disp      ctpr2, ->fff_res
     | --
-    | shld 0, TMP1, 0x2f, TMP1
+    | shld      0, TMP1, 0x2f, TMP1
     | --
-    | ord 0, TMP1, CRET1, TMP1
+    | ord       0, TMP1, CRET1, TMP1
     | --
-    | std 2, BASE, -16, TMP1
+    | std       2, BASE, -16, TMP1
     | --
-    | addd 3, 0x0, (1+1)*8, RD
+    | addd      3, 0x0, (1+1)*8, RD
     | --
-    | ct ctpr2
+    | ct        ctpr2                       // fff_res
     | --
     |
     |//-- Base library: iterators -------------------------------------------
@@ -3102,7 +3110,6 @@ static void build_subroutines(BuildCtx *ctx)
     | subd      4, 0x0, 0x10, RA, ~pred0    // Results start at BASE+RA = BASE-16
     | wait_load RB, 1
     | --
-    | addd      1, PC, 0x4, PC, pred0
     | shld      4, RB, 0x3, RB, pred0
     | disp      ctpr3, >1
     | --
