@@ -7341,135 +7341,108 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_IFORL:
-        | todo
-        | // ins_AJ RA = base*8, RD = target*8 (after end of loop or start of loop)
-        | shrd 0, RD, 0x1, CARG2
-        | subd 1, PC, BCBIAS_J*4, CARG3
-        | addd 3, BASE, RA, RA
+        | // ins_AJ RA_E = base*8, RD_E = target*8 (after end of loop or start of loop)
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | addd      4, BASE, RA_E, RA
+        | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline
         | --
-        | addd 0, CARG3, CARG2, CARG4
-        | ldd 3, RA, 0x10, RB
-        | ldd 5, RA, 0x0, TMP0
-        | nop 2
+        | ldd       3, RA, 0x10, RB
+        | ldd       5, RA, 0x0, TMP0
         | --
-        | ldbsm 0, PC, 0x0, CARG1
-        | ldbsm 2, CARG4, 0x0, CARG5
-        | faddd 3, TMP0, RB, TMP0
-        | fcmpltdb 4, RB, 0x0, pred2
-        | ldd 5, RA, 0x8, TMP1
-        | nop 2
+        | pipe_scale 0, 1, 2, 3
         | --
-        | shldsm 0, CARG1, 0x3, CARG1
-        | shldsm 1, CARG5, 0x3, CARG5
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load TMP0, 2
         | --
-        | lddsm 0, CARG1, DISPATCH, CARG1
-        | lddsm 2, CARG5, DISPATCH, CARG5
-        | fcmpltdb 3, TMP1, TMP0, pred0
-        | fcmpltdb 4, TMP0, TMP1, pred1     // Invert comparison if step is negative.
-        | nop 2
+        | faddd     3, TMP0, RB, TMP0
+        | fcmpltdb  4, RB, 0x0, pred2
+        | ldd       5, RA, 0x8, TMP1
+        | wait_load TMP1, 0
         | --
-        | std 5, RA, 0x0, TMP0
-        | pass pred0, p0
-        | pass pred1, p1
-        | pass pred2, p2
-        | landp ~p0, ~p2, p4
-        | landp ~p1, p2, p5
-        | landp ~p4, ~p5, p6
-        | pass p6, pred0
-        | nop 1
+        | fcmpltdb  3, TMP1, TMP0, pred0
+        | fcmpltdb  4, TMP0, TMP1, pred1    // Invert comparison if step is negative.
         | --
-        | addd 0, CARG5, 0x0, CARG1, ~pred0 
-        | addd 1, CARG4, 0x0, PC, ~pred0
-        | std 5, RA, 0x18, TMP0
+        | shrd      0, RD_E, 0x1, T2
+        | subd      1, PC, BCBIAS_J*4, T3
+        | std       5, RA, 0x0, TMP0
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | pass      pred2, p2
+        | landp     ~p0, ~p2, p4
+        | landp     ~p1, p2, p5
+        | landp     ~p4, ~p5, p6
+        | pass      p6, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | movtd 0, CARG1, ctpr1
-        | addd 1, PC, 0x4, PC
-        | ldw 3, PC, 0x0, TMP0
-        | nop 2
+        | addd      0, T3, T2, PC, ~pred0   // Branch target PC.
+        | std       5, RA, 0x18, TMP0
+        | ct        ctpr1, ~pred0           // vm_restart_pipeline
         | --
-        | shrd 3, TMP0, 0xd, RD
-        | shrd 4, TMP0, 0x15, RB
-        | shrd 5, TMP0, 0x5, RA
-        | --
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
-        | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | ct ctpr1
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
     case BC_FORI:
-        | todo
-        | // ins_AJ RA = base*8, RD = target*8 (after end of loop or start of loop)
-        | subd 2, PC, BCBIAS_J*4, CARG3
-        | addd 3, BASE, RA, RA
-        | addd 4, 0x0, 0x2f, CARG1
-        | disp ctpr2, ->vmeta_for
+        | // ins_AJ RA_E = base*8, RD_E = target*8 (after end of loop or start of loop)
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | subd      1, PC, BCBIAS_J*4, T3
+        | addd      4, BASE, RA_E, RA
+        | disp      ctpr2, ->vmeta_for
         | --
-        | shrd 1, RD, 0x1, CARG4
-        | ldd 2, RA, 0x10, RB
-        | ldd 3, RA, 0x0, TMP0
-        | ldd 5, RA, 0x8, TMP1
-        | nop 2
+        | shrd      1, RD_E, 0x1, T4
+        | ldd       2, RA, 0x10, RB
+        | ldd       3, RA, 0x0, TMP0
+        | addd      4, 0x0, 0x2f, T1
+        | ldd       5, RA, 0x8, TMP1
+        | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
         | --
-        | addd 1, CARG3, CARG4, CARG3
-        | sard 2, RB, CARG1, ITYPE
-        | sard 3, TMP0, CARG1, CARG1
-        | sard 4, TMP1, CARG1, CARG2
+        | pipe_scale 0, 1, 2, 3
         | --
-        | cmplsb 0, ITYPE, LJ_TISNUM, pred3
-        | cmpbsb 1, ITYPE, LJ_TISNUM, pred0
-        | cmpbsb 3, CARG1, LJ_TISNUM, pred1
-        | cmpbsb 4, CARG2, LJ_TISNUM, pred2
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load TMP0, 2
         | --
-        | pass pred0, p0
-        | pass pred1, p1
-        | landp p0, p1, p4
-        | pass p4, pred0
-        | pass pred2, p2
-        | landp p4, p2, p5
-        | pass p5, pred2
+        | addd      1, T3, T4, T3
+        | sard      2, RB, T1, ITYPE
+        | sard      3, TMP0, T1, T1
+        | sard      4, TMP1, T1, T2
         | --
-        | fcmpltdb 3, TMP1, TMP0, pred0
-        | fcmpltdb 4, TMP0, TMP1, pred1     // Invert comparison if step is negative.
-        | nop 1
+        | cmplsb    0, ITYPE, LJ_TISNUM, pred3
+        | cmpbsb    1, ITYPE, LJ_TISNUM, pred0
+        | cmpbsb    3, T1, LJ_TISNUM, pred1
+        | cmpbsb    4, T2, LJ_TISNUM, pred2
         | --
-        | std 5, RA, 0x18, TMP0, pred2
-        | ct ctpr2, ~pred2
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | pass      pred2, p2
+        | landp     p0, p1, p4
+        | landp     p4, p2, p5
+        | pass      p4, pred0               // FIXME: unused?
+        | pass      p5, pred2
         | --
-        | pass pred0, p0
-        | pass pred1, p1
-        | pass pred3, p3
-        | landp ~p0, ~p3, p4
-        | landp ~p1, p3, p5
-        | landp ~p4, ~p5, p6
-        | pass p6, pred0
-        | nop 1
+        | fcmpltdb  3, TMP1, TMP0, pred0
+        | fcmpltdb  4, TMP0, TMP1, pred1    // Invert comparison if step is negative.
+        | wait_pred_ct pred2, 1
         | --
-        | addd 0, CARG3, 0x0, PC, pred0
+        | std       5, RA, 0x18, TMP0, pred2
+        | ct        ctpr2, ~pred2           // vmeta_for(TODO)
         | --
-        | ldb 0, PC, 0x0, TMP1
-        | addd 1, PC, 0x4, PC
-        | ldw 3, PC, 0x0, TMP0
-        | nop 2
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | pass      pred3, p3
+        | landp     ~p0, ~p3, p4
+        | landp     ~p1, p3, p5
+        | landp     ~p4, ~p5, p6
+        | pass      p6, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | shld 2, TMP1, 0x3, TMP1
-        | shrd 3, TMP0, 0xd, RD
-        | shrd 4, TMP0, 0x15, RB
-        | shrd 5, TMP0, 0x5, RA
+        | addd      0, T3, 0x0, PC, pred0
+        | ct        ctpr1, pred0            // vm_restart_pipeline
         | --
-        | ldd 2, TMP1, DISPATCH, TMP1
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
-        | nop 2
-        | --
-        | movtd 0, TMP1, ctpr1
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | --
-        | ct ctpr1
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
