@@ -4492,78 +4492,61 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ISEQS: case BC_ISNES:
-        | todo
         vk = op == BC_ISEQS;
-        | // ins_AND RA = src*8, RD = str_const*8, JMP with RD = target
-        | addd 0, PC, 0x4, PC
-        | ldd 3, BASE, RA, RA
-        | subd 4, KBASE, RD, RD
-        | disp ctpr1, >3
+        | // ins_AND RA_E = src*8, RD_E = str_const*8, JMP with RD = target
+        | addd      0, PC, 0x4, PC
+        | subd      1, PC, BCBIAS_J*4 - 4, T2
+        | shrd      2, INSN_B, 0xe, T1      // JMP.RD*4
+        | ldd       3, BASE, RA_E, RA
+        | subd      4, KBASE, RD_E, RD
+        | disp      ctpr1, >3
         | --
-        | ldh 0, PC, PREV_PC_RD, CARG1
-        | ldd 3, RD, -8, RD
-        | disp ctpr2, >2
+        | andd      0, T1, 0x3fffc, T1      // extract JMP.RD*4 (18 bits)
+        | ldd       3, RD, -8, RD
+        | disp      ctpr2, >2
         | --
-        | subd 0, PC, BCBIAS_J*4, CARG2
-        | disp ctpr3, >1
+        | disp      ctpr3, >1
+        | wait_load RA, 2
         | --
-        | sard 3, RA, 0x2f, ITYPE
-        | getfd 4, RA, (47 << 6), RA
+        | sard      3, RA, 0x2f, ITYPE
+        | getfd     4, RA, (47 << 6), RA
         | --
-        | cmpesb 3, ITYPE, LJ_TSTR, pred1
-        | cmpedb 4, RA, RD, pred0
-        | nop 2
+        | cmpesb    3, ITYPE, LJ_TSTR, pred1
+        | cmpedb    4, RA, RD, pred0
+        | wait_pred_ct pred1, 0
         | --
-        | shld 0, CARG1, 0x2, CARG1
-        | ct ctpr1, ~pred1
+        | ct        ctpr1, ~pred1           // >3
         | --
         if (vk) {
-        | ct ctpr2, ~pred0
-        |1: // EQ: Branch to the target.
-        | addd 0, CARG2, CARG1, PC
-        |2: // NE: Fallthrough to next instruction.
-        |.if not FFI
-        |3:
-        |.endif
+          | ct      ctpr2, ~pred0           // >2
+          |1: // EQ: Branch to the target.
+          | addd    0, T2, T1, PC
+          |2: // NE: Fallthrough to next instruction.
+          |.if not FFI
+          |3:
+          |.endif
         } else {
-        | ct ctpr3, pred0
-        |.if not FFI
-        |3:
-        |.endif
-        |2: // NE: Branch to the target.
-        | addd 0, CARG2, CARG1, PC
-        |1: // EQ: Fallthrough to next instruction.
+          | ct      ctpr3, pred0            // >1
+          |.if not FFI
+          |3:
+          |.endif
+          |2: // NE: Branch to the target.
+          | addd    0, T2, T1, PC
+          |1: // EQ: Fallthrough to next instruction.
         }
-        | ldw 0, PC, 0x0, TMP0
-        | ldb 2, PC, 0x0, TMP1
-        | addd 1, PC, 0x4, PC
-        | nop 2
+        | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline/optimize
         | --
-        | shld 2, TMP1, 0x3, TMP1
-        | shrd 3, TMP0, 0xd, RD
-        | shrd 4, TMP0, 0x15, RB
-        | shrd 5, TMP0, 0x5, RA
-        | --
-        | ldd 2, TMP1, DISPATCH, TMP1
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
-        | nop 2
-        | --
-        | movtd 0, TMP1, ctpr1
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | --
-        | ct ctpr1
+        | ct        ctpr1                   // vm_restart_pipeline
         | --
         |.if FFI
         |3:
         | cmpesb 3, ITYPE, LJ_TCDATA, pred0
-        | disp ctpr1, ->vmeta_equal_cd
-        | nop 2
+        | disp      ctpr1, ->vmeta_equal_cd
+        | wait_pred_ct pred0, 0
         | --
-        | ct ctpr2, ~pred0
+        | ct        ctpr2, ~pred0           // <2
         | --
-        | ct ctpr1
+        | ct        ctpr1                   // vmeta_equal_cd(TODO)
         | --
         |.endif
         break;
