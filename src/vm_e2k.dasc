@@ -430,6 +430,20 @@
 | ct        ctpr, pred
 |.endmacro
 |
+|.macro pipe_next
+| pipe_dispatch_prep 0, ctpr3
+| pipe_fetch 2
+| pipe_dispatch_load 3
+| --
+| pipe_scale 0, 1, 2, 3
+| --
+| pipe_extract 0, 1, 2, 3, 4
+| --
+| wait_load OP_L, 3
+| pipe_dispatch 0, ctpr3
+| --
+|.endmacro
+|
 |//-----------------------------------------------------------------------
 |// Instruction decode+dispatch.
 |.macro ins_NEXT             // AD = {D |A|OP}, ABC = {B|C|A|OP}, AC = {lo_D|A|OP}
@@ -7723,15 +7737,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_LOOP:
-        | // ins_A RA = base*8, RD = target*8 (loop extent)
+        | // ins_A RA_E = base*8, RD_E = target*8 (loop extent)
         | // Note: RA/RD is only used by trace recorder to determine scope/extent
         | // This opcode does NOT jump, it's only purpose is to detect a hot loop.
         | //Fall through. Assumes BC_ILOOP follows and ins_A is a no-op.
         break;
 
     case BC_ILOOP:
-        | // ins_A RA = base*8, RD = target*8 (loop extent)
-        | ins_next
+        | // ins_A RA_E = base*8, RD_E = target*8 (loop extent)
+        | pipe_next
         break;
 
     case BC_JLOOP:
