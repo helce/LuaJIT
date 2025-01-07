@@ -5920,19 +5920,23 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | pipe_scale 0, 1, 2, 3
         | addd      4, 0x0, LJ_TSTR, T1
+        | ldd       5, TMP0, -8, RC
+        | wait_load RB, 1
         | --
-        | ldd       3, TMP0, -8, RC
         | sard      4, RB, 0x2f, ITYPE
         | getfd     5, RB, (47 << 6), RB
         | --
         | cmpesb    3, ITYPE, LJ_TTAB, pred0
         | shld      4, T1, 0x2f, T1
+        | wait_pred pred, 0
+        | wait_load RC, 2
         | --
         | ldd       2, RB, TAB->node, T2, pred0
         | ldw       3, RB, TAB->hmask, TMP0, pred0 // RB = GCtab *, RC = GCstr *
         | ldw       5, RC, STR->sid, TMP1, pred0
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | wait_load TMP0, 1
         | --
         | andd      4, TMP0, TMP1, TMP1, pred0 // idx = str->sid & tab->hmask
         | ct        ctpr1, ~pred0
