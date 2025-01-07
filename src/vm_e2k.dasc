@@ -7739,32 +7739,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_JMP:
-        | todo
-        | // ins_AJ RA = unused, RD = target*8
-        | subd 0, PC, BCBIAS_J*4, PC
-        | shrd 3, RD, 0x1, CARG1
+        | // ins_AJ RA_E = unused, RD_E = target*8
+        | subd      0, PC, BCBIAS_J*4, PC
+        | shrd      1, RD_E, 0x1, T0
+        | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
         | --
-        | ldw 0, PC, CARG1, TMP0
-        | addd 1, PC, CARG1, PC
-        | ldb 2, PC, CARG1, TMP1
-        | nop 3
-        | --
-        | addd 1, PC, 0x4, PC
-        | shld 2, TMP1, 0x3, TMP1
-        | shrd 3, TMP0, 0xd, RD
-        | shrd 4, TMP0, 0x15, RB
-        | shrd 5, TMP0, 0x5, RA
-        | --
-        | ldd 2, TMP1, DISPATCH, TMP1
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
-        | nop 2
-        | --
-        | movtd 0, TMP1, ctpr1
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | --
-        | ct ctpr1
+        | addd      0, PC, T0, PC
+        | ct        ctpr1                   // vm_restart_pipeline
         | --
         break;
 
