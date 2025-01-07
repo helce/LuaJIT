@@ -5675,59 +5675,45 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_TDUP:
         | // ins_AND RA_E = dst*8, RD_E = table_const*8 (~)
-        | setwd     wsz = 0xc, nfx = 0x1, dbl = 0x0
-        | setbn     rsz = 0x3, rbs = 0x8, rcur = 0x0
-        | addd      0, RA_E, 0, RA
-        | addd      1, RD_E, 0, RD
+        | setwd_call
+        | ldd       0, DISPATCH, DISPATCH_GL(gc.total), T3
+        | addd      1, RA_E, 0, RA
+        | ldd       2, DISPATCH, DISPATCH_GL(gc.threshold), T4
+        | ldd       3, STACK, SAVE_L, RB
+        | addd      4, RD_E, 0, RD
         | --
-        | ldw 0, PC, 0x0, TMP0
-        | ldd 3, STACK, SAVE_L, RB
-        | disp ctpr2, >1
+        | disp      ctpr1, extern lj_gc_step_fixtop
         | --
-        | ldd 0, DISPATCH, DISPATCH_GL(gc.total), CARG3
-        | ldd 2, DISPATCH, DISPATCH_GL(gc.threshold), CARG4
-        | nop 1
+        | wait_load T3, 2
         | --
-        | disp ctpr1, extern lj_gc_step_fixtop
+        | cmpbdb    0, T3, T4, pred0
+        | std       2, STACK, SAVE_PC, PC
+        | addd      3, RB, 0x0, CARG1
+        | std       5, RB, L->base, BASE
+        | wait_pred_ct pred0, 0
         | --
-        | std 2, STACK, SAVE_PC, PC
-        | addd 3, RB, 0x0, CARG1
-        | std 5, RB, L->base, BASE
+        | call      ctpr1, wbs = 0x8, ~pred0 // lj_gc_step_fixtop(lua_State *L)
         | --
-        | cmpbdb 0, CARG3, CARG4, pred0
-        | nop 2
+        | disp      ctpr1, extern lj_tab_dup
         | --
-        | ct ctpr2, pred0
+        | subd      3, KBASE, RD, T3
+        | addd      4, RB, 0x0, CARG1
         | --
-        | call      ctpr1, wbs = 0x8        // lj_gc_step_fixtop(lua_State *L)
-        | --
-        | ldh 3, PC, PREV_PC_RD, RD
-        | nop 3
-        | --
-        | shld 3, RD, 0x3, RD
-        |1:
-        | disp ctpr1, extern lj_tab_dup
-        | --
-        | subd 3, KBASE, RD, CARG3
-        | addd 4, RB, 0x0, CARG1
-        | --
-        | ldd 3, CARG3, -8, CARG2
+        | ldd       3, T3, -8, CARG2
         | wait_load CARG2, 0
         | --
         | call      ctpr1, wbs = 0x8        // lj_tab_dup(lua_State *L, Table *kt)
         | --
-        | ldd 3, RB, L->base, BASE
-        | addd 4, 0x0, LJ_TTAB, ITYPE
-        | ldb 5, PC, PREV_PC_RA, CARG2
+        | ldd       3, RB, L->base, BASE
+        | addd      4, 0x0, LJ_TTAB, ITYPE
         | disp      ctpr3, ->vm_restart_pipeline // TODO: inline
-        | nop 2
         | --
-        | shld 3, CARG2, 0x3, CARG2
-        | shld 4, ITYPE, 0x2f, ITYPE
+        | shld      4, ITYPE, 0x2f, ITYPE
         | --
-        | ord 3, CRET1, ITYPE, CRET1
+        | ord       3, CRET1, ITYPE, CRET1
+        | wait_load BASE, 2
         | --
-        | std 5, BASE, CARG2, CRET1
+        | std       5, BASE, RA, CRET1
         | ct        ctpr3                   // vm_restart_pipeline
         | --
         break;
