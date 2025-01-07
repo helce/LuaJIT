@@ -6136,107 +6136,98 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TSETV:
-        | todo
-        | // ins_ABC RA = src*8, RB = table*8, RC = key*8
-        | ldwsm 0, PC, 0x0, CARG5
-        | ldbsm 2, PC, 0x0, CARG6
-        | ldd 3, BASE, RB, RB
-        | ldd 5, BASE, RC, RC
-        | disp ctpr1, ->vmeta_tsetv
-        | nop 2
+        | // ins_ABC RA_E = src*8, RB_E = table*8, RC_E = key*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_dispatch_load 2
+        | ldd       3, BASE, RB_E, RB
+        | ldd       5, BASE, RC_E, RC
+        | disp      ctpr1, ->vmeta_tsetv
         | --
-        | sard 3, RB, 0x2f, CARG1
-        | fdtoistr 4, RC, TMP0
-        | getfd 5, RB, (47 << 6), RB
-        | disp ctpr2, ->BC_TSETS_Z
+        | pipe_scale 0, 1, 2, 3
+        | pipe_fetch 5
+        | disp      ctpr2, ->BC_TSETS_Z
         | --
-        | cmpesb 3, CARG1, LJ_TTAB, pred0
-        | istofd 4, TMP0, TMP1
-        | sard 5, RC, 0x2f, ITYPE
-        | disp ctpr3, >1
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load RB, 2
         | --
-        | fcmpeqdb 3, RC, TMP1, pred2       // Integer key?  Convert number to int and back and compare.
-        | cmpbsb 4, ITYPE, LJ_TISNUM, pred1
-        | ldwsm 5, RB, TAB->asize, CARG2
-        | nop 1
+        | sard      3, RB, 0x2f, T1
+        | fdtoistr  4, RC, TMP0
+        | getfd     5, RB, (47 << 6), RB
+        | wait      TMP0, 0, 4
         | --
-        | lddsm 3, RB, TAB->array, CARG3
-        | cmpesb 4, ITYPE, LJ_TSTR, pred3
-        | lddsm 5, RB, TAB->metatable, TMP1
-        | nop 1
+        | cmpesb    3, T1, LJ_TTAB, pred0
+        | istofd    4, TMP0, TMP1
+        | sard      5, RC, 0x2f, ITYPE
+        | wait      TMP1, 0, 4
         | --
-        | shldsm 2, CARG6, 0x3, CARG6
-        | pass pred0, p0
-        | pass pred2, p1
-        | pass pred3, p2
-        | landp p0, p1, p4
-        | landp p4, p2, p5
-        | pass p5, pred0
+        | fcmpeqdb  3, RC, TMP1, pred2      // Integer key?  Convert number to int and back and compare.
+        | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
+        | ldwsm     5, RB, TAB->asize, T2
         | --
-        | lddsm 2, CARG6, DISPATCH, CARG6
-        | ct ctpr1, ~pred0
+        | lddsm     3, RB, TAB->array, T3
+        | cmpesb    4, ITYPE, LJ_TSTR, pred3
+        | lddsm     5, RB, TAB->metatable, TMP1
         | --
-        | getfd 3, RC, (47 << 6), RC, ~pred1
-        | ct ctpr2, ~pred1                  // String key?
-        | sxt 4, 0x2, TMP0, RC, pred2
-        | ldbsm 5, RB, TAB->marked, CARG1
+        | pass      pred0, p0
+        | pass      pred2, p1
+        | pass      pred3, p2
+        | landp     p0, p1, p4
+        | landp     p4, p2, p5
+        | pass      p5, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | cmpbsb 3, RC, CARG2, pred0
-        | shld 4, RC, 0x3, RC
-        | ldbsm 5, TMP1, TAB->nomm, CARG4
-        | disp ctpr2, >2
-        | nop 2
+        | ct        ctpr1, ~pred0           // vmeta_tsetv
         | --
-        | cmpedbsm 3, TMP1, 0x0, pred1
-        | cmpandedbsm 4, CARG4, 1<<MM_newindex, pred2 // 'no __newindex' flag NOT set: check.
-        | addd 5, RC, CARG3, RC, pred0
-        | ct ctpr1, ~pred0
+        | getfd     3, RC, (47 << 6), RC, ~pred1
+        | sxt       4, 0x2, TMP0, RC, pred2
+        | ldbsm     5, RB, TAB->marked, T1
+        | ct        ctpr2, ~pred1           // BC_TSETS_Z(RB, RC), String key?
         | --
-        | ldw 3, RC, 0x0, TMP0
-        | nop 2
+        | cmpbsb    3, RC, T2, pred0
+        | shld      4, RC, 0x3, RC
+        | ldbsm     5, TMP1, TAB->nomm, T4
+        | wait_pred_ct pred0, 0
         | --
-        | cmpesb 3, TMP0, LJ_TNIL, pred0    // Previous value is nil?
-        | nop 1
+        | cmpedbsm  3, TMP1, 0x0, pred1
+        | cmpandedbsm 4, T4, 1<<MM_newindex, pred2 // 'no __newindex' flag NOT set: check.
+        | addd      5, RC, T3, RC, pred0
+        | ct        ctpr1, ~pred0           // vmeta_tsetv
         | --
-        | pass pred0, p0
-        | pass pred1, p1
-        | pass pred2, p2
-        | landp p0, ~p1, p4
-        | landp p4, p2, p5
-        | pass p5, pred0
+        | ldw       3, RC, 0x0, TMP0
+        | lddsm     5, BASE, RA_E, T0
+        | wait_load TMP0, 0
         | --
-        | cmpandedbsm 3, CARG1, LJ_GC_BLACK, pred1 // isblack(table)
-        | ct ctpr1, pred0
+        | cmpesb    4, TMP0, LJ_TNIL, pred0 // Previous value is nil?
         | --
-        | movtd 0, CARG6, ctpr1
-        | ct ctpr2, ~pred1
-        |1:                                 // Set array slot
-        | addd 1, PC, 0x4, PC
-        | ldd 3, BASE, RA, CARG1
-        | shrd 4, CARG5, 0xd, RD
-        | shrd 5, CARG5, 0x5, RA
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | pass      pred2, p2
+        | landp     p0, ~p1, p4
+        | landp     p4, p2, p5
+        | pass      p5, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
+        | cmpandedbsm 3, T1, LJ_GC_BLACK, pred1 // isblack(table)
+        | ct        ctpr1, pred0            // vmeta_tsetv
         | --
-        | addd 3, RC, 0x0, CARG2
-        | shrd 4, CARG5, 0x15, RB
-        | andd 5, RD, 0x7f8, RC
+        | wait_pred_ct pred1, 1
         | --
-        | andd 3, RB, 0x7f8, RB
-        | std 5, CARG2, 0x0, CARG1
-        | ct ctpr1
-        |2: // Possible table write barrier for the value. Skip valiswhite check.
-        | ldd 0, DISPATCH, DISPATCH_GL(gc.grayagain), TMP1
-        | ldb 3, RB, TAB->marked, TMP0
-        | nop 2
+        | std       5, RC, 0x0, T0, pred1   // Set array slot
+        | pipe_dispatch_if 0, ctpr3, pred1
         | --
-        | std 2, DISPATCH, DISPATCH_GL(gc.grayagain), RB
-        | andd 3, TMP0, ~LJ_GC_BLACK, TMP0  // black2gray(tab)
-        | std 5, RB, TAB->gclist, TMP1
+        | // Possible table write barrier for the value. Skip valiswhite check.
+        | ldd       0, DISPATCH, DISPATCH_GL(gc.grayagain), TMP1
+        | ldb       3, RB, TAB->marked, TMP0
+        | wait_load TMP0, 0
         | --
-        | stb 5, RB, TAB->marked, TMP0
-        | ct ctpr3
+        | std       2, DISPATCH, DISPATCH_GL(gc.grayagain), RB
+        | andd      3, TMP0, ~LJ_GC_BLACK, TMP0  // black2gray(tab)
+        | std       5, RB, TAB->gclist, TMP1
+        | --
+        | std       2, RC, 0x0, T0, pred1   // Set array slot
+        | stb       5, RB, TAB->marked, TMP0
+        | --
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
