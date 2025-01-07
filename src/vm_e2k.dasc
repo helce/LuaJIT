@@ -5346,80 +5346,76 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_USETV:
-        | todo
 #define TV2MARKOFS \
  ((int32_t)offsetof(GCupval, marked)-(int32_t)offsetof(GCupval, tv))
-        | // ins_AD RA = upvalue*8, RD = src*8
-        | ldw 0, PC, 0x0, TMP0
-        | addd 1, PC, 0x4, PC
-        | ldb 2, PC, 0x0, TMP1
-        | ldd 3, BASE, -16, RB
-        | nop 2
+        | // ins_AD RA_E = upvalue*8, RD_E = src*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | ldd       5, BASE, -16, RB
         | --
-        | shld 2, TMP1, 0x3, TMP1
-        | getfd 3, RB, (47 << 6), RB
+        | pipe_scale 0, 1, 2, 3
+        | ldd       5, BASE, RD_E, T5
         | --
-        | ldd 2, TMP1, DISPATCH, TMP1
-        | ldd 3, BASE, RD, CARG5
-        | addd 4, RB, RA, CARG2
-        | shrd 5, TMP0, 0xd, RD
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load RB, 2
         | --
-        | ldd 3, CARG2, offsetof(GCfuncL, uvptr), CARG6
-        | shrd 4, TMP0, 0x15, RB
-        | shrd 5, TMP0, 0x5, RA
-        | nop 2
+        | getfd     3, RB, (47 << 6), RB
         | --
-        | ldb 3, CARG6, UPVAL->closed, CARG2
-        | andd 4, RD, 0x7fff8, RD
-        | ldd 5, CARG6, UPVAL->v, CARG6
-        | nop 2
+        | addd      4, RB, RA_E, T2
         | --
-        | movtd 0, TMP1, ctpr3
-        | ldbsm 3, CARG6, TV2MARKOFS, CARG1
-        | cmpedb 4, CARG2, 0x0, pred0
-        | andd 5, RA, 0x7f8, RA
-        | nop 2
+        | ldd       3, T2, offsetof(GCfuncL, uvptr), T6
+        | wait_load T6, 0
         | --
-        | cmpandedbsm 3, CARG1, LJ_GC_BLACK, pred1
-        | std 5, CARG6, 0x0, CARG5
-        | nop 1
+        | ldb       3, T6, UPVAL->closed, T2
+        | ldd       5, T6, UPVAL->v, T6
+        | wait_load T2, 0
         | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | pass pred0, p0
-        | pass pred1, p1
-        | landp ~p0, ~p1, p4
-        | pass p4, pred0
+        | ldbsm     3, T6, TV2MARKOFS, T1
+        | cmpedb    4, T2, 0x0, pred0
+        | wait_load T1, 0
         | --
-        | addd 2, DISPATCH, GG_DISP2G, CARG1
-        | sard 3, CARG5, 0x2f, CARG4
-        | getfd 4, CARG5, (47 << 6), CARG5
-        | addd 5, CARG6, 0x0, CARG2
-        | ct ctpr3, ~pred0                  // isblack(uv)?
+        | cmpandedbsm 3, T1, LJ_GC_BLACK, pred1
+        | std       5, T6, 0x0, T5
         | --
-        | ldbsm 3, CARG5, GCOBJ->gch.marked, CARG3
-        | subs 4, CARG4, LJ_TISGCV, CARG4
-        | nop 1
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | landp     ~p0, ~p1, p4
+        | pass      p4, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | disp ctpr1, extern lj_gc_barrieruv // (global_State *g, TValue *tv)
+        | sard      3, T5, 0x2f, T4
+        | getfd     4, T5, (47 << 6), T5
+        | pipe_dispatch_if 0, ctpr3, ~pred0 // isblack(uv)?
         | --
-        | cmpbesb 3, CARG4, LJ_TNUMX - LJ_TISGCV, pred0
-        | cmpandedbsm 4, CARG3, LJ_GC_WHITES, pred1
-        | nop 1
+        | ldbsm     3, T5, GCOBJ->gch.marked, T3
+        | subs      4, T4, LJ_TISGCV, T4
         | --
-        | pass pred0, p0                    // tvisgcv(v)
-        | pass pred1, p1                    // iswhite(v)
-        | landp ~p0, ~p1, p4
-        | pass p4, pred0
+        | disp      ctpr1, extern lj_gc_barrieruv
         | --
-        | ct ctpr3, ~pred0
+        | wait_load T3, 2
+        | --
+        | cmpbesb   3, T4, LJ_TNUMX - LJ_TISGCV, pred0
+        | cmpandedbsm 4, T3, LJ_GC_WHITES, pred1
+        | --
+        | pass      pred0, p0               // tvisgcv(v)
+        | pass      pred1, p1               // iswhite(v)
+        | landp     ~p0, ~p1, p4
+        | pass      p4, pred0
+        | wait_pred_ct pred0, 0
+        | --
+        | pipe_dispatch_if 0, ctpr3, ~pred0
+        | --
+        | setwd_call
         | --
         | // Crossed a write barrier. Move the barrier forward.
-        | call ctpr1, wbs = 0x8
+        | addd      0, DISPATCH, GG_DISP2G, CARG1
+        | addd      1, T6, 0x0, CARG2
+        | call      ctpr1, wbs = 0x8        // lj_gc_barrieruv(global_State *g, TValue *tv)
         | --
-        | movtd 0, TMP1, ctpr3
+        | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline/optimize
         | --
-        | ct ctpr3
+        | ct        ctpr1                   // vm_restart_pipeline
         | --
         break;
 #undef TV2MARKOFS
