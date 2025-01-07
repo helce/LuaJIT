@@ -7364,9 +7364,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | fcmpltdb  4, RB, 0x0, pred2
         | ldd       5, RA, 0x8, TMP1
         | wait_load TMP1, 0
+        | wait      TMP0, 0, 4
         | --
         | fcmpltdb  3, TMP1, TMP0, pred0
         | fcmpltdb  4, TMP0, TMP1, pred1    // Invert comparison if step is negative.
+        | wait      pred0, 0, 3
         | --
         | shrd      0, RD_E, 0x1, T2
         | subd      1, PC, BCBIAS_J*4, T3
