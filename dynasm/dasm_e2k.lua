@@ -521,6 +521,7 @@ local map_op = {
   ct_1 = "CT",
   -- C.17.4 Call operations
   call_2 = "CALL_0x5",
+  call_3 = "CALL_0x5",
   -- C.??.? Ibranch operations
   ibranch_1 = "IBRANCH",
   ibranch_2 = "IBRANCH",
@@ -1031,10 +1032,10 @@ local function generate_ct_oper(opnd1, opnd2)
   generate_ct_oper_raw(ctpr.n, opnd2)
 end
 
-local function generate_call_oper(opc, opnd1, opnd2)
+local function generate_call_oper(opc, opnd1, opnd2, opnd3)
   local code = 0
   if wide_instr["CS1"] ~= nil then werror("CS1 already busy") end
-  generate_ct_oper(opnd1)
+  generate_ct_oper(opnd1, opnd3)
   local wbs = tonumber(sub(opnd2, 7))
   if wbs == nil then werror("incorrect wbs value") end
   -- 32Bit opc(4), unused(21), wbs(7)
@@ -1879,7 +1880,7 @@ map_op[".template__"] = function(params, template)
     generate_ct_oper(params[1], params[2])
   elseif op_type == "CALL" then
     local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
-    generate_call_oper(opc, params[1], params[2])
+    generate_call_oper(opc, params[1], params[2], params[3])
   elseif op_type == "IBRANCH" then
     generate_ibranch_oper(params[1], params[2])
   elseif op_type == "SETWD" then
