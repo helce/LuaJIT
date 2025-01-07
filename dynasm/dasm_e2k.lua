@@ -1908,7 +1908,7 @@ map_op[".template__"] = function(params, template)
                        params[6], params[7], params[8], params[9], params[10])
   elseif op_type == "GEN" then
     -- User requested to generate a bundle.
-    wide_gen(true)
+    wide_gen(false) -- relaxed wide gen so it can be used with empty wait macros
     if not wide_mode then
       wide_mode = true
       werror("Bundle end `--` cannot be used if wide mode is disabled")

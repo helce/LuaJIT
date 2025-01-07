@@ -189,26 +189,28 @@
 | wait_impl n + 0x28, latency
 |.endmacro
 |
-|.define LOAD_LATENCY, 3
+|.define LATENCY_LOAD, 3                    // v4
+|.define LATENCY_PRED, 1 + 1                // v4, 1 cycle extra delay
+|.define LATENCY_PRED_CT, 1 + 2             // v4, 2 cycles extra delay
 |
 |// Insert nops until load result is ready to use.
 |.macro wait_load_extra, reg, done, extra
-| wait reg, done, LOAD_LATENCY + extra
+| wait reg, done, LATENCY_LOAD + extra
 |.endmacro
 |
 |// Insert nops until load result is ready to use.
 |.macro wait_load, reg, done
-| wait reg, done, LOAD_LATENCY
+| wait reg, done, LATENCY_LOAD
 |.endmacro
 |
 |// Insert nops until predicate register is ready to use for conditional execution.
 |.macro wait_pred, reg, done
-| wait reg, done, 1 + 1     // 1 cycle extra delay
+| wait reg, done, LATENCY_PRED
 |.endmacro
 |
 |// Insert nops until predicate register is ready to use by ct instruction.
 |.macro wait_pred_ct, reg, done
-| wait reg, done, 1 + 2     // 2 cycles extra delay
+| wait reg, done, LATENCY_PRED_CT
 |.endmacro
 |
 |//-----------------------------------------------------------------------
@@ -4920,97 +4922,89 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_LEN:
-        | todo
-        | // ins_AD RA = dst*8, RD = src*8
-        | ldd 3, BASE, RD, RD
-        | ldwsm 0, PC, 0x0, TMP0
-        | ldbsm 2, PC, 0x0, TMP1
-        | disp ctpr1, >2
+        | // ins_AD RA_E = dst*8, RD_E = src*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | ldd       5, BASE, RD_E, RD
+        | disp      ctpr1, >2
         | --
-        | disp ctpr2, ->vmeta_len
-        | nop 1
+        | pipe_scale 0, 1, 2, 3
+        | disp      ctpr2, ->vmeta_len
         | --
-        | shldsm 2, TMP1, 0x3, TMP1
-        | sard 3, RD, 0x2f, ITYPE
-        | getfd 4, RD, (47 << 6), RD
-        | addd 5, RA, 0x0, CARG4
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load RD, 2
         | --
-        | ldwsm 0, RD, STR->len, CARG2
-        | lddsm 2, TMP1, DISPATCH, TMP1
-        | cmpesb 3, ITYPE, LJ_TSTR, pred0
-        | cmpedb 4, ITYPE, LJ_TTAB, pred1
-        | addd 5, RD, 0x0, CARG1
-        | nop 1
+        | sard      3, RD, 0x2f, ITYPE
+        | getfd     4, RD, (47 << 6), RD
         | --
-        | pass pred0, p0
-        | pass pred1, p1
-        | landp ~p0, ~p1, p4
-        | pass p4, pred2
+        | ldwsm     0, RD, STR->len, T2
+        | cmpesb    3, ITYPE, LJ_TSTR, pred0
+        | cmpedb    4, ITYPE, LJ_TTAB, pred1
         | --
-        | ct ctpr2, pred2
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | landp     ~p0, ~p1, p4
+        | pass      p4, pred2
+        | wait_pred_ct pred2, 0
         | --
-        | istofd 3, CARG2, CARG3
-        | ct ctpr1, ~pred0
-        |1:
-        | movtd 0, TMP1, ctpr1
-        | addd 1, PC, 0x4, PC
-        | shrd 3, TMP0, 0xd, RD
-        | shrd 4, TMP0, 0x15, RB
-        | shrd 5, TMP0, 0x5, RA
+        | ct        ctpr2, pred2            // vmeta_len(TODO)
         | --
-        | andd 3, RD, 0x7fff8, RD
-        | andd 4, RA, 0x7f8, RA
-        | std 5, BASE, CARG4, CARG3
+        | wait_load T2, 1 + LATENCY_PRED_CT + 1
         | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | ct ctpr1
+        | istofd    3, T2, T3
+        | ct        ctpr1, ~pred0           // >2
+        | --
+        | wait      T3, 1, 4
+        | --
+        | std       5, BASE, RA_E, T3
+        | pipe_dispatch 0, ctpr3
+        | --
         |2:
 #if LJ_52
-        | disp ctpr1, >4
-        | ldd 3, RD, TAB->metatable, RB
-        | nop 2
+        | disp      ctpr1, >4
+        | ldd       3, RD, TAB->metatable, RB
+        | wait_load RB, 0
         | --
-        | cmpedb 3, RB, 0x0, pred0
-        | nop 2
+        | cmpedb    3, RB, 0x0, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | ct ctpr1, ~pred0
+        | ct        ctpr1, ~pred0           // >4
         |3:
 #endif
         |->BC_LEN_Z:
-        | disp ctpr1, extern lj_tab_len     // (GCtab *t)
-        | nop 4
+        | // RD = GCtab *t
+        | disp      ctpr1, extern lj_tab_len
         | --
-        | call ctpr1, wbs = 0x8
+        | setwd_call
+        | --
+        | addd      5, RD, 0x0, CARG1
+        | --
+        | call      ctpr1, wbs = 0x8        // lj_tab_len(GCtab *t)
         | --
         | // Length of table returned.
-        | ldw 0, PC, 0x0, TMP0
-        | istofd 1, CRET1, CARG3
-        | ldb 2, PC, 0x0, TMP1
-        | disp ctpr2, <1
-        | nop 2
+        | ldb       0, PC, PREV_PC_RA, T4   // TODO: reuse RA_E/S0
+        | istofd    1, CRET1, T3
+        | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
+        | wait_load T4, 0
         | --
-        | ldb 0, PC, PREV_PC_RA, CARG4
-        | shld 1, TMP1, 0x3, TMP1
+        | shld      3, T4, 0x3, T4
         | --
-        | ldd 2, TMP1, DISPATCH, TMP1
-        | nop 1
-        | --
-        | shld 3, CARG4, 0x3, CARG4
-        | ct ctpr2
+        | std       5, BASE, T4, T3
+        | ct        ctpr1                   // vm_restart_pipeline
         | --
 #if LJ_52
         |4: // Check for __len.
-        | ldb 3, RB, TAB->nomm, CARG5
-        | disp ctpr1, <3
-        | nop 2
+        | ldb       3, RB, TAB->nomm, T5
+        | disp      ctpr1, <3
+        | wait_load T5, 0
         | --
-        | cmpandedb 0, CARG5, 1<<MM_len, pred0
-        | nop 2
+        | cmpandedb 0, T5, 1<<MM_len, pred0
+        | wait_pred_ct pred0, 0
         | --
-        | ct ctpr1, ~pred0
+        | ct        ctpr1, ~pred0           // <3
         | --
-        | ct ctpr2                          // 'no __len' flag NOT set: check.
+        | ct        ctpr2                   // vmeta_len(TODO), 'no __len' flag NOT set: check.
         | --
 #endif
         break;
@@ -6501,7 +6495,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load T3, 0
         | --
         | ldbsm     5, T3, TAB->nomm, T4
-        | wait      TMP0, LOAD_LATENCY, 4 + 2 // fp->int cross domain transfer
+        | wait      TMP0, LATENCY_LOAD, 4 + 2 // fp->int cross domain transfer
         | --
         | addd      3, T2, TMP0, TMP0
         | --
