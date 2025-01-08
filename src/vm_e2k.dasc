@@ -522,6 +522,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-----------------------------------------------------------------------
     |
     |->vm_returnp:
+    | // RA, RD
     | disp ctpr1, ->cont_dispatch
     | --
     | cmpandesb 0, PC, FRAME_P, pred0
@@ -582,7 +583,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldw 0, STACK, SAVE_NRES, RA, pred0
     | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0, pred0
     | subd 3, TMP1, BASE, PC, pred0
-    | ct        ctpr1, ~pred0               // vm_returnp(TODO)
+    | ct        ctpr1, ~pred0               // vm_returnp(RA)
     | --
     | return ctpr3
     | --
@@ -901,7 +902,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | addd 1, 0x0, ~LJ_VMST_INTERP, TMP0
     | std 2, DISPATCH, DISPATCH_GL(cur_L), RB
-    | disp ctpr1, ->vm_return
+    | disp      ctpr1, ->vm_return
     | --
     | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0
     | stb 5, RB, L->status, RD
@@ -919,7 +920,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ct ctpr2, pred0
     | --
-    | ct ctpr1
+    | ct        ctpr1                       // vm_return(RA, RD)
     | --
     |
     |->vm_pcall:                            // Setup protected C frame and enter VM.
@@ -1135,7 +1136,6 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Continuation dispatch ----------------------------------------------
     |
     |->cont_dispatch:
-    | todo
     | // BASE = meta base, RA = resultofs, RD = (nresults+1)*8 (also in MULTRES)
     | andd 2, PC, raw(0xfff8), PC
     | addd 3, BASE, RA, RA
@@ -2903,7 +2903,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ct ctpr1, pred0
     | --
-    | ct ctpr2
+    | ct        ctpr2                       // vm_return(RA, RD)
     |7: // Coroutine returned with error (at co->top-1).
     |.if resume
     | ldd 0, PC, L->top, RA
@@ -3073,7 +3073,7 @@ static void build_subroutines(BuildCtx *ctx)
     | disp      ctpr3, >1
     | --
     | cmpbedbsm 3, RB, RD, pred1            // More results expected?
-    | ct        ctpr1, ~pred0               // vm_return, Non-standard return case.
+    | ct        ctpr1, ~pred0               // vm_return(RA, RD), Non-standard return case.
     | wait_pred_ct pred1, 0
     | --
     | shld      3, RA, 0x3, T5
@@ -7041,8 +7041,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_RET:
         | // ins_AD RA_E = results*8, RD_E = (nresults+1)*8
-        | addd      0, RA_E, 0, RA          // TODO: remove me
-        | addd      1, RD_E, 0, RD          // TODO: remove me
+        | addd      0, RA_E, 0, RA
+        | addd      1, RD_E, 0, RD
         |1:
         | stw       2, STACK, MULTRES, RD_E // Save (nresults+1)*8.
         | ldd       5, BASE, -8, PC
@@ -7061,7 +7061,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p4, pred1
         | wait_pred_ct pred1, 0
         | --
-        | ct        ctpr3, pred1            // vm_return(TODO)
+        | ct        ctpr3, pred1            // vm_return(RA, RD)
         | --
         | subd      3, BASE, RB, BASE, ~pred0 // Return from vararg function: relocate BASE down and RA up.
         | addd      4, RA, RB, RA, ~pred0
@@ -7126,8 +7126,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_RET0: case BC_RET1:
         | // ins_AD RA = results*8, RD = (nresults+1)*8
-        | addd      3, RA_E, 0, RA          // TODO: remove me
-        | addd      4, RD_E, 0, RD          // TODO: remove me
+        | addd      3, RA_E, 0, RA
+        | addd      4, RD_E, 0, RD
         | --
         |1:
         | ldd 0, BASE, -8, PC
@@ -7148,7 +7148,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | landp ~p0, ~p1, p4
         | pass p4, pred1
         | --
-        | ct        ctpr3, pred1            // vm_return(TODO)
+        | ct        ctpr3, pred1            // vm_return(RA, RD)
         | --
         |// XXX: DO NOT USE IF INSIDE A BUNDLE!!!
         if (op == BC_RET1) {
