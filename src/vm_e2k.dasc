@@ -6615,12 +6615,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_CALLMT:
-        | todo
-        | // ins_AD RA = base*8, RD = extra_nargs*8
-        | ldw 0, STACK, MULTRES, TMP0
-        | nop 2
+        | // ins_AD RA_E = base*8, RD_E = extra_nargs*8
+        | ldw       0, STACK, MULTRES, TMP0
+        | wait_load TMP0, 0
         | --
-        | addd 3, RD, TMP0, RD
+        | addd      3, RD_E, TMP0, RD_E
         | --
         | // Fall through. Assumes BC_CALLT follows and ins AD is a no-op.
         break;
