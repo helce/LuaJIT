@@ -2009,102 +2009,105 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Base library: getters and setters ---------------------------------
     |
     |->ff_getmetatable:
-    | todo
-    | ldd 3, BASE, 0x0, RB
-    | disp ctpr1, ->fff_fallback
+    | // RD_E
+    | ldd       3, BASE, 0x0, RB
+    | addd      4, RD_E, 0, RD
+    | disp      ctpr1, ->fff_fallback
     | --
-    | ldd 0, BASE, -8, PC
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | disp ctpr2, >1
-    | nop 1
+    | ldd       0, BASE, -8, PC
+    | cmpbdb    3, RD, (1+1)*8, pred0
+    | disp      ctpr2, >1
+    | wait_load RB, 1
     | --
-    | sard 3, RB, 0x2f, ITYPE
-    | getfd 4, RB, (47 << 6), RB
+    | sard      3, RB, 0x2f, ITYPE
+    | getfd     4, RB, (47 << 6), RB
     | --
-    | cmpesb 3, ITYPE, LJ_TTAB, pred1
-    | cmpesb 4, ITYPE, LJ_TUDATA, pred2
-    | ct ctpr1, pred0
+    | cmpesb    3, ITYPE, LJ_TTAB, pred1
+    | cmpesb    4, ITYPE, LJ_TUDATA, pred2
+    | ct        ctpr1, pred0                // fff_fallback(RD)
     | --
     | // Field metatable must be at same offset for GCtab and GCudata!
-    | lddsm 3, RB, TAB->metatable, RB
-    | cmpbesb 4, ITYPE, LJ_TISNUM, pred3
-    | disp ctpr1, ->fff_res
-    | nop 1
+    | lddsm     3, RB, TAB->metatable, RB
+    | cmpbesb   4, ITYPE, LJ_TISNUM, pred3
+    | disp      ctpr1, ->fff_res
     | --
-    | addd 3, 0x0, LJ_TISNUM, ITYPE, pred3
-    | addd 4, 0x0, LJ_TTAB, RC
-    | pass pred1, p0
-    | pass pred2, p1
-    | landp ~p0, ~p1, p4
-    | pass p4, pred0
+    | addd      3, 0x0, LJ_TISNUM, ITYPE, pred3
+    | addd      4, 0x0, LJ_TTAB, RC
+    | pass      pred1, p0
+    | pass      pred2, p1
+    | landp     ~p0, ~p1, p4
+    | pass      p4, pred0
     | --
-    | shld 3, RC, 0x2f, RC
-    | xord 4, ITYPE, -1, ITYPE
-    | ct ctpr2, ~pred0
+    | shld      3, RC, 0x2f, RC
+    | xord      4, ITYPE, -1, ITYPE
+    | ct        ctpr2, ~pred0               // >1
     | --
-    | shld 0, ITYPE, 0x3, TMP0
+    | shld      0, ITYPE, 0x3, TMP0
     | --
-    | addd 0, TMP0, DISPATCH_GL(gcroot[GCROOT_BASEMT]), TMP0
+    | addd      0, TMP0, DISPATCH_GL(gcroot[GCROOT_BASEMT]), TMP0
     | --
-    | ldd 0, DISPATCH, TMP0, RB
-    | nop 2
+    | ldd       0, DISPATCH, TMP0, RB
+    | wait_load RB, 0
+    | --
     |1:
-    | lddsm 0, DISPATCH, DISPATCH_GL(gcroot)+8*(GCROOT_MMNAME+MM_metatable), TMP1
-    | cmpedb 3, RB, 0x0, pred0
-    | addd 4, 0x0, LJ_TNIL, TMP0
-    | ord 5, RC, RB, RC
+    | lddsm     0, DISPATCH, DISPATCH_GL(gcroot)+8*(GCROOT_MMNAME+MM_metatable), TMP1
+    | cmpedb    3, RB, 0x0, pred0
+    | addd      4, 0x0, LJ_TNIL, TMP0
+    | ord       5, RC, RB, RC
     | --
-    | ldwsm 3, RB, TAB->hmask, RA
-    | lddsm 5, RB, TAB->node, CARG1
+    | ldwsm     3, RB, TAB->hmask, RA
+    | lddsm     5, RB, TAB->node, T1
     | --
-    | addd 0, 0x0, LJ_TSTR, ITYPE
-    | std 5, BASE, -16, RC, ~pred0   // Store metatable as default result.
+    | addd      0, 0x0, LJ_TSTR, ITYPE
+    | std       5, BASE, -16, RC, ~pred0   // Store metatable as default result.
     | --
-    | shld 0, ITYPE, 0x2f, ITYPE
-    | addd 4, 0x0, (1+1)*8, RD
-    | std 5, BASE, -16, TMP0, pred0
-    | ct ctpr1, pred0
+    | shld      0, ITYPE, 0x2f, ITYPE
+    | addd      4, 0x0, (1+1)*8, RD
+    | std       5, BASE, -16, TMP0, pred0
+    | ct        ctpr1, pred0                // fff_res(RD)
     | --
-    | ldw 0, TMP1, STR->sid, TMP0
-    | nop 2
+    | ldw       0, TMP1, STR->sid, TMP0
+    | wait_load TMP0, 0
     | --
-    | andd 0, RA, TMP0, RA
-    | ord 1, TMP1, ITYPE, TMP1
-    | disp ctpr2, >3
+    | andd      0, RA, TMP0, RA
+    | ord       1, TMP1, ITYPE, TMP1
+    | disp      ctpr2, >3
     | --
-    | smulx 0, RA, #NODE, RA
-    | nop 5
+    | smulx     0, RA, #NODE, RA
+    | wait      RA, 0, 4 + 2                // extra fp->int penalty
     | --
-    | addd 0, RA, CARG1, RA
+    | addd      0, RA, T1, RA
+    | --
     |2: // Rearranged logic, because we expect _not_ to find the key.
-    | ldd 0, RA, NODE->key, TMP0
-    | disp ctpr3, <2
-    | nop 2
+    | ldd       0, RA, NODE->key, TMP0
+    | disp      ctpr3, <2
+    | wait_load TMP0, 0
     | --
-    | cmpedb 0, TMP0, TMP1, pred0
-    | nop 2
+    | cmpedb    0, TMP0, TMP1, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ldd 0, RA, NODE->next, RA, ~pred0
-    | ct ctpr2, pred0
-    | nop 2
+    | ldd       0, RA, NODE->next, RA, ~pred0
+    | ct        ctpr2, pred0                // >3
     | --
-    | cmpedb 0, RA, 0x0, pred0
-    | nop 2
+    | wait_load RA, 1
     | --
-    | ct ctpr3, ~pred0
+    | cmpedb    0, RA, 0x0, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | addd 3, 0x0, (1+1)*8, RD
-    | ct ctpr1                              // Not found, keep default result.
+    | ct        ctpr3, ~pred0               // <2
+    | --
+    | addd      3, 0x0, (1+1)*8, RD
+    | ct        ctpr1                       // fff_res(RD), Not found, keep default result.
     |3:
-    | ldd 0, RA, NODE->val, RB
-    | addd 3, 0x0, (1+1)*8, RD
-    | nop 2
+    | ldd       0, RA, NODE->val, RB
+    | addd      3, 0x0, (1+1)*8, RD
+    | wait_load RB, 0
     | --
-    | cmpedb 0, RB, LJ_TNIL, pred0
-    | nop 1
+    | cmpedb    0, RB, LJ_TNIL, pred0
+    | wait_pred pred0, 0
     | --
-    | std 5, BASE, -16, RB, ~pred0   // Return value of mt.__metatable.
-    | ct ctpr1
+    | std       5, BASE, -16, RB, ~pred0    // Return value of mt.__metatable.
+    | ct        ctpr1                       // fff_res(RD)
     | --
     |
     |->ff_setmetatable:
