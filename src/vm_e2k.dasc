@@ -2986,33 +2986,34 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Math library -------------------------------------------------------
     |
     |->ff_math_abs:
-    | todo
-    | ldd 3, BASE, 0x0, RB
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E = (nargs+1)*8
+    | ldd       3, BASE, 0x0, RB
+    | disp      ctpr1, ->fff_fallback
+    | wait_load RB, 0
     | --
-    | sard 3, RB, 0x2f, ITYPE
-    | shld 4, RB, 0x1, RB
+    | addd      0, RD_E, 0, RD
+    | sard      3, RB, 0x2f, ITYPE
+    | shld      4, RB, 0x1, RB
     | --
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | cmpbsb 4, ITYPE, LJ_TISNUM, pred1
-    | shrd 5, RB, 0x1, RB
-    | nop 1
+    | cmpbdb    3, RD_E, (1+1)*8, pred0
+    | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
+    | shrd      5, RB, 0x1, RB
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr1, ~pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
-    | ldd 0, BASE, -8, PC
-    | disp ctpr1, ->fff_res
-    | nop 4
+    | ldd       0, BASE, -8, PC
+    | disp      ctpr1, ->fff_res
+    | wait_load PC, 0
     | --
-    | addd 3, 0x0, (1+1)*8, RD
-    | std 5, BASE, -16, RB
-    | ct ctpr1
+    | addd      3, 0x0, (1+1)*8, RD
+    | std       5, BASE, -16, RB
+    | ct        ctpr1                       // fff_res(RD)
     | --
     |
     |->ff_math_sqrt:
