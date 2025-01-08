@@ -1135,6 +1135,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Continuation dispatch ----------------------------------------------
     |
     |->cont_dispatch:
+    | todo
     | // BASE = meta base, RA = resultofs, RD = (nresults+1)*8 (also in MULTRES)
     | andd 2, PC, raw(0xfff8), PC
     | addd 3, BASE, RA, RA
@@ -1965,6 +1966,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_type:
+    | todo
     | ldd 3, BASE, 0x0, RC
     | adds 4, 0x0, LJ_TISNUM, RB
     | disp ctpr1, ->fff_fallback
@@ -2006,6 +2008,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Base library: getters and setters ---------------------------------
     |
     |->ff_getmetatable:
+    | todo
     | ldd 3, BASE, 0x0, RB
     | disp ctpr1, ->fff_fallback
     | --
@@ -2104,6 +2107,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_setmetatable:
+    | todo
     | ldd 3, BASE, 0x0, RB
     | disp ctpr1, ->fff_fallback
     | --
@@ -2162,6 +2166,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_rawget:
+    | todo
     | ldd 2, STACK, SAVE_L, CARG1
     | ldd 3, BASE, 0x0, CARG2
     | disp ctpr2, ->fff_fallback
@@ -2200,6 +2205,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Base library: conversions ------------------------------------------
     |
     |->ff_tonumber:
+    | todo
     | // Only handles the number case inline (without a base argument).
     | ldd 3, BASE, 0x0, RB
     | disp ctpr1, ->fff_fallback
@@ -2678,6 +2684,7 @@ static void build_subroutines(BuildCtx *ctx)
     |.macro coroutine_resume_wrap, resume
     |.if resume
     |->ff_coroutine_resume:
+    | todo
     | ldd 3, BASE, -8, PC
     | ldd 5, BASE, 0x0, RB
     | disp ctpr1, ->fff_fallback
@@ -2700,6 +2707,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |.else
     |->ff_coroutine_wrap_aux:
+    | todo
     | ldd 3, BASE, -16, RB
     | ldd 5, BASE, -8, PC
     | nop 2
@@ -2947,6 +2955,7 @@ static void build_subroutines(BuildCtx *ctx)
     | coroutine_resume_wrap 0        // coroutine.wrap
     |
     |->ff_coroutine_yield:
+    | todo
     | ldd 0, STACK, SAVE_L, RB
     | disp ctpr1, ->fff_fallback
     | nop 2
@@ -2977,6 +2986,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Math library -------------------------------------------------------
     |
     |->ff_math_abs:
+    | todo
     | ldd 3, BASE, 0x0, RB
     | disp ctpr1, ->fff_fallback
     | nop 2
@@ -3079,6 +3089,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.macro math_round, func
     |->ff_math_ .. func:
+    | todo
     | ldd 3, BASE, 0x0, CARG1
     | disp ctpr2, ->fff_fallback
     | nop 1
@@ -3106,6 +3117,7 @@ static void build_subroutines(BuildCtx *ctx)
     | math_round ceil
     |
     |->ff_math_log:
+    | todo
     | ldd 3, BASE, 0x0, CARG1
     | disp ctpr2, ->fff_fallback
     | nop 1
@@ -3136,6 +3148,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.macro math_extern, func
     |->ff_math_ .. func:
+    | todo
     | ldd 3, BASE, 0x0, CARG1
     | disp ctpr2, ->fff_fallback
     | nop 1
@@ -3167,6 +3180,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.macro math_extern2, func
     |->ff_math_ .. func:
+    | todo
     | ldd 3, BASE, 0x0, CARG1
     | addd 4, 0x0, 0x2f, TMP0
     | ldd 5, BASE, 0x8, CARG2
@@ -3217,6 +3231,7 @@ static void build_subroutines(BuildCtx *ctx)
     | math_extern2 fmod
     |
     |->ff_math_ldexp:
+    | todo
     | ldd 3, BASE, 0x0, TMP0
     | addd 4, 0x0, 0x2f, CARG2
     | ldd 5, BASE, 0x8, TMP1
@@ -3252,6 +3267,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_math_frexp:
+    | todo
     | ldd 3, BASE, 0x0, CARG1
     | disp ctpr2, ->fff_fallback
     | nop 1
@@ -3288,6 +3304,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_math_modf:
+    | todo
     | ldd 3, BASE, 0x0, CARG1
     | disp ctpr2, ->fff_fallback
     | nop 1
@@ -3321,6 +3338,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.macro math_minmax, name, ins
     |->ff_ .. name:
+    | todo
     | ldd 3, BASE, 0x0, TMP0
     | disp ctpr1, ->fff_fallback
     | nop 2
