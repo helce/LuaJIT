@@ -1585,26 +1585,25 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | addd      0, TMP1, TMP0, PC, pred0    // Branch if result is true.
     | --
-    | ins_next
+    | ins_next                              // TODO: inline
     |
     |->cont_condf:                          // BASE = base, CRET1 = result
-    | todo
-    | ldd 0, CRET1, 0x0, ITYPE
-    | addd 1, PC, 0x4, PC
+    | ldd       0, CRET1, 0x0, ITYPE
+    | addd      1, PC, 0x4, PC
     | --
-    | ldh 0, PC, PREV_PC_RD, TMP0
-    | subd 1, PC, BCBIAS_J*4, TMP1
-    | nop 1
+    | ldh       0, PC, PREV_PC_RD, TMP0
+    | subd      1, PC, BCBIAS_J*4, TMP1
+    | wait_load ITYPE, 0
     | --
-    | sard 0, ITYPE, 0x2f, ITYPE
+    | sard      0, ITYPE, 0x2f, ITYPE
     | --
-    | cmpbsb 0, ITYPE, LJ_TISTRUECOND, pred0
-    | shld 1, TMP0, 0x2, TMP0
-    | nop 1
+    | cmpbsb    0, ITYPE, LJ_TISTRUECOND, pred0
+    | shld      1, TMP0, 0x2, TMP0
+    | wait_pred pred0, 0
     | --
-    | addd 0, TMP1, TMP0, PC, ~pred0        // Branch if result is false.
+    | addd      0, TMP1, TMP0, PC, ~pred0   // Branch if result is false.
     | --
-    | ins_next
+    | ins_next                              // TODO: inline
     |
     |->vmeta_equal:
     | todo
