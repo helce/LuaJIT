@@ -1789,39 +1789,41 @@ static void build_subroutines(BuildCtx *ctx)
     | ins_call
     |
     |->vmeta_len:
-    | todo
-    | disp ctpr1, extern lj_meta_len        // (lua_State *L, TValue *o)
+    | // BASE
+    | disp      ctpr1, extern lj_meta_len
     | --
-    | ldh 0, PC, PREV_PC_RD, RD
-    | ldd 2, STACK, SAVE_L, RB
-    | nop 2
+    | setwd_call
+    | ldh       0, PC, PREV_PC_RD, RD
+    | ldd       2, STACK, SAVE_L, RB
+    | wait_load RD, 0
     | --
-    | shld 3, RD, 0x3, RD
-    | std 5, RB, L->base, BASE
+    | shld      3, RD, 0x3, RD
+    | std       5, RB, L->base, BASE
     | --
-    | std 2, STACK, SAVE_PC, PC
-    | addd 3, BASE, RD, CARG2
-    | addd 4, RB, 0x0, CARG1
-    | call ctpr1, wbs = 0x8
+    | std       2, STACK, SAVE_PC, PC
+    | addd      3, BASE, RD, CARG2
+    | addd      4, RB, 0x0, CARG1
+    | call      ctpr1, wbs = 0x8            // lj_meta_len(lua_State *L, TValue *o)
     | --
     | // NULL (retry) or TValue * (metamethod) returned.
-    | ldd 3, RB, L->base, BASE
-    | disp ctpr2, ->vmeta_binop             // Binop call for compatibility.
-    | nop 4
+    | ldd       3, RB, L->base, BASE
+    | disp      ctpr2, ->vmeta_binop        // Binop call for compatibility.
+    | wait_load BASE, 0
     | --
 #if LJ_52
-    | cmpedb 0, CRET1, 0x0, pred0
-    | ldd 3, BASE, RD, CARG1
-    | disp ctpr1, ->BC_LEN_Z
-    | nop 2
+    | cmpedb    0, CRET1, 0x0, pred0
+    | ldd       3, BASE, RD, CARG1
+    | disp      ctpr1, ->BC_LEN_Z
+    | wait_pred_ct pred0, 0
+    | wait_load CARG1, 0
     | --
-    | ct ctpr2, ~pred0
+    | ct        ctpr2, ~pred0               // vmeta_binop(CARG1)
     | --
-    | getfd 0, CARG1, (47 << 6), CARG1
-    | ct ctpr1
+    | getfd     0, CARG1, (47 << 6), RD
+    | ct        ctpr1                       // BC_LEN_Z(RD)
     | --
 #else
-    | ct ctpr2
+    | ct        ctpr2                       // vmeta_binop(CARG1)
     | --
 #endif
     |
