@@ -7032,7 +7032,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd      1, RD_E, 0, RD          // TODO: remove me
         |1:
         | stw       2, STACK, MULTRES, RD_E // Save (nresults+1)*8.
-        | ldd       3, BASE, -8, PC
+        | ldd       5, BASE, -8, PC
         | disp      ctpr3, ->vm_return
         | wait_load PC, 0
         | --
