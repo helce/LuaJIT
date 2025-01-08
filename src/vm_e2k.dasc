@@ -447,27 +447,9 @@
 |//-----------------------------------------------------------------------
 |// Instruction decode+dispatch.
 |.macro ins_NEXT             // AD = {D |A|OP}, ABC = {B|C|A|OP}, AC = {lo_D|A|OP}
-| todo
-| ldw 0, PC, 0x0, TMP0
-| ldb 2, PC, 0x0, TMP1
-| addd 1, PC, 0x4, PC
-| nop 2
+| disp      ctpr1, ->vm_restart_pipeline    // TODO: inline/optimize
 | --
-| shld 2, TMP1, 0x3, TMP1
-| shrd 3, TMP0, 0xd, RD
-| shrd 4, TMP0, 0x15, RB
-| shrd 5, TMP0, 0x5, RA
-| --
-| ldd 2, TMP1, DISPATCH, TMP1
-| andd 3, RD, 0x7fff8, RD
-| andd 4, RA, 0x7f8, RA
-| nop 2
-| --
-| movtd 0, TMP1, ctpr1
-| andd 3, RB, 0x7f8, RB
-| andd 4, RD, 0x7f8, RC
-| --
-| ct ctpr1
+| ct        ctpr1                           // vm_restart_pipeline
 | --
 |.endmacro
 |
@@ -1719,88 +1701,88 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Arithmetic metamethods ---------------------------------------------
     |
     |.macro vmeta_arith_base
-    | todo
-    | disp ctpr1, extern lj_meta_arith      // (lua_State *L, TValue *ra, *rb, *rc, BCReg op)
+    | disp      ctpr1, extern lj_meta_arith
     | --
-    | ldb 0, PC, PREV_PC_OP, CARG5
-    | addd 1, RA, 0x0, CARG2
-    | ldd 2, STACK, SAVE_L, CARG1
-    | nop 2
+    | setwd_call
     | --
-    | addd 0, RC, 0x0, CARG4
-    | addd 1, RB, 0x0, CARG3
-    | std 2, CARG1, L->base, BASE
+    | ldb       0, PC, PREV_PC_OP, CARG5
+    | addd      1, RA, 0x0, CARG2
+    | ldd       2, STACK, SAVE_L, CARG1
+    | wait_load CARG1, 0
     | --
-    | addd 0, CARG1, 0x0, RB
-    | std 2, STACK, SAVE_PC, PC
-    | call ctpr1, wbs = 0x8
+    | addd      0, RC, 0x0, CARG4
+    | addd      1, RB, 0x0, CARG3
+    | std       2, CARG1, L->base, BASE
+    | --
+    | addd      0, CARG1, 0x0, RB
+    | std       2, STACK, SAVE_PC, PC
+    | call      ctpr1, wbs = 0x8            // lj_meta_arith(lua_State *L, TValue *ra, *rb, *rc, BCReg op)
     | --
     | // NULL (finished) or TValue * (metamethod) returned.
-    | ldd 3, RB, L->base, BASE
-    | cmpedb 4, CRET1, 0x0, pred0
-    | disp ctpr2, ->cont_nop
+    | ldd       3, RB, L->base, BASE
+    | cmpedb    4, CRET1, 0x0, pred0
+    | disp      ctpr2, ->cont_nop
     | --
-    | disp ctpr1, ->vmeta_binop
-    | nop 3
+    | disp      ctpr1, ->vmeta_binop
+    | wait_pred_ct pred0, 1
     | --
-    | ct ctpr2, pred0
+    | ct        ctpr2, pred0                // cont_nop(TODO), TODO: vm_restart_pipeline
     | --
-    | ct ctpr1
+    | ct        ctpr1                       // vmeta_binop(TODO)
     | --
     |.endmacro
     |
     |->vmeta_arith_vn:
-    | addd 3, KBASE, RC, RC
-    | addd 4, BASE, RB, RB
-    | addd 5, BASE, RA, RA
+    | addd 3, KBASE, RC_E, RC
+    | addd 4, BASE, RB_E, RB
+    | addd 5, BASE, RA_E, RA
     | --
     | vmeta_arith_base
     |
     |->vmeta_arith_nv:
-    | addd 3, KBASE, RC, RB
-    | addd 4, BASE, RB, RC
-    | addd 5, BASE, RA, RA
+    | addd 3, KBASE, RC_E, RB
+    | addd 4, BASE, RB_E, RC
+    | addd 5, BASE, RA_E, RA
     | --
     | vmeta_arith_base
     |
     |->vmeta_unm:
-    | addd 3, BASE, RD, RC
-    | addd 4, BASE, RD, RB
-    | addd 5, BASE, RA, RA
+    | addd 3, BASE, RD_E, RC
+    | addd 4, BASE, RD_E, RB
+    | addd 5, BASE, RA_E, RA
     | --
     | vmeta_arith_base
     |
     |->vmeta_arith_vv:
-    | addd 3, BASE, RC, RC
-    | addd 4, BASE, RB, RB
-    | addd 5, BASE, RA, RA
+    | addd 3, BASE, RC_E, RC
+    | addd 4, BASE, RB_E, RB
+    | addd 5, BASE, RA_E, RA
     | --
     | vmeta_arith_base
     |
     | // Call metamethod for binary op.
     |->vmeta_binop:
-    | todo
     | // BASE = old base, CRET1 = new base, stack = cont/func/o1/o2
-    | addd 0, CRET1, 0x0, RA
-    | subd 1, CRET1, BASE, CRET1
+    | addd      0, CRET1, 0x0, RA
+    | subd      1, CRET1, BASE, CRET1
     | --
-    | addd 1, CRET1, FRAME_CONT, PC
-    | std 2, RA, -24, PC                    // [cont|PC]
-    | addd 3, 0x0, (2+1)*8, RD              // 2 args for func(o1, o2).
+    | addd      1, CRET1, FRAME_CONT, PC
+    | std       2, RA, -24, PC              // [cont|PC]
+    | addd      3, 0x0, (2+1)*8, RD         // 2 args for func(o1, o2).
     | --
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
-    | ldd 0, RA, -16, RB
-    | disp ctpr1, ->vmeta_call
-    | nop 2
+    | ldd       0, RA, -16, RB
+    | disp      ctpr1, ->vmeta_call
+    | wait_load RB, 0
     | --
-    | sard 3, RB, 0x2f, ITYPE
-    | getfd 4, RB, (47 << 6), RB
+    | sard      3, RB, 0x2f, ITYPE
+    | getfd     4, RB, (47 << 6), RB
     | --
-    | cmpesb 3, ITYPE, LJ_TFUNC, pred0
-    | nop 2
+    | cmpesb    3, ITYPE, LJ_TFUNC, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | addd 3, RA, 0x0, BASE, pred0
-    | ct ctpr1, ~pred0
+    | addd      3, RA, 0x0, BASE, pred0
+    | ct        ctpr1, ~pred0               // vmeta_call(RA, RD)
     | --
     | ins_call
     |
