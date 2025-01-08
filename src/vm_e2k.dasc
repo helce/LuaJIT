@@ -3239,39 +3239,40 @@ static void build_subroutines(BuildCtx *ctx)
     | math_extern2 fmod
     |
     |->ff_math_ldexp:
-    | todo
-    | ldd 3, BASE, 0x0, TMP0
-    | addd 4, 0x0, 0x2f, CARG2
-    | ldd 5, BASE, 0x8, TMP1
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E
+    | ldd       3, BASE, 0x0, TMP0
+    | addd      4, 0x0, 0x2f, CARG2
+    | ldd       5, BASE, 0x8, TMP1
+    | disp      ctpr1, ->fff_fallback
+    | wait_load TMP0, 0
     | --
-    | cmpbdb 3, RD, (2+1)*8, pred0
-    | sard 4, TMP0, CARG2, ITYPE
-    | sard 5, TMP1, CARG2, CARG1
-    | disp ctpr2, ->fff_res
+    | addd      0, RD_E, 0, RD
+    | cmpbdb    3, RD_E, (2+1)*8, pred0
+    | sard      4, TMP0, CARG2, ITYPE
+    | sard      5, TMP1, CARG2, CARG1
+    | disp      ctpr2, ->fff_res
     | --
-    | cmpbsb 3, ITYPE, LJ_TISNUM, pred1
-    | cmpbsb 4, CARG1, LJ_TISNUM, pred2
+    | cmpbsb    3, ITYPE, LJ_TISNUM, pred1
+    | cmpbsb    4, CARG1, LJ_TISNUM, pred2
     | --
-    | fdtoidtr 3, TMP1, TMP1
+    | fdtoidtr  3, TMP1, TMP1
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | pass pred2, p2
-    | landp ~p0, p1, p4
-    | landp p4, p2, p5
-    | pass p5, pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | pass      pred2, p2
+    | landp     ~p0, p1, p4
+    | landp     p4, p2, p5
+    | pass      p5, pred0
     | --
-    | fscaled 4, TMP0, TMP1, TMP0
-    | ct ctpr1, ~pred0
+    | fscaled   4, TMP0, TMP1, TMP0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
-    | ldd 0, BASE, -8, PC
-    | nop 2
+    | ldd       0, BASE, -8, PC
+    | wait_load PC, 0
     | --
-    | addd 3, 0x0, (1+1)*8, RD
-    | std 5, BASE, -16, TMP0
-    | ct ctpr2
+    | addd      3, 0x0, (1+1)*8, RD
+    | std       5, BASE, -16, TMP0
+    | ct        ctpr2                       // fff_res(RD)
     | --
     |
     |->ff_math_frexp:
