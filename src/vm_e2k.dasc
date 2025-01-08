@@ -3150,33 +3150,35 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.macro math_extern, func
     |->ff_math_ .. func:
-    | todo
-    | ldd 3, BASE, 0x0, CARG1
-    | disp ctpr2, ->fff_fallback
-    | nop 1
+    | // RD_E = (nargs+1)*8
+    | ldd       3, BASE, 0x0, T1
+    | disp      ctpr2, ->fff_fallback
     | --
-    | disp ctpr1, extern func
+    | disp      ctpr1, extern func
+    | wait_load T1, 1
     | --
-    | sard 3, CARG1, 0x2f, ITYPE
+    | sard      3, T1, 0x2f, ITYPE
     | --
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | cmpbsb 4, ITYPE, LJ_TISNUM, pred1
-    | nop 1
+    | setwd_call
+    | addd      0, RD_E, 0, RD
+    | cmpbdb    3, RD_E, (1+1)*8, pred0
+    | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
+    | addd      0, T1, 0, CARG1
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr2, ~pred0
+    | ct        ctpr2, ~pred0
     | --
-    | call ctpr1, wbs = 0x8
+    | call      ctpr1, wbs = 0x8
     | --
-    | addd 0, CRET1, 0x0, TMP0
-    | disp ctpr2, ->fff_resb
-    | nop 4
+    | addd      0, CRET1, 0x0, TMP0
+    | disp      ctpr2, ->fff_resb
     | --
-    | ct ctpr2
+    | ct        ctpr2                       // fff_resb(RD, TMP0)
     | --
     |.endmacro
     |
