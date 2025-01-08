@@ -3587,85 +3587,87 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.macro ffstring_op, name
     |->ff_string_..name:
-    | lddsm 0, DISPATCH, DISPATCH_GL(gc.total), RB
-    | lddsm 2, DISPATCH, DISPATCH_GL(gc.threshold), TMP0
-    | disp ctpr1, ->fff_fallback
+    | // RD_E
+    | setwd_call
+    | lddsm     0, DISPATCH, DISPATCH_GL(gc.total), RB
+    | lddsm     2, DISPATCH, DISPATCH_GL(gc.threshold), TMP0
+    | cmpbdb    3, RD_E, (1+1)*8, pred0
+    | addd      4, RD_E, 0, RD
+    | disp      ctpr1, ->fff_fallback
     | --
-    | ldd 0, STACK, SAVE_L, CARG1
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | disp ctpr2, >1
-    | nop 2
+    | ldd       0, STACK, SAVE_L, CARG1
+    | disp      ctpr2, >1
+    | wait_pred_ct pred0, 1
     | --
-    | ct ctpr1, pred0
+    | ct        ctpr1, pred0                // fff_fallback(BASE, RD)
     | --
-    | cmpbdbsm 0, RB, TMP0, pred1
-    | nop 1
+    | cmpbdbsm  0, RB, TMP0, pred1
     | --
-    | disp ctpr1, extern lj_gc_step         // (lua_State *L)
+    | disp      ctpr1, extern lj_gc_step
+    | wait_pred_ct pred1, 1
     | --
-    | ct ctpr2, pred1
-    | std 2, CARG1, L->base, BASE, ~pred1
-    | addd 3, BASE, RD, RD, ~pred1
-    | std 5, STACK, SAVE_PC, PC, ~pred1
+    | std       2, CARG1, L->base, BASE, ~pred1
+    | addd      3, BASE, RD, RD, ~pred1
+    | std       5, STACK, SAVE_PC, PC, ~pred1
+    | ct        ctpr2, pred1                // >1
     | --
-    | subd 3, RD, 0x8, RD
-    | nop 2
+    | subd      3, RD, 0x8, RD
     | --
-    | addd 3, CARG1, 0x0, RB 
-    | std 5, CARG1, L->top, RD
-    | call ctpr1, wbs = 0x8
+    | addd      3, CARG1, 0x0, RB 
+    | std       5, CARG1, L->top, RD
+    | call      ctpr1, wbs = 0x8            // lj_gc_step(lua_State *L)
     | --
-    | ldd 3, RB, L->base, BASE
-    | ldd 5, RB, L->top, RD
-    | nop 2
+    | ldd       3, RB, L->base, BASE
+    | ldd       5, RB, L->top, RD
+    | wait_load BASE, 0
     | --
-    | subd 3, RD, BASE, RD
+    | subd      3, RD, BASE, RD
     | --
-    | addd 3, RD, 0x8, RD
+    | addd      3, RD, 0x8, RD
     |1:
-    | addd 0, DISPATCH, DISPATCH_GL(tmpbuf), CARG1
-    | ldd 3, BASE, 0x0, CARG2
-    | ldd 5, STACK, SAVE_L, RB
-    | disp ctpr2, ->fff_fallback
+    | addd      0, DISPATCH, DISPATCH_GL(tmpbuf), CARG1
+    | ldd       3, BASE, 0x0, CARG2
+    | ldd       5, STACK, SAVE_L, RB
+    | disp      ctpr2, ->fff_fallback
     | --
-    | ldd 0, CARG1, SBUF->b, RC
+    | ldd       0, CARG1, SBUF->b, RC
     | --
-    | disp ctpr1, extern lj_buf_putstr_ .. name
+    | disp      ctpr1, extern lj_buf_putstr_ .. name
     | --
-    | sard 3, CARG2, 0x2f, ITYPE
-    | getfd 4, CARG2, (47 << 6), CARG2
+    | sard      3, CARG2, 0x2f, ITYPE
+    | getfd     4, CARG2, (47 << 6), CARG2
     | --
-    | cmpesb 3, ITYPE, LJ_TSTR, pred0
-    | nop 2
+    | cmpesb    3, ITYPE, LJ_TSTR, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr2, ~pred0
+    | ct        ctpr2, ~pred0               // fff_fallback(BASE, RD)
     | --
-    | std 2, CARG1, SBUF->L, RB
-    | std 5, RB, L->base, BASE
+    | std       2, CARG1, SBUF->L, RB
+    | std       5, RB, L->base, BASE
     | --
-    | std 2, CARG1, SBUF->w, RC
-    | std 5, STACK, SAVE_PC, PC
-    | call ctpr1, wbs = 0x8
+    | std       2, CARG1, SBUF->w, RC
+    | std       5, STACK, SAVE_PC, PC
+    | call      ctpr1, wbs = 0x8            // lj_buf_putstr_op(SBuf *sb, GCstr *s)
     | --
-    | disp ctpr1, extern lj_buf_tostr
+    | disp      ctpr1, extern lj_buf_tostr
     | --
-    | addd 0, CRET1, 0x0, CARG1
-    | call ctpr1, wbs = 0x8
+    | call      ctpr1, wbs = 0x8            // lj_buf_tostr(SBuf *sb)
     | --
     | // GStr * returned.
-    | addd 0, 0x0, LJ_TSTR, ITYPE
-    | ldd 3, RB, L->base, BASE
-    | disp ctpr1, ->fff_res
+    | addd      0, 0x0, LJ_TSTR, ITYPE
+    | ldd       3, RB, L->base, BASE
+    | disp      ctpr1, ->fff_res
     | --
-    | shld 0, ITYPE, 0x2f, ITYPE
+    | shld      0, ITYPE, 0x2f, ITYPE
     | --
-    | ord 0, CRET1, ITYPE, CRET1
+    | ord       0, CRET1, ITYPE, CRET1
+    | wait_load BASE, 0
     | --
-    | ldd 3, BASE, -8, PC
+    | addd      0, 0x0, (1+1)*8, RD
+    | ldd       3, BASE, -8, PC
+    | std       5, BASE, -16, CRET1
     | --
-    | addd 3, 0x0, (1+1)*8, RD
-    | std 5, BASE, -16, CRET1
-    | ct ctpr1
+    | ct        ctpr1                       // fff_res(RD)
     | --
     |.endmacro
     |
@@ -3803,8 +3805,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->fff_fallback:                        // Call fast function fallback handler.
     | // BASE = new base, RD = (nargs+1)*8
-    | setwd     wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn     rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | ldd 0, STACK, SAVE_L, RB
     | ldd 3, BASE, -8, PC                   // Fallback may overwrite PC.
     | addd 4, BASE, RD, RD
