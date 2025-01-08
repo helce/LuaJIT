@@ -5759,6 +5759,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | addd      1, RA_E, 0, RA
         | subd      4, KBASE, RD_E, T0
         | ldd       5, BASE, -16, RB
         | disp      ctpr1, ->BC_TSETS_Z
@@ -5772,7 +5773,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd       5, T0, -8, RC
         | wait_load RB, 0
         | wait_load RC, 0
-        | ct        ctpr1                   // BC_TSETS_Z(RB, RC)
+        | ct        ctpr1                   // BC_TSETS_Z(RA, RB, RC)
         | --
         break;
 
@@ -6077,6 +6078,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_ABC RA_E = src*8, RB_E = table*8, RC_E = key*8
         | pipe_dispatch_prep 0, ctpr3
         | pipe_dispatch_load 2
+        | addd      1, RA_E, 0, RA
         | ldd       3, BASE, RB_E, RB
         | ldd       5, BASE, RC_E, RC
         | disp      ctpr1, ->vmeta_tsetv
@@ -6119,7 +6121,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | getfd     3, RC, (47 << 6), RC, ~pred1
         | sxt       4, 0x2, TMP0, RC, pred2
         | ldbsm     5, RB, TAB->marked, T1
-        | ct        ctpr2, ~pred1           // BC_TSETS_Z(RB, RC), String key?
+        | ct        ctpr2, ~pred1           // BC_TSETS_Z(RA, RB, RC), String key?
         | --
         | cmpbsb    3, RC, T2, pred0
         | shld      4, RC, 0x3, RC
@@ -6132,7 +6134,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct        ctpr1, ~pred0           // vmeta_tsetv
         | --
         | ldw       3, RC, 0x0, TMP0
-        | lddsm     5, BASE, RA_E, T0
+        | lddsm     5, BASE, RA, T0
         | wait_load TMP0, 0
         | --
         | cmpesb    4, TMP0, LJ_TNIL, pred0 // Previous value is nil?
@@ -6193,7 +6195,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct        ctpr2, ~pred0           // vmeta_tsets(RA, RB, RC)
         | --
         |->BC_TSETS_Z:
-        | // RB = GCtab *, RC = GCstr *
+        | // RA = src*8, RB = GCtab *, RC = GCstr *
         | ldw       3, RB, TAB->hmask, TMP0
         | addd      4, 0x0, LJ_TSTR, ITYPE
         | ldw       5, RC, STR->sid, TMP1
