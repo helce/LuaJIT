@@ -1937,51 +1937,55 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Base library: checks -----------------------------------------------
     |
     |->ff_assert:
-    | ldd 3, BASE, 0x0, ITYPE
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E
+    | addd      0, RD_E, 0, RD
+    | ldd       3, BASE, 0x0, ITYPE
+    | disp      ctpr1, ->fff_fallback
     | --
-    | addd 3, ITYPE, 0x0, RB
-    | sard 4, ITYPE, 0x2f, ITYPE
-    | disp ctpr2, ->fff_res
+    | disp      ctpr2, ->fff_res
+    | wait_load ITYPE, 1
     | --
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | cmpbsb 4, ITYPE, LJ_TISTRUECOND, pred1
-    | nop 1
+    | addd      3, ITYPE, 0x0, RB
+    | sard      4, ITYPE, 0x2f, ITYPE
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
+    | cmpbdb    3, RD, (1+1)*8, pred0
+    | cmpbsb    4, ITYPE, LJ_TISTRUECOND, pred1
     | --
-    | ldd 0, BASE, -8, PC
-    | ct ctpr1, ~pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | stw 2, STACK, MULTRES, RD
-    | subd 4, RD, 0x10, RD
-    | std 5, BASE, -16, RB
+    | ldd       0, BASE, -8, PC
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
-    | cmpedb 3, RD, 0x0, pred0
-    | disp ctpr1, >1
-    | nop 2
+    | stw       2, STACK, MULTRES, RD
+    | subd      4, RD, 0x10, RD
+    | std       5, BASE, -16, RB
     | --
-    | addd 3, RD, 0x10, RD, pred0
-    | addd 4, BASE, 0x8, RA
-    | ct ctpr2, pred0
+    | cmpedb    3, RD, 0x0, pred0
+    | disp      ctpr1, >1
+    | wait_pred_ct pred0, 0
+    | --
+    | addd      3, RD, 0x10, RD, pred0
+    | addd      4, BASE, 0x8, RA
+    | ct        ctpr2, pred0                // fff_res(RD)
     |1:
-    | ldd 3, RA, 0x0, RB
-    | subd 4, RD, 0x8, RD
+    | ldd       3, RA, 0x0, RB
+    | subd      4, RD, 0x8, RD
     | --
-    | cmpedb 3, RD, 0x0, pred0
-    | nop 2
+    | cmpedb    3, RD, 0x0, pred0
+    | wait_pred_ct pred0, 0
+    | wait_load RB, 1
     | --
-    | addd 4, RA, 0x8, RA, ~pred0
-    | std 5, RA, -16, RB
-    | ct ctpr1, ~pred0
+    | addd      4, RA, 0x8, RA, ~pred0
+    | std       5, RA, -16, RB
+    | ct        ctpr1, ~pred0               // <1
     | --
-    | ldw 0, STACK, MULTRES, RD
-    | ct ctpr2
-    | nop 2
+    | ldw       0, STACK, MULTRES, RD
+    | ct        ctpr2                       // fff_res(RD)
+    | wait_load RD, 0
     | --
     |
     |->ff_type:
