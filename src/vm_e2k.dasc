@@ -1187,34 +1187,35 @@ static void build_subroutines(BuildCtx *ctx)
     |.endif
     |
     |->cont_cat:                            // BASE = base, CRET1 = result, RB = mbase
-    | todo
-    | ldb 0, PC, PREV_PC_RB, CARG3
-    | lddsm 2, CRET1, 0x0, TMP0
-    | subd 3, RB, 0x20, RB
-    | disp ctpr1, ->cont_ra
-    | nop 2
+    | setwd_call
+    | ldb       0, PC, PREV_PC_RB, T3
+    | lddsm     2, CRET1, 0x0, TMP0
+    | subd      3, RB, 0x20, RB
+    | disp      ctpr1, ->cont_ra
     | --
-    | shld 3, CARG3, 0x3, CARG3
-    | disp ctpr2, ->BC_CAT_Z
+    | disp      ctpr2, ->BC_CAT_Z
+    | wait_load T3, 1
     | --
-    | addd 3, BASE, CARG3, CARG3
+    | shld      3, T3, 0x3, CARG3
     | --
-    | subd 3, CARG3, RB, CARG3
+    | addd      3, BASE, CARG3, CARG3
     | --
-    | cmpedb 3, CARG3, 0x0, pred0
-    | nop 2
+    | subd      3, CARG3, RB, CARG3
     | --
-    | ldd 0, STACK, SAVE_L, CARG1, ~pred0
-    | subd 1, 0x0, CARG3, CARG3
-    | ct ctpr1, pred0
+    | cmpedb    3, CARG3, 0x0, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | shrd 0, CARG3, 0x3, CARG3
-    | addd 1, RB, 0x0, CARG2
-    | std 2, RB, 0x0, TMP0
+    | ldd       0, STACK, SAVE_L, CARG1, ~pred0
+    | subd      1, 0x0, CARG3, CARG3
+    | ct        ctpr1, pred0                // cont_ra(PC, CRET1)
+    | --
+    | shrd      0, CARG3, 0x3, CARG3
+    | addd      1, RB, 0x0, CARG2
+    | std       2, RB, 0x0, TMP0
     | nop 1
     | --
-    | std 2, CARG1, L->base, BASE
-    | ct ctpr2
+    | std       2, CARG1, L->base, BASE
+    | ct        ctpr2                       // !!! CARG1-CARG3(lua_State *L, TValue *top, int left)
     | --
     |
     |//-- Table indexing metamethods -----------------------------------------
@@ -5079,8 +5080,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_CAT:
         | // ins_ABC // RA_E = dst*8, RB_E = src_start*8, RC_E = src_end*8
-        | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-        | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+        | setwd_call
         | addd      0, RA_E, 0, RA          // TODO: remove me
         | addd      1, RB_E, 0, RB          // TODO: remove me
         | addd      3, RC_E, 0, RC          // TODO: remove me
@@ -5096,6 +5096,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std       2, CARG1, L->base, BASE
         | --
         |->BC_CAT_Z:
+        | // (lua_State *L, TValue *top, int left)
         | disp      ctpr1, extern lj_meta_cat
         | --
         | std       2, STACK, SAVE_PC, PC
