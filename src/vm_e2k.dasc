@@ -768,88 +768,92 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_growstack_c:                      // Grow stack for C function.
     | // RB = L, L->base = new base, L->top = top 
-    | disp ctpr1, extern lj_state_growstack // (lua_State *L, int n)
+    | disp      ctpr1, extern lj_state_growstack // (lua_State *L, int n)
     | --
-    | addd 0, 0x0, LUA_MINSTACK, CARG2
-    | addd 1, RB, 0x0, CARG1
-    | nop 3
+    | setwd_call
     | --
-    | call ctpr1, wbs = 0x8
+    | addd      0, 0x0, LUA_MINSTACK, CARG2
+    | addd      1, RB, 0x0, CARG1
     | --
-    | ldd 3, RB, L->base, BASE
-    | ldd 5, RB, L->top, RD
-    | nop 2
+    | call      ctpr1, wbs = 0x8            // lj_state_growstack(lua_State *L, int n)
     | --
-    | ldd 3, BASE, -16, RB
-    | subd 4, RD, BASE, RD
-    | nop 2
+    | ldd       3, RB, L->base, BASE
+    | ldd       5, RB, L->top, RD
+    | wait_load BASE, 0
     | --
-    | getfd 3, RB, (47 << 6), RB
-    | addd 4, RD, 0x8, RD
+    | ldd       3, BASE, -16, RB
+    | subd      4, RD, BASE, RD
+    | wait_load RB, 0
+    | --
+    | getfd     3, RB, (47 << 6), RB
+    | addd      4, RD, 0x8, RD
     | --
     | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8
     | ins_callt                             // Just retry the call
     |
     |->vm_growstack_v:                      // Grow stack for vararg Lua function.
-    | ldb 0, PC, PC2PROTO(framesize)-4, RA
-    | addd 1, PC, 0x4, PC                   // Must point after first instruction.
-    | subd 3, RD, 0x10, RD                  // LJ_FR2
+    | // PC, RD = top, RB = lua_State *L
+    | setwd_call
+    | ldb       0, PC, PC2PROTO(framesize)-4, RA
+    | addd      1, PC, 0x4, PC              // Must point after first instruction.
+    | subd      3, RD, 0x10, RD             // LJ_FR2
     | --
-    | disp ctpr1, extern lj_state_growstack // (lua_State *L, int n)
+    | disp      ctpr1, extern lj_state_growstack // (lua_State *L, int n)
     | --
-    | std 2, STACK, SAVE_PC, PC
-    | std 5, RB, L->base, BASE
+    | std       2, STACK, SAVE_PC, PC
+    | std       5, RB, L->base, BASE
     | --
-    | addd 0, RA, 0x0, CARG2
-    | addd 3, RB, 0x0, CARG1
-    | std 5, RB, L->top, RD
-    | call ctpr1, wbs = 0x8
+    | addd      0, RA, 0x0, CARG2
+    | addd      3, RB, 0x0, CARG1
+    | std       5, RB, L->top, RD
+    | call      ctpr1, wbs = 0x8            // lj_state_growstack(lua_State *L, int n)
     | --
     | // RB = L, L->base = new base, L->top = top 
-    | ldd 3, RB, L->base, BASE
-    | ldd 5, RB, L->top, RD
-    | nop 2
+    | ldd       3, RB, L->base, BASE
+    | ldd       5, RB, L->top, RD
+    | wait_load BASE, 0
     | --
-    | ldd 3, BASE, -16, RB
-    | subd 4, RD, BASE, RD
-    | nop 2
+    | ldd       3, BASE, -16, RB
+    | subd      4, RD, BASE, RD
+    | wait_load RB, 0
     | --
-    | getfd 3, RB, (47 << 6), RB
-    | addd 4, RD, 0x8, RD
+    | getfd     3, RB, (47 << 6), RB
+    | addd      4, RD, 0x8, RD
     | --
     | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8
     | ins_callt                             // Just retry the call
     |
     |->vm_growstack_f:                      // Grow stack for fixarg Lua function.
     | // BASE = new base, RD = (nargs+1)*8, RB = L, PC = first PC
-    | disp ctpr1, extern lj_state_growstack // (lua_State *L, int n)
+    | disp      ctpr1, extern lj_state_growstack
     | --
-    | ldb 0, PC, PC2PROTO(framesize)-4, RA
-    | addd 1, PC, 0x4, PC                   // Must point after first instruction.
-    | addd 3, BASE, RD, RD
-    | nop 1
+    | setwd_call
+    | ldb       0, PC, PC2PROTO(framesize)-4, RA
+    | addd      1, PC, 0x4, PC              // Must point after first instruction.
+    | addd      3, BASE, RD, RD
     | --
-    | std 2, STACK, SAVE_PC, PC
-    | subd 3, RD, 0x8, RD
-    | std 5, RB, L->base, BASE
+    | std       2, STACK, SAVE_PC, PC
+    | subd      3, RD, 0x8, RD
+    | std       5, RB, L->base, BASE
+    | wait_load RA, 1
     | --
-    | addd 0, RA, 0x0, CARG2
-    | addd 3, RB, 0x0, CARG1
-    | std 5, RB, L->top, RD
+    | addd      0, RA, 0x0, CARG2
+    | addd      3, RB, 0x0, CARG1
+    | std       5, RB, L->top, RD
     | --
-    | call ctpr1, wbs = 0x8
+    | call      ctpr1, wbs = 0x8            // lj_state_growstack(lua_State *L, int n)
     | --
     | // RB = L, L->base = new base, L->top = top 
-    | ldd 3, RB, L->base, BASE
-    | ldd 5, RB, L->top, RD
-    | nop 2
+    | ldd       3, RB, L->base, BASE
+    | ldd       5, RB, L->top, RD
+    | wait_load BASE, 0
     | --
-    | ldd 3, BASE, -16, RB
-    | subd 4, RD, BASE, RD
-    | nop 2
+    | ldd       3, BASE, -16, RB
+    | subd      4, RD, BASE, RD
+    | wait_load RB, 0
     | --
-    | getfd 3, RB, (47 << 6), RB
-    | addd 4, RD, 0x8, RD
+    | getfd     3, RB, (47 << 6), RB
+    | addd      4, RD, 0x8, RD
     | --
     | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8
     | ins_callt                             // Just retry the call
@@ -7497,7 +7501,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_extract 0, 1, 2, 3, 4
         | wait_load RB, 2
         | --
-        | addd      0, RD_E, 0, RD          // TODO: remove me
+        | addd      0, RD_E, 0, RD
         | ldd       3, RB, L->maxstack, TMP0
         | wait_load TMP0, 0
         | --
@@ -7505,7 +7509,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_pred_ct pred0, 0
         | --
         | shld      3, T6, 0x3, RA, pred0
-        | ct        ctpr1, ~pred0           // vm_growstack_f(TODO)
+        | ct        ctpr1, ~pred0           // vm_growstack_f(BASE, RD, RB, PC)
         | --
         | cmpbedb   3, RD, RA, pred1        // Check for missing parameters.
         | wait_pred_ct pred1, 0
@@ -7567,7 +7571,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | addd      3, BASE, 0x0, RA, pred0
         | addd      0, RD, 0x0, BASE, pred0
-        | ct        ctpr1, ~pred0           // vm_growstack_v(TODO)
+        | ct        ctpr1, ~pred0           // vm_growstack_v(PC, RD, RB)
         |                                   // Need to grow stack?
         | --
         | addd      3, RA, 0x8, RA, ~pred1
@@ -7638,7 +7642,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_pred_ct pred0, 0
         | --
         | stw       2, DISPATCH, DISPATCH_GL(vmstate), TMP0, pred0
-        | ct        ctpr1, ~pred0           // vm_growstack_c(TODO)
+        | ct        ctpr1, ~pred0           // vm_growstack_c(RB)
         |                                   // Need to grow stack?
         | --
         | call      ctpr2, wbs = 0x8        // (lua_State *L)
