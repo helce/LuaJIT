@@ -1966,43 +1966,44 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_type:
-    | todo
-    | ldd 3, BASE, 0x0, RC
-    | adds 4, 0x0, LJ_TISNUM, RB
-    | disp ctpr1, ->fff_fallback
+    | // RD_E
+    | addd      0, RD_E, 0, RD
+    | ldd       3, BASE, 0x0, RC
+    | adds      4, 0x0, LJ_TISNUM, RB
+    | disp      ctpr1, ->fff_fallback
+    | wait_load RC, 0
+    | --
+    | sard      3, RC, 0x2f, RC
+    | cmpbdb    4, RD, (1+1)*8, pred0
+    | --
+    | cmpbsb    4, RC, RB, pred1
+    | wait_pred pred1, 0
+    | --
+    | xors      3, RB, -1, RC, pred1
+    | xors      4, RC, -1, RC, ~pred1
+    | ct        ctpr1, pred0                // fff_fallback(RD)
+    | --
+    | ldd       0, BASE, -8, PC
+    | ldd       3, BASE, -16, RB
+    | shls      4, RC, 0x3, RC
+    | disp      ctpr2, ->fff_res
     | nop 2
     | --
-    | sard 3, RC, 0x2f, RC
-    | cmpbdb 4, RD, (1+1)*8, pred0
+    | sxt       3, 0x6, RC, RC
+    | getfd     4, RB, (47 << 6), RB
+    | addd      5, 0x0, LJ_TSTR, ITYPE
     | --
-    | cmpbsb 4, RC, RB, pred1
-    | nop 1
+    | addd      3, RB, RC, TMP0
+    | shld      4, ITYPE, 0x2f, ITYPE
     | --
-    | xors 3, RB, -1, RC, pred1
-    | xors 4, RC, -1, RC, ~pred1
-    | ct ctpr1, pred0
+    | ldd       3, TMP0, ((char *)(&((GCfuncC *)0)->upvalue)), RC
+    | wait_load RC, 0
     | --
-    | ldd 0, BASE, -8, PC
-    | ldd 3, BASE, -16, RB
-    | shls 4, RC, 0x3, RC
-    | disp ctpr2, ->fff_res
-    | nop 2
+    | ord       3, RC, ITYPE, RC
     | --
-    | sxt 3, 0x6, RC, RC
-    | getfd 4, RB, (47 << 6), RB
-    | addd 5, 0x0, LJ_TSTR, ITYPE
-    | --
-    | addd 3, RB, RC, TMP0
-    | shld 4, ITYPE, 0x2f, ITYPE
-    | --
-    | ldd 3, TMP0, ((char *)(&((GCfuncC *)0)->upvalue)), RC
-    | nop 2
-    | --
-    | ord 3, RC, ITYPE, RC
-    | --
-    | addd 4, 0x0, (1+1)*8, RD
-    | std 5, BASE, -16, RC
-    | ct ctpr2
+    | addd      4, 0x0, (1+1)*8, RD
+    | std       5, BASE, -16, RC
+    | ct        ctpr2                       // fff_res(RD)
     | --
     |
     |//-- Base library: getters and setters ---------------------------------
