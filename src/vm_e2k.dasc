@@ -1477,7 +1477,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      4, RA, 0x0, BASE
     | --
     | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8, PC = caller PC
-    | ldd       0, RB, LFUNC->pc, RARG1
+    | ldd       2, RB, LFUNC->pc, RARG1
     | std       5, BASE, -8, PC
     | wait_load RARG1, 0
     | ct        ctpr1                       // vm_enter_pipeline
