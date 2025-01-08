@@ -1363,35 +1363,36 @@ static void build_subroutines(BuildCtx *ctx)
     |//-----------------------------------------------------------------------
     |
     |->vmeta_tsets:
-    | todo
-    | ldb 0, PC, PREV_PC_OP, TMP0
-    | addd 1, 0x0, LJ_TSTR, ITYPE
-    | ldbsm 2, PC, PREV_PC_RB, CARG1        // Reload TValue *t from RB.
-    | addd 3, 0x0, LJ_TTAB, CARG2
-    | disp ctpr1, >1
+    | // RA, RB, RC
+    | setwd_call
+    | ldb       0, PC, PREV_PC_OP, TMP0
+    | addd      1, 0x0, LJ_TSTR, ITYPE
+    | ldbsm     2, PC, PREV_PC_RB, T1       // Reload TValue *t from RB.
+    | addd      3, 0x0, LJ_TTAB, T2
+    | disp      ctpr1, >1
     | --
-    | shld 0, ITYPE, 0x2f, ITYPE
-    | shld 1, CARG2, 0x2f, CARG2
+    | shld      0, ITYPE, 0x2f, ITYPE
+    | shld      1, T2, 0x2f, CARG2
     | --
-    | ord 0, RC, ITYPE, TMP1                // STR:RC = GCstr *
-    | addd 1, STACK, STACK_TMP, CARG3
+    | ord       0, RC, ITYPE, TMP1          // STR:RC = GCstr *
+    | addd      1, STACK, STACK_TMP, CARG3
+    | wait_load TMP0, 2
     | --
-    | cmpedb 0, TMP0, BC_GSET, pred0
-    | shld 1, CARG1, 0x3, CARG1
-    | std 2, STACK, STACK_TMP, TMP1
-    | nop 2
+    | cmpedb    0, TMP0, BC_GSET, pred0
+    | shld      1, T1, 0x3, T1
+    | std       2, STACK, STACK_TMP, TMP1
+    | wait_pred pred0, 0
     | --
-    | addd 0, BASE, CARG1, CARG2, ~pred0
-    | ord 1, CARG2, RB, RA, pred0           // RB = GCtab *
-    | addd 2, DISPATCH, DISPATCH_GL(tmptv), CARG2, pred0 // Store fn->l.env in g->tmptv
+    | addd      0, BASE, T1, CARG2, ~pred0
+    | ord       1, CARG2, RB, RA, pred0        // RB = GCtab *
+    | addd      2, DISPATCH, DISPATCH_GL(tmptv), CARG2, pred0 // Store fn->l.env in g->tmptv
     | --
-    | std 2, CARG2, 0x0, RA, pred0
-    | ct ctpr1
+    | std       2, CARG2, 0x0, RA, pred0
+    | ct        ctpr1                       // >1
     | --
     |
     |->vmeta_tsetb:
-    | setwd     wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn     rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | ldb       0, PC, PREV_PC_RC, TMP0
     | ldb       2, PC, PREV_PC_RB, RB       // Reload TValue *t from RB.
     | disp      ctpr1, >1
@@ -1408,8 +1409,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vmeta_tsetv:
-    | setwd     wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn     rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | ldb       0, PC, PREV_PC_RC, RC       // Reload TValue *k from RC.
     | ldb       2, PC, PREV_PC_RB, RB       // Reload TValue *t from RB.
     | wait_load RC, 0
@@ -6205,7 +6205,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | pipe_scale 0, 1, 2, 4
         | ldd       3, TMP0, -8, RC
-        | addd      5, RA_E, 0, RA // TODO: remove me
+        | addd      5, RA_E, 0, RA
         | wait_load RB, 1
         | --
         | sard      3, RB, 0x2f, ITYPE
@@ -6215,7 +6215,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | cmpesb    4, ITYPE, LJ_TTAB, pred0
         | wait_pred_ct pred0, 0
         | --
-        | ct        ctpr2, ~pred0           // vmeta_tsets(TODO)
+        | ct        ctpr2, ~pred0           // vmeta_tsets(RA, RB, RC)
         | --
         |->BC_TSETS_Z:
         | // RB = GCtab *, RC = GCstr *
