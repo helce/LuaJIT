@@ -1325,44 +1325,28 @@ static void build_subroutines(BuildCtx *ctx)
     | // BASE = new base, RB = func, RD = (nargs+1)*8, PC = caller PC
     |
     |->vmeta_tgetr:
-    | todo
-    | disp ctpr1, extern lj_tab_getinth     // // (GCtab *t, int32_t key)
+    | // RA, RB, RC
+    | disp      ctpr1, extern lj_tab_getinth
     | --
-    | addd 0, RB, 0x0, CARG1
-    | adds 1, RC, 0x0, CARG2
-    | nop 3
+    | setwd_call
     | --
-    | call ctpr1, wbs = 0x8
+    | addd      0, RB, 0x0, CARG1
+    | adds      1, RC, 0x0, CARG2
+    | --
+    | call      ctpr1, wbs = 0x8            // lj_tab_getinth(GCtab *t, int32_t key)
     | --
     | // cTValue * or NULL returned.
-    | ldw 0, PC, 0x0, TMP0
-    | ldb 2, PC, 0x0, TMP1
+    | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
     | --
-    | ldb 0, PC, PREV_PC_RA, RA
-    | cmpedb 1, CRET1, 0x0, pred0
-    | lddsm 2, CRET1, 0x0, ITYPE
-    | nop 1
+    | cmpedb    1, CRET1, 0x0, pred0
+    | lddsm     2, CRET1, 0x0, ITYPE
+    | wait_pred pred0, 0
     | --
-    | shld 2, TMP1, 0x3, TMP1
+    | addd      2, 0x0, LJ_TNIL, ITYPE, pred0
+    | wait_load ITYPE, LATENCY_PRED
     | --
-    | ldd 0, TMP1, DISPATCH, TMP1
-    | addd 2, 0x0, LJ_TNIL, ITYPE, pred0
-    | shld 3, RA, 0x3, RA
-    | --
-    | addd 1, PC, 0x4, PC
-    | std 2, BASE, RA, ITYPE
-    | shrd 3, TMP0, 0xd, RD
-    | shrd 4, TMP0, 0x15, RB
-    | shrd 5, TMP0, 0x5, RA
-    | --
-    | andd 3, RD, 0x7fff8, RD
-    | andd 4, RA, 0x7f8, RA
-    | --
-    | movtd 0, TMP1, ctpr1
-    | andd 3, RB, 0x7f8, RB
-    | andd 4, RD, 0x7f8, RC
-    | --
-    | ct ctpr1
+    | std       2, BASE, RA, ITYPE
+    | ct        ctpr1                       // vm_restart_pipeline(PC)
     | --
     |
     |//-----------------------------------------------------------------------
@@ -1489,45 +1473,28 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vmeta_tsetr:
-    | todo
-    | disp ctpr1, extern lj_tab_setinth     // (lua_State *L, GCtab *t, int32_t key)
+    | // RA, RB, RC
+    | disp      ctpr1, extern lj_tab_setinth
     | --
-    | ldd 0, STACK, SAVE_L, CARG1
-    | addd 1, RB, 0x0, CARG2
-    | nop 1
+    | setwd_call
+    | ldd       0, STACK, SAVE_L, T1
     | --
-    | std 2, STACK, SAVE_PC, PC
-    | adds 0, RC, 0x0, CARG3
-    | nop 1
+    | addd      0, RB, 0x0, CARG2
+    | adds      1, RC, 0x0, CARG3
+    | std       2, STACK, SAVE_PC, PC
+    | wait_load T1, 1
     | --
-    | std 2, CARG1, L->base, BASE
-    | call ctpr1, wbs = 0x8
+    | addd      0, T1, 0, CARG1
+    | std       2, T1, L->base, BASE
+    | call      ctpr1, wbs = 0x8            // lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
     | --
     | // TValue * returned.
-    | ldw 0, PC, 0x0, TMP0
-    | addd 1, PC, 0x4, PC
-    | ldb 2, PC, 0x0, TMP1
-    | ldb 3, PC, PREV_PC_RA, CARG2
-    | nop 3
+    | ldd       0, BASE, RA, ITYPE
+    | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
+    | wait_load ITYPE, 0
     | --
-    | shld 1, CARG2, 0x3, CARG2
-    | shld 2, TMP1, 0x3, TMP1
-    | shrd 3, TMP0, 0xd, RD
-    | shrd 4, TMP0, 0x15, RB
-    | shrd 5, TMP0, 0x5, RA
-    | --
-    | ldd 0, BASE, CARG2, ITYPE
-    | ldd 2, TMP1, DISPATCH, TMP1
-    | andd 3, RD, 0x7fff8, RD
-    | andd 4, RA, 0x7f8, RA
-    | nop 2
-    | --
-    | movtd 0, TMP1, ctpr1
-    | std 2, CRET1, 0x0, ITYPE
-    | andd 3, RB, 0x7f8, RB
-    | andd 4, RD, 0x7f8, RC
-    | --
-    | ct ctpr1
+    | std       2, CRET1, 0x0, ITYPE
+    | ct        ctpr1                       // vm_restart_pipeline(PC)
     | --
     |
     |//-- Comparison metamethods ---------------------------------------------
@@ -6032,49 +5999,42 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TGETR:
-        | todo
-        | // ins_ABC RA = dst*8, RB = table*8, RC = key*8
-        | ldw 0, PC, 0x0, TMP0
-        | ldb 2, PC, 0x0, TMP1
-        | ldd 3, BASE, RB, RB
-        | addd 4, RA, 0x0, CARG4
-        | ldd 5, BASE, RC, RC
-        | disp ctpr1, ->vmeta_tgetr
-        | nop 2
+        | // ins_ABC RA_E = dst*8, RB_E = table*8, RC_E = key*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | ldd       3, BASE, RB_E, RB
+        | addd      4, RA_E, 0, RA
+        | ldd       5, BASE, RC_E, RC
+        | disp      ctpr1, ->vmeta_tgetr
         | --
-        | shld 2, TMP1, 0x3, TMP1
-        | getfd 3, RB, (47 << 6), RB
-        | fdtoistr 4, RC, RC
+        | pipe_scale 0, 1, 2, 3
         | --
-        | ldd 2, TMP1, DISPATCH, TMP1
-        | ldw 3, RB, TAB->asize, CARG1
-        | lddsm 5, RB, TAB->array, CARG2
-        | nop 2
+        | pipe_extract 0, 1, 2, 3, 4
+        | pipe_dispatch_load 5
+        | wait_load RC, 2
         | --
-        | cmpbsb 3, RC, CARG1, pred0
-        | nop 2
+        | getfd     3, RB, (47 << 6), RB
+        | fdtoistr  4, RC, RC
         | --
-        | shls 3, RC, 0x3, CARG3, pred0
-        | ct ctpr1, ~pred0                  // Not in array part? Use fallback.
+        | ldw       3, RB, TAB->asize, T1
+        | lddsm     5, RB, TAB->array, T2
+        | wait_load T1, 0
+        | wait      RC, 1, 4 + 2            // fp->int cross domain penalty
         | --
-        | movtd 0, TMP1, ctpr2
-        | addd 1, PC, 0x4, PC
-        | sxt 3, 0x2, CARG3, CARG3
-        | shrd 4, TMP0, 0xd, RD
-        | shrd 5, TMP0, 0x15, RB
+        | cmpbsb    3, RC, T1, pred0
+        | shls      4, RC, 0x3, T3
         | --
-        | addd 3, CARG2, CARG3, CARG3
-        | shrd 4, TMP0, 0x5, RA
+        | sxt       3, 0x2, T3, T3
         | --
-        | ldd 3, CARG3, 0x0, ITYPE          // Get array slot.
-        | andd 4, RD, 0x7fff8, RD
-        | andd 5, RA, 0x7f8, RA
-        | nop 2
+        | addd      3, T2, T3, T3
         | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | std 5, BASE, CARG4, ITYPE
-        | ct ctpr2
+        | ldd       3, T3, 0x0, ITYPE, pred0 // Get array slot.
+        | ct        ctpr1, ~pred0           // vmeta_tgetr(RA, RB, RC), Not in array part? Use fallback.
+        | --
+        | wait_load ITYPE, 1
+        | --
+        | std       5, BASE, RA, ITYPE
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
@@ -6417,56 +6377,49 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_TSETR:
-        | todo
-        | // ins_ABC RA = src*8, RB = table*8, RC = key*8
-        | ldw 0, PC, 0x0, TMP0
-        | ldb 2, PC, 0x0, TMP1
-        | ldd 3, BASE, RB, RB
-        | ldd 5, BASE, RC, RC
-        | disp ctpr1, ->vmeta_tsetr
-        | nop 2
+        | // ins_ABC RA_E = src*8, RB_E = table*8, RC_E = key*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | addd      1, RA_E, 0, RA
+        | ldd       3, BASE, RB_E, RB
+        | ldd       5, BASE, RC_E, RC
+        | disp      ctpr1, ->vmeta_tsetr
         | --
-        | ldd 0, DISPATCH, DISPATCH_GL(gc.grayagain), CARG3
-        | shld 2, TMP1, 0x3, TMP1
-        | getfd 3, RB, (47 << 6), RB
-        | fdtoistr 4, RC, RC
-        | lddsm 5, RB, TAB->array, CARG5
+        | pipe_scale 0, 1, 2, 4
+        | pipe_dispatch_load 3
+        | ldd       5, DISPATCH, DISPATCH_GL(gc.grayagain), T3
         | --
-        | ldd 2, TMP1, DISPATCH, TMP1
-        | ldb 3, RB, TAB->marked, CARG1
-        | ldbsm 5, RB, TAB->marked, CARG2
-        | nop 2
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load RB, 2
         | --
-        | cmpandedb 3, CARG1, LJ_GC_BLACK, pred0
-        | anddsm 4, CARG2, ~LJ_GC_BLACK, CARG2 // black2gray(tab)
-        | ldwsm 5, RB, TAB->asize, CARG4
-        | nop 1
+        | getfd     3, RB, (47 << 6), RB
+        | fdtoistr  4, RC, RC
+        | lddsm     5, RB, TAB->array, T5
         | --
-        | movtd 0, TMP1, ctpr2
-        | std 2, DISPATCH, DISPATCH_GL(gc.grayagain), RB, ~pred0
-        | stb 5, RB, TAB->marked, CARG2, ~pred0
+        | ldb       3, RB, TAB->marked, T1
+        | ldbsm     5, RB, TAB->marked, T2
+        | wait_load T1, 0
         | --
-        | ldd 3, BASE, RA, ITYPE
-        | cmpbsbsm 4, RC, CARG4, pred1
-        | std 5, RB, TAB->gclist, CARG3, ~pred0
+        | cmpandedb 3, T1, LJ_GC_BLACK, pred0
+        | anddsm    4, T2, ~LJ_GC_BLACK, T2 // black2gray(tab)
+        | ldwsm     5, RB, TAB->asize, T4
         | --
-        | shls 3, RC, 0x3, CARG1
-        | shrd 4, TMP0, 0x5, RA, pred1
-        | ct ctpr1, ~pred1
+        | std       2, DISPATCH, DISPATCH_GL(gc.grayagain), RB, ~pred0
+        | stb       5, RB, TAB->marked, T2, ~pred0
         | --
-        | addd 2, PC, 0x4, PC
-        | sxt 3, 0x2, CARG1, CARG1
-        | shrd 4, TMP0, 0xd, RD
-        | andd 5, RA, 0x7f8, RA
+        | shls      3, RC, 0x3, T1
+        | wait_load T4, 2
         | --
-        | addd 3, CARG5, CARG1, CARG1
-        | shrd 4, TMP0, 0x15, RB
-        | andd 5, RD, 0x7fff8, RD
+        | ldd       3, BASE, RA_E, ITYPE
+        | cmpbsbsm  4, RC, T4, pred1
+        | std       5, RB, TAB->gclist, T3, ~pred0
+        | wait_pred_ct pred1, 0
         | --
-        | andd 3, RB, 0x7f8, RB
-        | andd 4, RD, 0x7f8, RC
-        | std 5, CARG1, 0x0, ITYPE
-        | ct ctpr2
+        | sxt       3, 0x2, T1, T1
+        | ct        ctpr1, ~pred1           // vmeta_tsetr(TODO)
+        | --
+        | std       5, T5, T1, ITYPE
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
