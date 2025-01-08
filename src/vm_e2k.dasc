@@ -1611,39 +1611,40 @@ static void build_subroutines(BuildCtx *ctx)
     | ins_next                              // TODO: inline
     |
     |->vmeta_equal:
-    | todo
-    | disp ctpr1, extern lj_meta_equal      // (lua_State *L, GCobj *o1, *o2, int ne)
+    | // PC, RB, RD
+    | disp      ctpr1, extern lj_meta_equal
     | --
-    | ldd 0, STACK, SAVE_L, RB
-    | addd 1, RB, 0x0, CARG4
-    | getfd 3, RD, (47 << 6), RD
+    | setwd_call
+    | ldd       0, STACK, SAVE_L, RB
+    | getfd     3, RD, (47 << 6), RD
     | --
-    | ldh 0, PC, PREV_PC_RD, TMP0
-    | subd 2, PC, 0x4, PC
-    | subd 1, PC, BCBIAS_J*4, TMP1
-    | nop 1
+    | ldh       0, PC, PREV_PC_RD, TMP0
+    | addd      1, RB, 0x0, CARG4
+    | subd      2, PC, 0x4, PC
+    | subd      3, PC, BCBIAS_J*4, TMP1
+    | wait_load RB, 1
     | --
-    | addd 0, RA, 0x0, CARG2
-    | addd 1, RB, 0x0, CARG1
-    | std 2, RB, L->base, BASE
+    | addd      0, RA, 0x0, CARG2
+    | addd      1, RB, 0x0, CARG1
+    | std       2, RB, L->base, BASE
     | --
-    | addd 0, RD, 0x0, CARG3
-    | shld 1, TMP0, 0x2, TMP0
-    | std 2, STACK, SAVE_PC, PC
-    | call ctpr1, wbs = 0x8
+    | addd      0, RD, 0x0, CARG3
+    | shld      1, TMP0, 0x2, TMP0
+    | std       2, STACK, SAVE_PC, PC
+    | call      ctpr1, wbs = 0x8            // lj_meta_equal(lua_State *L, GCobj *o1, *o2, int ne)
     | --
     | // 0/1 or TValue * (metamethod) returned.
-    | cmpbedb 0, CRET1, 0x1, pred0
-    | cmpbdb 1, CRET1, 0x1, pred1
-    | addd 2, TMP1, 0x4, TMP1
-    | ldd 3, RB, L->base, BASE
-    | disp ctpr2, ->vmeta_binop
-    | nop 4
+    | cmpbedb   0, CRET1, 0x1, pred0
+    | cmpbdb    1, CRET1, 0x1, pred1
+    | addd      2, TMP1, 0x4, TMP1
+    | ldd       3, RB, L->base, BASE
+    | disp      ctpr2, ->vmeta_binop
+    | wait      ctpr2, 0, 5
     | --
-    | addd 0, PC, 0x4, PC, pred0
-    | ct ctpr2, ~pred0
+    | addd      0, PC, 0x4, PC, pred0
+    | ct        ctpr2, ~pred0               // vmeta_binop(BASE, CRET1)
     | --
-    | addd 0, TMP1, TMP0, PC, ~pred1
+    | addd      0, TMP1, TMP0, PC, ~pred1
     | --
     | ins_next
     |
@@ -4428,11 +4429,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         if (vk) {
           | addd    3, 0x0, 0x0, RB         // ne = 0
-          | ct      ctpr1                   // vmeta_equal(TODO), Handle __eq metamethod.
+          | ct      ctpr1                   // vmeta_equal(PC, RB, RD), Handle __eq metamethod.
           | --
         } else {
           | addd    3, 0x0, 0x1, RB         // ne = 1
-          | ct      ctpr1                   // vmeta_equal(TODO), Handle __eq metamethod.
+          | ct      ctpr1                   // vmeta_equal(PC, RB, RD), Handle __eq metamethod.
           | --
         }
         break;
