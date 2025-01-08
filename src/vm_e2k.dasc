@@ -2437,143 +2437,150 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_ipairs_aux:
-    | lddsm 3, BASE, 0x0, RB
-    | cmpbdb 4, RD, (2+1)*8, pred0
-    | ldd 5, BASE, 0x8, TMP0
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E = (nargs+1)*8
+    | addd      0, RD_E, 0, RD
+    | lddsm     3, BASE, 0x0, RB
+    | cmpbdb    4, RD_E, (2+1)*8, pred0
+    | ldd       5, BASE, 0x8, TMP0
+    | disp      ctpr1, ->fff_fallback
+    | wait_load TMP0, 0
     | --
-    | sard 3, TMP0, 0x2f, TMP1
-    | faddd 4, TMP0, U64x(0x3ff00000,0x00000000), TMP0   // +1.0e0
-    | disp ctpr2, >1
+    | sard      3, TMP0, 0x2f, TMP1
+    | faddd     4, TMP0, U64x(0x3ff00000,0x00000000), TMP0   // +1.0e0
+    | disp      ctpr2, >1
     | --
-    | sard 3, RB, 0x2f, ITYPE
-    | getfd 4, RB, (47 << 6), RB
-    | ct ctpr1, pred0
+    | sard      3, RB, 0x2f, ITYPE
+    | getfd     4, RB, (47 << 6), RB
+    | ct        ctpr1, pred0                // fff_fallback(RD)
     | --
-    | cmpesb 3, ITYPE, LJ_TTAB, pred0
-    | cmpbsb 4, TMP1, LJ_TISNUM, pred1
-    | ldw 5, RB, TAB->asize, CARG3
-    | disp ctpr3, ->fff_res
-    | nop 1
+    | cmpesb    3, ITYPE, LJ_TTAB, pred0
+    | cmpbsb    4, TMP1, LJ_TISNUM, pred1
+    | ldw       5, RB, TAB->asize, T3
+    | disp      ctpr3, ->fff_res
     | --
-    | ldwsm 3, RB, TAB->hmask, CARG4
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp p0, p1, p4
-    | pass p4, pred0
+    | ldwsm     3, RB, TAB->hmask, T4
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ldd 3, BASE, -8, PC, pred0
-    | ct ctpr1, ~pred0
+    | ldd       3, BASE, -8, PC, pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
-    | lddsm 3, RB, TAB->array, RD
-    | fdtoistr 4, TMP0, CARG2
-    | std 5, BASE, -16, TMP0
+    | lddsm     3, RB, TAB->array, RD
+    | fdtoistr  4, TMP0, T2
+    | std       5, BASE, -16, TMP0
+    | wait      T2, 0, 4 + 2             // extra fp->int
     | --
-    | cmpbsb 3, CARG2, CARG3, pred0
-    | sxt 4, 0x2, CARG2, CARG2
-    | nop 1
+    | cmpbsb    3, T2, T3, pred0
+    | sxt       4, 0x2, T2, T2
     | --
-    | shld 3, CARG2, 0x3, RA
+    | shld      3, T2, 0x3, RA
+    | wait_pred_ct pred0, 1
     | --
-    | addd 3, RD, RA, RD, pred0
-    | ct ctpr2, ~pred0                      // Not in array part?
+    | addd      3, RD, RA, RD, pred0
+    | ct        ctpr2, ~pred0               // >1, Not in array part?
     | --
-    | ldw 3, RD, 0x0, TMP0
-    | lddsm 5, RD, 0x0, RB
-    | nop 2
+    | ldw       3, RD, 0x0, TMP0
+    | lddsm     5, RD, 0x0, RB
+    | wait_load TMP0, 0
     | --
-    | cmpesb 3, TMP0, LJ_TNIL, pred0
-    | nop 1
+    | cmpesb    3, TMP0, LJ_TNIL, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | addd 3, 0x0, (0+1)*8, RD, pred0
-    | ct ctpr3, pred0
+    | addd      3, 0x0, (0+1)*8, RD, pred0
+    | ct        ctpr3, pred0                // fff_res(RD)
     | --
     | // Copy array slot.
-    | addd 3, 0x0, (1+2)*8, RD
-    | std 5, BASE, -8, RB
-    | ct ctpr3
+    | addd      3, 0x0, (1+2)*8, RD
+    | std       5, BASE, -8, RB
+    | ct        ctpr3                       // fff_res(RD)
     |1: // Check for empty hash part first. Otherwise call C function.
-    | disp ctpr1, extern lj_tab_getinth     // (GCtab *t, int32_t key)
+    | disp      ctpr1, extern lj_tab_getinth     // (GCtab *t, int32_t key)
     | --
-    | cmpedb 3, CARG4, 0x0, pred0
-    | addd 4, RB, 0x0, CARG1
-    | nop 2
+    | setwd_call
+    | cmpedb    3, T4, 0x0, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | addd 3, 0x0, (0+1)*8, RD, pred0
-    | ct ctpr3, pred0
+    | addd      3, 0x0, (0+1)*8, RD, pred0
+    | ct        ctpr3, pred0                // fff_res(RD)
     | --
-    | call ctpr1, wbs = 0x8
+    | addd      0, RB, 0, CARG1
+    | addd      1, T2, 0, CARG2
+    | call      ctpr1, wbs = 0x8            // lj_tab_getinth(GCtab *t, int32_t key)
     | --
     | // cTValue * or NULL returned.
-    | lddsm 0, CRET1, 0x0, RB
-    | cmpedb 1, CRET1, 0x0, pred0
-    | ldwsm 2, CRET1, 0x0, TMP0
-    | disp ctpr3, ->fff_res
-    | nop 2
+    | lddsm     0, CRET1, 0x0, RB
+    | cmpedb    1, CRET1, 0x0, pred0
+    | ldwsm     2, CRET1, 0x0, TMP0
+    | disp      ctpr3, ->fff_res
+    | wait_load TMP0, 0
     | --
     | cmpesbsm 1, TMP0, LJ_TNIL, pred1
-    | nop 1
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, ~p1, p4
-    | pass p4, pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, ~p1, p4
+    | pass      p4, pred0
     | --
-    | addd 3, 0x0, (0+1)*8, RD, ~pred0
-    | ct ctpr3, ~pred0
+    | addd      3, 0x0, (0+1)*8, RD, ~pred0
+    | ct        ctpr3, ~pred0               // fff_res(RD)
     | --
     | // Copy array slot.
-    | addd 3, 0x0, (1+2)*8, RD
-    | std 5, BASE, -8, RB
-    | ct ctpr3
+    | addd      3, 0x0, (1+2)*8, RD
+    | std       5, BASE, -8, RB
+    | ct        ctpr3                       // fff_res(RD)
     | --
     |
     |->ff_ipairs:
-    | ldd 3, BASE, 0x0, RB
-    | addd 4, 0x0, U64x(0x00007fff,0xffffffff), CARG2
-    | lddsm 5, BASE, -16, CARG1
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E = (nargs+1)*8
+    | lddsm     0, BASE, -16, T1
+    | addd      1, RD_E, 0, RD              // TODO: remove me
+    | ldd       3, BASE, 0, RB
+    | addd      4, 0x0, U64x(0x00007fff,0xffffffff), T2
+    | disp      ctpr1, ->fff_fallback
+    | wait_load T1, 0
     | --
-    | andd 2, CARG1, CARG2, CARG1
-    | addd 3, RB, 0x0, TMP1
-    | sard 4, RB, 0x2f, ITYPE
-    | andd 5, RB, CARG2, RB
+    | andd      2, T1, T2, T1
+    | addd      3, RB, 0x0, TMP1
+    | sard      4, RB, 0x2f, ITYPE
+    | andd      5, RB, T2, RB
     | --
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | cmpesb 4, ITYPE, LJ_TTAB, pred1
-    | lddsm 5, RB, TAB->metatable, TMP0
+    | cmpbdb    3, RD, (1+1)*8, pred0
+    | cmpesb    4, ITYPE, LJ_TTAB, pred1
+    | lddsm     5, RB, TAB->metatable, TMP0
     | --
-    | lddsm 0, CARG1, CFUNC->upvalue[0], CARG2
-    | addd 1, 0x0, LJ_TFUNC, ITYPE
+    | lddsm     0, T1, CFUNC->upvalue[0], T2
+    | addd      1, 0x0, LJ_TFUNC, ITYPE
     | --
-    | shld 0, ITYPE, 0x2f, ITYPE
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
+    | shld      0, ITYPE, 0x2f, ITYPE
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr1, ~pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
 #if LJ_52
-    | cmpedb 3, TMP0, 0x0, pred0
-    | nop 2
+    | cmpedb    3, TMP0, 0x0, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr1, ~pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
 #endif
-    | ldd 0, BASE, -8, PC
-    | ord 1, CARG2, ITYPE, CARG2
-    | disp ctpr1, ->fff_res
+    | ldd       0, BASE, -8, PC
+    | ord       1, T2, ITYPE, T2
+    | disp      ctpr1, ->fff_res
     | --
-    | addd 1, 0x0, 0x0, TMP0
-    | std 2, BASE, -8, TMP1
-    | std 5, BASE, -16, CARG2
+    | addd      1, 0x0, 0x0, TMP0
+    | std       2, BASE, -8, TMP1
+    | std       5, BASE, -16, T2
     | --
-    | addd 4, 0x0, (1+3)*8, RD
-    | std 5, BASE, 0x0, TMP0
-    | ct ctpr1
+    | addd      4, 0x0, (1+3)*8, RD
+    | std       5, BASE, 0x0, TMP0
+    | ct        ctpr1                       // fff_res(RD)
     | --
     |
     |//-- Base library: catch errors ----------------------------------------
@@ -3088,6 +3095,7 @@ static void build_subroutines(BuildCtx *ctx)
     | // fallthrough
     |
     |->fff_res:
+    | // RD = (nargs+1)*8
     | cmpandedb 0, PC, FRAME_TYPE, pred0
     | stw       5, STACK, MULTRES, RD
     | disp      ctpr1, ->vm_return
@@ -6611,7 +6619,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Calls and vararg handling ----------------------------------------- */
 
     case BC_CALL: case BC_CALLM:
-        | // ins_A_C  RA_E = base*8, (RB_E = (nresults+1)*8,) RC_E = (nargs+1)*8 | extra_nargs*8
+        | // ins_A_C  RA_E = base*8, (RB_E = (nresults+1)*8,) RD_E = (nargs+1)*8 | extra_nargs*8
         | ldd       0, BASE, RA_E, RB
         | addd      1, RA_E, 0x10, RA
         | ldw       2, STACK, MULTRES, TMP0
