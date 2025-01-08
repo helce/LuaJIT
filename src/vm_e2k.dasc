@@ -2211,30 +2211,30 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Base library: conversions ------------------------------------------
     |
     |->ff_tonumber:
-    | todo
+    | // RD_E
     | // Only handles the number case inline (without a base argument).
-    | ldd 3, BASE, 0x0, RB
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | addd      0, RD_E, 0, RD
+    | ldd       3, BASE, 0x0, RB
+    | disp      ctpr1, ->fff_fallback
+    | wait_load RB, 0
     | --
-    | sard 3, RB, 0x2f, ITYPE
-    | disp ctpr2, ->fff_res
+    | sard      3, RB, 0x2f, ITYPE
+    | disp      ctpr2, ->fff_res
     | --
-    | cmpedb 3, RD, (1+1)*8, pred0          // Exactly one argument.
-    | cmpbesb 4, ITYPE, LJ_TISNUM, pred1
-    | nop 1
+    | cmpedb    3, RD, (1+1)*8, pred0       // Exactly one argument.
+    | cmpbesb   4, ITYPE, LJ_TISNUM, pred1
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp p0, p1, p4
-    | pass p4, pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     p0, p1, p4
+    | pass      p4, pred0
     | --
-    | ldd 0, BASE, -8, PC, pred0
-    | ct ctpr1, ~pred0
+    | ldd       0, BASE, -8, PC, pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
-    | addd 4, 0x0, (1+1)*8, RD
-    | std 5, BASE, -16, RB
-    | ct ctpr2
+    | addd      4, 0x0, (1+1)*8, RD
+    | std       5, BASE, -16, RB
+    | ct        ctpr2                       // fff_res(RD)
     | --
     |
     |->ff_tostring:
