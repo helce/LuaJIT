@@ -2631,85 +2631,74 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_xpcall:
-    | todo
-    | ldd 3, BASE, 0x8, RA
-    | ldd 5, BASE, 0x0, RB
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E = (nargs+1)*8
+    | addd      0, RD_E, 0, RD
+    | ldd       3, BASE, 0x8, RA
+    | ldd       5, BASE, 0x0, RB
+    | disp      ctpr1, ->fff_fallback
+    | wait_load RA, 0
     | --
-    | sard 3, RA, 0x2f, ITYPE
+    | sard      3, RA, 0x2f, ITYPE
     | --
-    | cmpbdb 3, RD, (2+1)*8, pred0
-    | cmpesb 4, ITYPE, LJ_TFUNC, pred1
-    | nop 1
+    | cmpbdb    3, RD, (2+1)*8, pred0
+    | cmpesb    4, ITYPE, LJ_TFUNC, pred1
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | addd 1, 0x0, 0x18+FRAME_PCALL, PC, pred0
-    | std 2, BASE, 0x0, RA, pred0           // Swap function and traceback.
-    | std 5, BASE, 0x8, RB, pred0
-    | ct ctpr1, ~pred0
+    | addd      1, 0x0, 0x18+FRAME_PCALL, PC, pred0
+    | std       2, BASE, 0x0, RA, pred0     // Swap function and traceback.
+    | std       5, BASE, 0x8, RB, pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(BASE, RD)
     | --
-    | ldb 0, DISPATCH, DISPATCH_GL(hookmask), RB
-    | disp ctpr2, >1
-    | nop 1
+    | ldb       0, DISPATCH, DISPATCH_GL(hookmask), RB
+    | disp      ctpr2, >1
     | --
-    | addd 3, BASE, 0x18, RA
-    | subd 4, RD, 0x10, RD
+    | addd      3, BASE, 0x18, RA
+    | subd      4, RD, 0x10, RD
+    | wait_load RB, 1
     | --
-    | shrd 0, RB, HOOK_ACTIVE_SHIFT, RB
-    | addd 3, RD, 0x0, KBASE
+    | shrd      0, RB, HOOK_ACTIVE_SHIFT, RB
+    | addd      3, RD, 0x0, KBASE
     | --
-    | andd 0, RB, 0x1, RB
-    | addd 3, RA, KBASE, TMP0
+    | andd      0, RB, 0x1, RB
+    | addd      3, RA, KBASE, TMP0
     | --
-    | addd 0, PC, RB, PC                    // Remember active hook before pcall.
-    | subd 3, KBASE, 0x8, KBASE
+    | addd      0, PC, RB, PC               // Remember active hook before pcall.
+    | subd      3, KBASE, 0x8, KBASE
     | // Note: this does a (harmless) copy of the function to the PC slot, too.
     |1:
-    | ldd 3, TMP0, -24, RB
-    | cmpbedb 4, KBASE, 0x0, pred0
-    | nop 2
+    | ldd       3, TMP0, -24, RB
+    | cmpbedb   4, KBASE, 0x0, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | addd 3, RA, KBASE, TMP0, ~pred0
-    | subd 4, KBASE, 0x8, KBASE, ~pred0
-    | std 5, TMP0, -16, RB
-    | ct ctpr2, ~pred0
+    | addd      3, RA, KBASE, TMP0, ~pred0
+    | subd      4, KBASE, 0x8, KBASE, ~pred0
+    | std       5, TMP0, -16, RB
+    | ct        ctpr2, ~pred0               // <1
     | --
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
-    | ldd 3, RA, -16, RB
-    | disp ctpr1, ->vmeta_call
-    | nop 2
+    | ldd       3, RA, -16, RB
+    | disp      ctpr1, ->vmeta_call
     | --
-    | sard 3, RB, 0x2f, ITYPE
-    | getfd 4, RB, (47 << 6), RB
+    | disp      ctpr2, ->vm_enter_pipeline  // TODO: inline
+    | wait_load RB, 1
     | --
-    | lddsm 3, RB, LFUNC->pc, CARG1
-    | cmpesb 4, ITYPE, LJ_TFUNC, pred0
-    | nop 2
+    | sard      3, RB, 0x2f, ITYPE
+    | getfd     4, RB, (47 << 6), RB
     | --
-    | ldwsm 3, CARG1, 0x0, TMP0
-    | addd 4, RA, 0x0, BASE, pred0
-    | ldbsm 5, CARG1, 0x0, TMP1
-    | ct ctpr1, ~pred0
+    | lddsm     3, RB, LFUNC->pc, RARG1
+    | cmpesb    4, ITYPE, LJ_TFUNC, pred0
+    | wait_load RARG1, 0
     | --
-    | std 5, BASE, -8, PC
-    | nop 1
+    | addd      4, RA, 0x0, BASE, pred0
+    | ct        ctpr1, ~pred0               // vmeta_call(BASE, RA, RD)
     | --
-    | shld 0, TMP1, 0x3, TMP1               // jmp to [DISPATCH+OP*8]
-    | addd 1, CARG1, 0x4, PC
-    | shrd 3, TMP0, 0x5, RA
-    | --
-    | ldd 0, TMP1, DISPATCH, TMP1
-    | andd 3, RA, 0x7f8, RA
-    | nop 2
-    | --
-    | movtd 0, TMP1, ctpr1
-    | --
-    | ct ctpr1
+    | std       5, BASE, -8, PC
+    | ct        ctpr2                       // vm_enter_pipeline(RARG1, RD, RB)
     | --
     |
     |//-- Coroutine library --------------------------------------------------
