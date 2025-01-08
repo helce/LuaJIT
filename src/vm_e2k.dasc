@@ -3347,45 +3347,48 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.macro math_minmax, name, ins
     |->ff_ .. name:
-    | todo
-    | ldd 3, BASE, 0x0, TMP0
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E = (nargs+1)*8
+    | ldd       3, BASE, 0x0, TMP0
+    | disp      ctpr1, ->fff_fallback
     | --
-    | sard 3, TMP0, 0x2f, ITYPE
-    | disp ctpr2, ->fff_resb
+    | disp      ctpr2, ->fff_resb
     | --
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | cmpbsb 4, ITYPE, LJ_TISNUM, pred1
-    | disp ctpr3, >1
-    | nop 1
+    | disp      ctpr3, >1
+    | wait_load TMP0, 2
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
+    | sard      3, TMP0, 0x2f, ITYPE
     | --
-    | addd 3, 0x0, 0x10, RA
-    | ct ctpr1, ~pred0
+    | addd      0, RD_E, 0, RD
+    | cmpbdb    3, RD_E, (1+1)*8, pred0
+    | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
+    | --
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
+    | --
+    | addd      3, 0x0, 0x10, RA
+    | ct        ctpr1, ~pred0
     |1: //  Handle numbers or integers.
-    | cmpbsb 3, RA, RD, pred0
-    | addd 4, BASE, RA, TMP1
+    | cmpbsb    3, RA, RD, pred0
+    | addd      4, BASE, RA, TMP1
     | --
-    | lddsm 3, TMP1, -8, TMP1
-    | nop 1
+    | lddsm     3, TMP1, -8, TMP1
+    | wait_pred_ct pred0, 1
     | --
-    | ct ctpr2, ~pred0
+    | ct        ctpr2, ~pred0               /// fff_resb(RD, TMP0)
     | --
-    | sard 3, TMP1, 0x2f, ITYPE
+    | sard      3, TMP1, 0x2f, ITYPE
     | --
-    | cmpbsb 3, ITYPE, LJ_TISNUM, pred0
-    | nop 2
+    | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr1, ~pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
-    | ins 3, TMP0, TMP1, TMP0
-    | addd 4, RA, 0x8, RA
-    | ct ctpr3
+    | ins       3, TMP0, TMP1, TMP0
+    | addd      4, RA, 0x8, RA
+    | ct        ctpr3                       // <1
     | --
     |.endmacro
     |
