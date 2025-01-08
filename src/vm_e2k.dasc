@@ -1644,37 +1644,35 @@ static void build_subroutines(BuildCtx *ctx)
     | ins_next
     |
     |->vmeta_equal_cd:
-    | todo
     |.if FFI
-    | disp ctpr1, extern lj_meta_equal_cd   // (lua_State *L, BCIns ins)
+    | disp      ctpr1, extern lj_meta_equal_cd
     | --
-    | ldd 0, STACK, SAVE_L, RB
-    | subd 1, PC, 0x4, PC
+    | setwd_call
+    | ldd       0, STACK, SAVE_L, RB
+    | subd      1, PC, 0x4, PC
     | --
-    | ldw 0, PC, PREV_PC_OP, CARG2
-    | ldh 2, PC, PREV_PC_RD, TMP0
-    | nop 1
+    | ldw       0, PC, PREV_PC_OP, CARG2
+    | ldh       2, PC, PREV_PC_RD, TMP0
     | --
-    | subd 0, PC, BCBIAS_J*4, TMP1
-    | addd 1, RB, 0x0, CARG1
-    | std 2, RB, L->base, BASE
+    | subd      0, PC, BCBIAS_J*4, TMP1
+    | addd      1, RB, 0x0, CARG1
+    | std       2, RB, L->base, BASE
     | --
-    | addd 0, TMP1, 0x4, TMP1
-    | shld 1, TMP0, 0x2, TMP0
-    | std 2, STACK, SAVE_PC, PC
-    | call ctpr1, wbs = 0x8
+    | addd      0, TMP1, 0x4, TMP1
+    | shld      1, TMP0, 0x2, TMP0
+    | std       2, STACK, SAVE_PC, PC
+    | call      ctpr1, wbs = 0x8            // lj_meta_equal_cd(lua_State *L, BCIns ins)
     | --
     | // 0/1 or TValue * (metamethod) returned.
-    | cmpbedb 0, CRET1, 0x1, pred0
-    | cmpbdb 1, CRET1, 0x1, pred1
-    | ldd 3, RB, L->base, BASE
-    | disp ctpr2, ->vmeta_binop
-    | nop 4
+    | cmpbedb   0, CRET1, 0x1, pred0
+    | cmpbdb    1, CRET1, 0x1, pred1
+    | ldd       3, RB, L->base, BASE
+    | disp      ctpr2, ->vmeta_binop
     | --
-    | addd 0, PC, 0x4, PC, pred0
-    | ct ctpr2, ~pred0
+    | addd      0, PC, 0x4, PC, pred0
+    | ct        ctpr2, ~pred0               // vmeta_binop(CRET1)
     | --
-    | addd 0, TMP1, TMP0, PC, ~pred1
+    | addd      0, TMP1, TMP0, PC, ~pred1
     | --
     | ins_next
     |.endif
