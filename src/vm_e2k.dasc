@@ -2337,103 +2337,109 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Base library: iterators -------------------------------------------
     |
     |->ff_next:
-    | lddsm 3, BASE, 0x0, CARG1
-    | disp ctpr2, ->fff_fallback
+    | // RD_E = (nargs+1)*8
+    | cmpbdb    0, RD_E, (1+1)*8, pred0
+    | cmpedb    1, RD_E, (1+1)*8, pred1     // Missing 2nd arg?
+    | addd      2, RD_E, 0, RD
+    | lddsm     3, BASE, 0x0, T1
+    | disp      ctpr2, ->fff_fallback
     | --
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | cmpedb 4, RD, (1+1)*8, pred1          // Missing 2nd arg?
-    | nop 1
+    | disp      ctpr1, extern lj_tab_next
+    | wait_load T1, 1
     | --
-    | sardsm 3, CARG1, 0x2f, ITYPE
-    | getfdsm 4, CARG1, (47 << 6), CARG1
+    | sardsm    3, T1, 0x2f, ITYPE
+    | getfdsm   4, T1, (47 << 6), T1
     | --
-    | addd 0, 0x0, LJ_TNIL, TMP0
-    | cmpesbsm 3, ITYPE, LJ_TTAB, pred2
+    | addd      0, 0x0, LJ_TNIL, TMP0
+    | cmpesbsm  3, ITYPE, LJ_TTAB, pred2
     | --
-    | disp ctpr1, extern lj_tab_next        // (GCtab *t, cTValue *key, TValue *o)
+    | std       5, BASE, 0x8, TMP0, pred1   // Set missing 2nd arg to nil
+    | pass      pred0, p0
+    | pass      pred2, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | std 5, BASE, 0x8, TMP0, pred1         // Set missing 2nd arg to nil
-    | pass pred0, p0
-    | pass pred2, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
-    | nop 2
+    | ldd       0, BASE, -8, PC, pred0
+    | ct        ctpr2, ~pred0               // fff_fallback(RD)
     | --
-    | ldd 0, BASE, -8, PC, pred0
-    | ct ctpr2, ~pred0
+    | setwd_call
     | --
-    | addd 0, BASE, 0x8, CARG2
-    | subd 1, BASE, 0x10, CARG3
-    | call ctpr1, wbs = 0x8
+    | addd      0, T1, 0, CARG1
+    | addd      1, BASE, 0x8, CARG2
+    | subd      2, BASE, 0x10, CARG3
+    | call      ctpr1, wbs = 0x8            // lj_tab_next(GCtab *t, cTValue *key, TValue *o)
     | --
     | // 1=found, 0=end, -1=error returned.
-    | cmpledb 0, CRET1, 0x0, pred0
-    | cmpldb 1, CRET1, 0x0, pred1
-    | addd 3, 0x0, LJ_TNIL, TMP0
-    | disp ctpr2, ->fff_res
+    | cmpledb   0, CRET1, 0x0, pred0
+    | cmpldb    1, CRET1, 0x0, pred1
+    | addd      3, 0x0, LJ_TNIL, TMP0
+    | disp      ctpr2, ->fff_res
     | --
-    | disp ctpr1, ->fff_fallback
-    | nop 3
+    | addd      4, 0x0, (1+2)*8, RD         // Found key/value
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     p0, ~p1, p4
+    | landp     p0, p1, p5
+    | pass      p4, pred2
+    | pass      p5, pred3
+    | disp      ctpr1, ->fff_fallback
+    | wait_pred_ct pred3, 0
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp p0, ~p1, p4
-    | landp p0, p1, p5
-    | pass p4, pred2
-    | pass p5, pred3
-    | addd 4, 0x0, (1+2)*8, RD              // Found key/value
+    | ct        ctpr1, pred3                // fff_fallback(RD), Invalid key.
     | --
-    | ct ctpr1, pred3                       // Invalid key.
-    | --
-    | addd 4, 0x0, (1+1)*8, RD, pred2
-    | std 5, BASE, -16, TMP0, pred2         // End of traversal: return nil.
-    | ct ctpr2
+    | addd      4, 0x0, (1+1)*8, RD, pred2
+    | std       5, BASE, -16, TMP0, pred2   // End of traversal: return nil.
+    | ct        ctpr2                       // fff_res(RD)
     | --
     |
     |->ff_pairs:
-    | ldd 3, BASE, 0x0, RB
-    | lddsm 5, BASE, -16, CARG1
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E = (nargs+1)*8
+    | addd      0, RD_E, 0, RD
+    | ldd       3, BASE, 0x0, RB
+    | lddsm     5, BASE, -16, T1
+    | disp      ctpr1, ->fff_fallback
+    | wait_load RB, 0
     | --
-    | addd 3, RB, 0x0, TMP1
-    | sard 4, RB, 0x2f, ITYPE
-    | getfd 5, RB, (47 << 6), RB
+    | addd      3, RB, 0x0, TMP1
+    | sard      4, RB, 0x2f, ITYPE
+    | getfd     5, RB, (47 << 6), RB
     | --
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | cmpesb 4, ITYPE, LJ_TTAB, pred1
-    | lddsm 5, RB, TAB->metatable, TMP0
+    | cmpbdb    3, RD, (1+1)*8, pred0
+    | cmpesb    4, ITYPE, LJ_TTAB, pred1
+    | lddsm     5, RB, TAB->metatable, TMP0
     | --
-    | addd 3, 0x0, LJ_TFUNC, ITYPE
-    | getfdsm 4, CARG1, (47 << 6), CARG1
-    | disp ctpr2, ->fff_res
+    | addd      3, 0x0, LJ_TFUNC, ITYPE
+    | getfdsm   4, T1, (47 << 6), T1
+    | disp      ctpr2, ->fff_res
     | --
-    | lddsm 3, CARG1, CFUNC->upvalue[0], CARG2
-    | shld 4, ITYPE, 0x2f, ITYPE
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
+    | lddsm     3, T1, CFUNC->upvalue[0], T2
+    | shld      4, ITYPE, 0x2f, ITYPE
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr1, ~pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
 #if LJ_52
-    | cmpedb 3, TMP0, 0x0, pred0
-    | nop 2
+    | cmpedb    3, TMP0, 0, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr1, ~pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
 #endif
-    | ldd 0, BASE, -8, PC
-    | addd 1, 0x0, LJ_TNIL, TMP0
-    | ord 3, CARG2, ITYPE, CARG2
+    | ldd       0, BASE, -8, PC
+    | addd      1, 0x0, LJ_TNIL, TMP0
+    | ord       3, T2, ITYPE, T2
     | --
-    | std 2, BASE, -16, CARG2
-    | std 5, BASE, -8, TMP1
+    | std       2, BASE, -16, T2
+    | std       5, BASE, -8, TMP1
     | --
-    | addd 4, 0x0, (1+3)*8, RD
-    | std 5, BASE, 0x0, TMP0
-    | ct ctpr2
+    | addd      4, 0x0, (1+3)*8, RD
+    | std       5, BASE, 0x0, TMP0
+    | ct        ctpr2                       // fff_res(RD)
     | --
     |
     |->ff_ipairs_aux:
