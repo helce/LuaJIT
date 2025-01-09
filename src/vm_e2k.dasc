@@ -4131,30 +4131,65 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vm_hotcall:                          // Hot call counter underflow.
-    | todo
-    | .wide off
-    | addd 0, BASE, RD, RD
-    | subd 0, RD, 0x8, RD
-    | ldd 0, STACK, SAVE_L, RB
-    | std 2, RB, L->base, BASE
-    | std 2, RB, L->top, RD
-    | addd 0, PC, 0x0, CARG2
-    | addd 0, RB, 0x0, CARG1
-    | disp ctpr1, extern lj_dispatch_call   // (lua_State *L, const BCIns *pc)
-    | call ctpr1, wbs = 0x8
+    | // RD_E
+    | disp ctpr1, extern lj_dispatch_call
+    | --
+    | setwd_call
+    | ldd       0, STACK, SAVE_L, RB
+    | addd      1, BASE, RD_E, RD
+    | --
+    | subd      0, RD, 8, RD
+    | wait_load RB, 1
+    | --
+    | addd      0, RB, 0, CARG1
+    | addd      1, PC, 0, CARG2
+    | addd      3, 0, 0, TMP0
+    | --
+    | std       2, RB, L->base, BASE
+    | std       5, RB, L->top, RD
+    | call      ctpr1, wbs = 0x8            // lj_dispatch_call(lua_State *L, const BCIns *pc)
+    | --
     | // ASMFunction returned.
-    | addd 0, 0x0, 0x0, TMP0
-    | std 2, STACK, SAVE_PC, TMP0              // Invalidate for subsequent line hook.
-    | ldd 0, RB, L->base, BASE
-    | addd 0, CRET1, 0x0, RA
-    | ldd 0, RB, L->top, RD
-    | subd 0, RD, BASE, RD
-    | movtd 0, RA, ctpr1
-    | ldb 0, PC, PREV_PC_RA, RA
-    | shld 0, RA, 0x3, RA
-    | addd 0, RD, 0x8, RD
-    | ct ctpr1
-    | .wide on
+    | pipe_setwd
+    | movtd     0, CRET1, ctpr3             // Prepare an insn handler for stage E.
+    | addd      1, CRET1, 0x0, T0
+    | ldd       2, RB, L->base, BASE
+    | ldd       3, RB, L->top, RD
+    | std       5, STACK, SAVE_PC, TMP0     // Invalidate for subsequent line hook.
+    | --
+    | ldw       0, PC,-4, INSN_E            // Load insns.
+    | ldwsm     2, PC, 0, INSN_B
+    | ldwsm     3, PC, 4, INSN_L
+    | ldwsm     5, PC, 8, INSN_D
+    | --
+    | ldwsm     0, PC,12, INSN_S
+    | wait_load INSN_B, 1
+    | --
+    | addd      0, T0, 0, OP_E
+    | shldsm    2, INSN_B, 0x3, OP_B        // Scale opcode fields.
+    | shldsm    3, INSN_L, 0x3, OP_L
+    | shldsm    5, INSN_D, 0x3, OP_D
+    | --
+    | anddsm    2, OP_B, 0x7f8, OP_B        // Extract opcode fields.
+    | anddsm    3, OP_L, 0x7f8, OP_L
+    | subd      4, RD, BASE, RD
+    | --
+    | lddsm     2, OP_B, DISPATCH, OP_B
+    | shrd      1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
+    | shrd      3, INSN_E, 0x15, RB_E
+    | addd      4, RD, 0x8, RD
+    | --
+    | andd      1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
+    | andd      3, RB_E, 0x7f8, RB_E
+    | addd      4, 0, 0, RC_E               // FIXME: set to RD???
+    | addd      5, RD, 0, RD_E
+    | --
+    | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
+    | shrdsm    4, INSN_B, 0x15, RB_B
+    | shrdsm    5, INSN_B, 0xd, RCD_B
+    | --
+    | ct        ctpr3                       // Jump to the insn handler for stage E.
+    | --
     |
     |->vm_profhook:                         // Dispatch target for profiler hook.
     | todo
