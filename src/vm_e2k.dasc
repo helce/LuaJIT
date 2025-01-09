@@ -1930,6 +1930,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      4, T1, 0x0, RB, ~pred0
     | ct        ctpr2, pred0                // >1
     | --
+    | addd      0, T1, 0, CARG1
     | std       2, T1, L->base, BASE
     | subd      3, RD, 0x8, RD
     | --
