@@ -4192,19 +4192,23 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vm_profhook:                         // Dispatch target for profiler hook.
-    | todo
 #if LJ_HASPROFILE
-    | .wide off
-    | ldd 0, STACK, SAVE_L, RB
-    | std 2, RB, L->base, BASE
-    | addd 0, PC, 0x0, CARG2
-    | addd 0, RB, 0x0, CARG1
-    | disp ctpr1, extern lj_dispatch_profile // (lua_State *L, const BCIns *pc)
-    | call ctpr1, wbs = 0x8
-    | ldd 0, RB, L->base, BASE
+    | disp ctpr1, extern lj_dispatch_profile
+    | --
+    | setwd_call
+    | ldd       0, STACK, SAVE_L, RB
+    | wait_load RB, 0
+    | --
+    | addd      0, RB, 0x0, CARG1
+    | addd      1, PC, 0x0, CARG2
+    | std       2, RB, L->base, BASE
+    | --
+    | call      ctpr1, wbs = 0x8            // lj_dispatch_profile(lua_State *L, const BCIns *pc)
+    | --
+    | ldd       0, RB, L->base, BASE
     | // HOOK_PROFILE is off again, so re-dispatch to dynamic instruction.
-    | subd 0, PC, 0x4, PC
-    | .wide on
+    | subd      1, PC, 4, PC
+    | --
     | ins_next
 #endif
     |
