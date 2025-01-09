@@ -1908,11 +1908,10 @@ static void build_subroutines(BuildCtx *ctx)
     |//-----------------------------------------------------------------------
     |
     |// Inlined GC threshold check.
-    |// RD = (nargs+1)*8
     |// Setup the registers window for a call.
     |// Invalidate ctpr1 and ctpr2. Prepare ctpr3 to ->fff_fallback.
     |.macro ffgccheck
-    | // RD
+    | // RD = (nargs+1)*8
     | setwd_call
     | ldd       0, DISPATCH, DISPATCH_GL(gc.total), TMP1
     | ldd       2, DISPATCH, DISPATCH_GL(gc.threshold), TMP0
@@ -3555,99 +3554,101 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_string_sub:
-    | todo
+    | addd      1, RD_E, 0, RD              // used in ffgccheck
     | ffgccheck
-    | lddsm 3, BASE, 0x10, TMP0
-    | addd 4, 0x0, 0x0, RA
-    | adds 5, 0x0, -1, TMP1
-    | nop 1
+    | lddsm     3, BASE, 0x10, TMP0
+    | addd      4, 0x0, 0x0, RA
+    | adds      5, 0x0, -1, TMP1
+    | wait_pred_ct TMP0, 0
     | --
-    | cmpbdb 3, RD, (1+2)*8, pred0
-    | cmpbedb 4, RD, (1+2)*8, pred1
+    | cmpbdb    3, RD, (1+2)*8, pred0
+    | cmpbedb   4, RD, (1+2)*8, pred1
+    | sardsm    5, TMP0, 0x2f, ITYPE
     | --
-    | sardsm 5, TMP0, 0x2f, ITYPE
+    | cmpbsbsm  3, ITYPE, LJ_TISNUM, pred2
     | --
-    | cmpbsbsm 3, ITYPE, LJ_TISNUM, pred2
-    | nop 1
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | pass      pred2, p2
+    | landp     ~p0, p2, p4
+    | landp     ~p1, p2, p5
+    | pass      p4, pred0
+    | pass      p5, pred1
+    | wait_pred_ct pred0, 0
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | pass pred2, p2
-    | landp ~p0, p2, p4
-    | landp ~p1, p2, p5
-    | pass p4, pred0
-    | pass p5, pred1
+    | fdtoistr  3, TMP0, TMP1, pred1
+    | ct        ctpr3, ~pred0               // fff_fallback(RD), prepared in ffgccheck
     | --
-    | fdtoistr 3, TMP0, TMP1, pred1
-    | ct ctpr3, ~pred0
+    | ldd       3, BASE, 0x0, RB
+    | addd      4, 0x0, U64x(0x00007fff,0xffffffff), T1
+    | ldd       5, BASE, 0x8, TMP0
+    | disp      ctpr1, >2
+    | wait_load RB, 0
     | --
-    | ldd 3, BASE, 0x0, RB
-    | addd 4, 0x0, U64x(0x00007fff,0xffffffff), CARG1
-    | ldd 5, BASE, 0x8, TMP0
-    | nop 2
+    | sard      3, RB, 0x2f, ITYPE
+    | andd      4, RB, T1, RB
+    | sard      5, TMP0, 0x2f, T1
     | --
-    | sard 3, RB, 0x2f, ITYPE
-    | andd 4, RB, CARG1, RB
-    | sard 5, TMP0, 0x2f, CARG1
+    | cmpesb    3, ITYPE, LJ_TSTR, pred0
+    | cmpbsb    4, T1, LJ_TISNUM, pred1
+    | ldwsm     5, RB, STR->len, RC
     | --
-    | cmpesb 3, ITYPE, LJ_TSTR, pred0
-    | cmpbsb 4, CARG1, LJ_TISNUM, pred1
-    | ldwsm 5, RB, STR->len, RC
-    | disp ctpr1, >2
-    | nop 1
+    | fdtoistr  3, TMP0, RA
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     p0, p1, p4
+    | pass      p4, pred0
+    | disp      ctpr2, >2
+    | wait_load RC, 1
+    | wait_pred_ct pred0, 0
     | --
-    | fdtoistr 3, TMP0, RA
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp p0, p1, p4
-    | pass p4, pred0
-    | disp ctpr2, >2
+    | cmpbsbsm  3, RC, TMP1, pred1
+    | cmplsbsm  4, RC, TMP1, pred2
+    | adds      5, TMP1, 0x1, T1
+    | ct        ctpr3, ~pred0               // fff_fallback(RD), prepared in ffgccheck
     | --
-    | cmpbsbsm 3, RC, TMP1, pred1
-    | cmplsbsm 4, RC, TMP1, pred2
-    | adds 5, TMP1, 0x1, CARG1
-    | ct ctpr3, ~pred0
+    | cmplesb   3, RA, 0x0, pred3
+    | cmpesb    4, RA, 0x0, pred4
+    | disp      ctpr2, ->fff_newstr
     | --
-    | cmplesb 3, RA, 0x0, pred3
-    | cmpesb 4, RA, 0x0, pred4
-    | disp ctpr2, ->fff_newstr
+    | pass      pred1, p0
+    | pass      pred2, p1
+    | landp     p0, p1, p4
+    | landp     p0, ~p1, p5
+    | pass      p4, pred0
+    | pass      p5, pred1
     | --
-    | pass pred1, p0
-    | pass pred2, p1
-    | landp p0, p1, p4
-    | landp p0, ~p1, p5
-    | pass p4, pred0
-    | pass p5, pred1
+    | pass      pred3, p0
+    | pass      pred4, p1
+    | landp     p0, ~p1, p4
+    | pass      p4, pred2
+    | wait_pred_ct pred2, 0
     | --
-    | pass pred3, p0
-    | pass pred4, p1
-    | landp p0, ~p1, p4
-    | pass p4, pred2
-    | --
-    | adds 3, CARG1, RC, TMP1, pred1        // end = end+(len+1)
-    | adds 4, RC, 0x0, TMP1, pred0          // end = len
-    | adds 5, 0x0, 0x1, RA, pred4           // start = 1
-    | ct ctpr1, ~pred2                      // start > 0?
+    | adds      3, T1, RC, TMP1, pred1   // end = end+(len+1)
+    | adds      4, RC, 0x0, TMP1, pred0     // end = len
+    | adds      5, 0x0, 0x1, RA, pred4      // start = 1
+    | ct        ctpr1, ~pred2               // >2 start > 0?
     | --
     | // Negative start or underflow.
-    | adds 3, RA, RC, RA                    // start = start+(len+1)
+    | adds      3, RA, RC, RA               // start = start+(len+1)
     | --
-    | adds 3, RA, 0x1, RA
+    | adds      3, RA, 0x1, RA
     | --
-    | cmplesb 3, RA, 0x0, pred0
+    | cmplesb   3, RA, 0x0, pred0
     | --
-    | adds 3, 0x0, 0x1, RA, pred0           // start = 1
+    | adds      3, 0x0, 0x1, RA, pred0      // start = 1
+    | --
     |2:
-    | subs 3, TMP1, RA, TMP1
-    | addd 4, RB, RA, CARG1
+    | subs      3, TMP1, RA, TMP1
+    | addd      4, RB, RA, T1
     | --
-    | cmplsb 3, TMP1, 0x0, pred0
+    | cmplsb    3, TMP1, 0x0, pred0
     | nop 1
     | --
-    | xors 3, TMP1, TMP1, TMP1, pred0       // Zero length. Any ptr in RD is ok.
-    | adds 4, TMP1, 0x1, TMP1, ~pred0
-    | addd 5, CARG1, #STR-1, RD, ~pred0
-    | ct ctpr2
+    | xors      3, TMP1, TMP1, TMP1, pred0  // Zero length. Any ptr in RD is ok.
+    | adds      4, TMP1, 0x1, TMP1, ~pred0
+    | addd      5, T1, #STR-1, RD, ~pred0
+    | ct        ctpr2                       // fff_newstr(RD, TMP1)
     | --
     |
     |.macro ffstring_op, name
