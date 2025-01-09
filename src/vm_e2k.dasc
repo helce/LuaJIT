@@ -1579,15 +1579,15 @@ static void build_subroutines(BuildCtx *ctx)
     | ins_next                              // TODO: inline
     |
     |->vmeta_equal:
-    | // PC, RB, RD
+    | // RA, RB, RD
     | disp      ctpr1, extern lj_meta_equal
     | --
     | setwd_call
     | ldd       0, STACK, SAVE_L, RB
+    | addd      1, RB, 0x0, T4
     | getfd     3, RD, (47 << 6), RD
     | --
     | ldh       0, PC, PREV_PC_RD, TMP0
-    | addd      1, RB, 0x0, CARG4
     | subd      2, PC, 0x4, PC
     | subd      3, PC, BCBIAS_J*4, TMP1
     | wait_load RB, 1
@@ -1595,6 +1595,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, RA, 0x0, CARG2
     | addd      1, RB, 0x0, CARG1
     | std       2, RB, L->base, BASE
+    | addd      3, T4, 0x0, CARG4
     | --
     | addd      0, RD, 0x0, CARG3
     | shld      1, TMP0, 0x2, TMP0
@@ -1961,8 +1962,8 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr1, ~pred0               // <1
     | --
     | ldw       0, STACK, MULTRES, RD
-    | ct        ctpr2                       // fff_res(RD)
     | wait_load RD, 0
+    | ct        ctpr2                       // fff_res(RD)
     | --
     |
     |->ff_type:
@@ -4425,7 +4426,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      pred2, p1
         | landp     p0, p1, p4
         | pass      p4, pred1
-        | ct        ctpr3, pred0            // Same GCobjs or pvalues?
+        | ct        ctpr3, pred0            // <1, Same GCobjs or pvalues?
         | --
         | wait_pred_ct pred1, 1
         | --
@@ -4446,11 +4447,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         if (vk) {
           | addd    3, 0x0, 0x0, RB         // ne = 0
-          | ct      ctpr1                   // vmeta_equal(PC, RB, RD), Handle __eq metamethod.
+          | ct      ctpr1                   // vmeta_equal(RA, RB, RD), Handle __eq metamethod.
           | --
         } else {
           | addd    3, 0x0, 0x1, RB         // ne = 1
-          | ct      ctpr1                   // vmeta_equal(PC, RB, RD), Handle __eq metamethod.
+          | ct      ctpr1                   // vmeta_equal(RA, RB, RD), Handle __eq metamethod.
           | --
         }
         break;
