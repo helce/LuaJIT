@@ -1912,6 +1912,7 @@ static void build_subroutines(BuildCtx *ctx)
     |// Setup the registers window for a call.
     |// Invalidate ctpr1 and ctpr2. Prepare ctpr3 to ->fff_fallback.
     |.macro ffgccheck
+    | // RD
     | setwd_call
     | ldd       0, DISPATCH, DISPATCH_GL(gc.total), TMP1
     | ldd       2, DISPATCH, DISPATCH_GL(gc.threshold), TMP0
@@ -3492,62 +3493,65 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_string_char:
-    | todo
+    | addd      1, RD_E, 0, RD              // used in ffgccheck
     | ffgccheck
-    | ldd 3, BASE, 0x0, TMP0
-    | addd 4, 0x0, 0x1, TMP1
-    | nop 2
+    | ldd       3, BASE, 0x0, TMP0
+    | addd      4, 0x0, 0x1, TMP1           // used in fff_newstr
+    | wait_load TMP0, 0
     | --
-    | sard 3, TMP0, 0x2f, ITYPE
-    | fdtoistr 4, TMP0, RB
+    | sard      3, TMP0, 0x2f, ITYPE
+    | fdtoistr  4, TMP0, RB
     | --
-    | cmpedb 3, RD, (1+1)*8, pred0
-    | cmpbsb 4, ITYPE, LJ_TISNUM, pred1
+    | cmpedb    3, RD, (1+1)*8, pred0
+    | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
     | --
-    | pass pred0, p0                        // *Exactly* 1 arg.
-    | pass pred1, p1
-    | landp p0, p1, p4
-    | pass p4, pred0
+    | pass      pred0, p0                   // *Exactly* 1 arg.
+    | pass      pred1, p1
+    | landp     p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
+    | wait      RB, 2, 4 + 2                // extra fp->int pernalty
     | --
-    | cmpbesb 3, RB, 255, pred1
-    | ct ctpr3, ~pred0
-    | nop 2
+    | cmpbesb   3, RB, 255, pred1
+    | ct        ctpr3, ~pred0               // fff_fallback(RD), prepared in ffgccheck
+    | wait_pred_ct pred1, 0
     | --
-    | stw 2, STACK, STACK_TMP, RB, pred1
-    | addd 3, STACK, STACK_TMP, RD, pred1   // Points to stack. Little-endian.
-    | ct ctpr3, ~pred1
+    | stw       2, STACK, STACK_TMP, RB, pred1
+    | addd      3, STACK, STACK_TMP, RD, pred1   // Points to stack. Little-endian.
+    | ct        ctpr3, ~pred1               // fff_fallback(RD), prepared in ffgccheck
     | --
     | // Fall through
     |
     |->fff_newstr:
-    | todo
-    | disp ctpr1, extern lj_str_new         // (lua_State *L, char *str, size_t l)
+    | // RD, TMP1
+    | disp      ctpr1, extern lj_str_new
     | --
-    | ldd 0, STACK, SAVE_L, RB
-    | sxt 1, 0x2, TMP1, CARG3               // Zero-extended to size_t.
-    | nop 2
+    | setwd_call
+    | ldd       0, STACK, SAVE_L, RB
+    | wait_load RB, 0
     | --
-    | addd 0, RD, 0x0, CARG2
-    | addd 1, RB, 0x0, CARG1
-    | std 2, RB, L->base, BASE
+    | addd      0, RD, 0x0, CARG2
+    | addd      1, RB, 0x0, CARG1
+    | std       2, RB, L->base, BASE
+    | sxt       3, 0x2, TMP1, CARG3         // Zero-extended to size_t.
     | --
-    | std 2, STACK, SAVE_PC, PC
-    | call ctpr1, wbs = 0x8
+    | std       2, STACK, SAVE_PC, PC
+    | call      ctpr1, wbs = 0x8            // lj_str_new(lua_State *L, char *str, size_t l)
     | --
     | // GStr * returned.
-    | addd 2, 0x0, LJ_TSTR, ITYPE
-    | ldd 3, RB, L->base, BASE
-    | disp ctpr1, ->fff_res
+    | addd      2, 0x0, LJ_TSTR, ITYPE
+    | ldd       3, RB, L->base, BASE
+    | disp      ctpr1, ->fff_res
     | nop 2
     | --
-    | shld 0, ITYPE, 0x2f, ITYPE
+    | shld      0, ITYPE, 0x2f, ITYPE
     | --
-    | ord 2, CRET1, ITYPE, CRET1
-    | ldd 3, BASE, -8, PC
+    | ord       2, CRET1, ITYPE, CRET1
+    | ldd       3, BASE, -8, PC
     | --
-    | addd 0, 0x0, (1+1)*8, RD
-    | std 5, BASE, -16, CRET1
-    | ct ctpr1
+    | addd      0, 0x0, (1+1)*8, RD
+    | std       5, BASE, -16, CRET1
+    | ct        ctpr1                       // fff_res(RD)
     | --
     |
     |->ff_string_sub:
