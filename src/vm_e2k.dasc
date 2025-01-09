@@ -2964,32 +2964,33 @@ static void build_subroutines(BuildCtx *ctx)
     | coroutine_resume_wrap 0        // coroutine.wrap
     |
     |->ff_coroutine_yield:
-    | todo
-    | ldd 0, STACK, SAVE_L, RB
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | ldd       0, STACK, SAVE_L, RB
+    | addd      1, RD_E, 0, RD
+    | disp      ctpr1, ->fff_fallback
     | --
-    | ldd 0, RB, L->cframe, TMP0
-    | addd 3, BASE, RD, TMP1
-    | return ctpr3
-    | nop 2
+    | return    ctpr3
+    | wait_load RB, 1
+    | --
+    | ldd       0, RB, L->cframe, TMP0
+    | addd      3, BASE, RD, TMP1
+    | wait_load TMP0, 0
     | --
     | cmpandedb 0, TMP0, CFRAME_RESUME, pred0
-    | nop 2
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr1, pred0
+    | ct        ctpr1, pred0                // fff_fallback(RD)
     | --
-    | std 2, RB, L->base, BASE
-    | subd 3, TMP1, 0x8, RD
+    | std       2, RB, L->base, BASE
+    | subd      3, TMP1, 0x8, RD
     | --
-    | std 2, RB, L->top, RD
-    | addd 3, 0x0, 0x0, RD
+    | std       2, RB, L->top, RD
+    | addd      3, 0x0, 0x0, RD
     | --
-    | addd 0, 0x0, LUA_YIELD, RRET1
-    | std 2, RB, L->cframe, RD
+    | addd      0, 0x0, LUA_YIELD, RRET1
+    | std       2, RB, L->cframe, RD
     | --
-    | stb 2, RB, L->status, RRET1
-    | ct ctpr3
+    | stb       2, RB, L->status, RRET1
+    | ct        ctpr3                       // return
     | --
     |
     |//-- Math library -------------------------------------------------------
