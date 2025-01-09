@@ -3376,40 +3376,44 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_math_frexp:
-    | todo
-    | ldd 3, BASE, 0x0, CARG1
-    | disp ctpr2, ->fff_fallback
-    | nop 1
+    | // RD_E
+    | setwd_call
+    | addd      0, RD_E, 0, RD
+    | ldd       3, BASE, 0x0, T1
+    | disp      ctpr2, ->fff_fallback
     | --
-    | disp ctpr1, extern frexp
+    | disp      ctpr1, extern frexp
+    | wait_load T1, 1
     | --
-    | sard 3, CARG1, 0x2f, ITYPE
+    | sard      3, T1, 0x2f, ITYPE
+    | addd      4, T1, 0, CARG1
     | --
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | cmpbsb 4, ITYPE, LJ_TISNUM, pred1
-    | nop 1
+    | cmpbdb    3, RD, (1+1)*8, pred0
+    | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr2, ~pred0
+    | ct        ctpr2, ~pred0               // fff_fallback(RD)
     | --
-    | addd 0, STACK, STACK_TMP, CARG2
-    | call ctpr1, wbs = 0x8
+    | addd      0, STACK, STACK_TMP, CARG2
+    | call      ctpr1, wbs = 0x8            // frexp(f64, int*)
     | --
-    | ldd 0, BASE, -8, PC
-    | ldw 2, STACK, STACK_TMP, TMP0
-    | disp ctpr1, ->fff_res
-    | nop 2
+    | ldd       0, BASE, -8, PC
+    | ldw       2, STACK, STACK_TMP, TMP0
+    | disp      ctpr1, ->fff_res
+    | wait_load TMP0, 0
     | --
-    | istofd 0, TMP0, TMP0
-    | std 5, BASE, -16, CRET1
+    | istofd    0, TMP0, TMP0
+    | std       5, BASE, -16, CRET1
+    | wait      TMP0, 0, 4
     | --
-    | addd 3, 0x0, (1+2)*8, RD
-    | std 5, BASE, -8, TMP0
-    | ct ctpr1
+    | addd      3, 0x0, (1+2)*8, RD
+    | std       5, BASE, -8, TMP0
+    | ct        ctpr1                       // fff_res(RD)
     | --
     |
     |->ff_math_modf:
