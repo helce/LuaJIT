@@ -7038,22 +7038,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
         | --
         | addd      1, PC, RD, PC
+        | ldd       2, TMP0, -8, T2
         | ldd       3, TMP0, -24, T1
         | ldd       5, TMP0, -16, TMP1
-        | --
-        | addd      3, 0x0, 0x2f, T2
-        | wait_load T1, 1
+        | wait_load T1, 0
         | --
         | getfd     3, T1, (47 << 6), RB
-        | sard      4, T1, T2, ITYPE
-        | sard      5, TMP1, T2, TMP1
+        | sard      4, T1, 0x2f, ITYPE
+        | sard      5, TMP1, 0x2f, TMP1
         | --
-        | ldbsm     3, RB, CFUNC->ffid, T6
-        | cmpedb    4, T1, LJ_TNIL, pred2
-        | --
+        | cmpedb    0, T2, LJ_TNIL, pred2
         | cmpesb    3, ITYPE, LJ_TFUNC, pred0
         | cmpesb    4, TMP1, LJ_TTAB, pred1
-        | wait_load T6, 1
+        | ldbsm     5, RB, CFUNC->ffid, T6
+        | wait_load T6, 0
         | --
         | cmpedbsm  3, T6, FF_next_N, pred3
         | pass      pred0, p0
