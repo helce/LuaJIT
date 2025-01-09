@@ -3453,38 +3453,42 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- String library -----------------------------------------------------
     |
     |->ff_string_byte:
-    | todo
-    | ldd 3, BASE, 0x0, RB
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E
+    | addd      0, RD_E, 0, RD
+    | ldd       3, BASE, 0x0, RB
+    | disp      ctpr1, ->fff_fallback
     | --
-    | sard 3, RB, 0x2f, ITYPE
-    | getfd 4, RB, (47 << 6), RB
-    | disp ctpr2, ->fff_res
+    | disp      ctpr2, ->fff_res
     | --
-    | cmpedb 3, RD, (1+1)*8, pred0
-    | cmpesb 4, ITYPE, LJ_TSTR, pred1
-    | disp ctpr3, ->fff_resb
+    | disp      ctpr3, ->fff_resb
+    | wait_load RB, 2
     | --
-    | ldwsm 3, RB, STR->len, TMP0
+    | sard      3, RB, 0x2f, ITYPE
+    | getfd     4, RB, (47 << 6), RB
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp p0, p1, p4
-    | pass p4, pred0
+    | cmpedb    3, RD, (1+1)*8, pred0
+    | cmpesb    4, ITYPE, LJ_TSTR, pred1
+    | ldwsm     5, RB, STR->len, TMP0
     | --
-    | ct ctpr1, ~pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ldd 2, BASE, -8, PC
-    | ldbsm 3, RB, STR[1], RB
-    | cmpbsbsm 4, TMP0, 0x1, pred1
-    | nop 2
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
-    | addd 2, 0x0, (0+1)*8, RD, pred1
-    | istofd 3, RB, TMP0
-    | ct ctpr2, pred1                       // Return no results for empty string.
+    | ldd       2, BASE, -8, PC
+    | ldbsm     3, RB, STR[1], RB
+    | cmpbsbsm  4, TMP0, 0x1, pred1
+    | wait_load RB, 0
+    | wait_pred_ct pred1, 0
     | --
-    | ct ctpr3
+    | addd      2, 0x0, (0+1)*8, RD, pred1
+    | istofd    3, RB, TMP0
+    | ct        ctpr2, pred1                // fff_res(RD), Return no results for empty string.
+    | --
+    | ct        ctpr3                       // fff_resb(RD, TMP0)
     | --
     |
     |->ff_string_char:
