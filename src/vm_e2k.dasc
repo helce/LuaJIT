@@ -7755,53 +7755,55 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_FUNCCW:
-        | todo
-        | // ins_AD BASE = new base, RA = framesize*8, RD = (nargs+1)*8
-        | ldd 3, BASE, -16, CARG2
-        | addd 4, BASE, RD, RD
-        | ldd 5, STACK, SAVE_L, RB
-        | disp ctpr1, ->vm_growstack_c
-        | nop 2
+        | // ins_AD BASE = new base, RA_E = framesize*8, RD_E = (nargs+1)*8
+        | setwd_call
+        | addd      0, RA_E, 0, RA          // FIXME: unused
+        | ldd       2, BASE, -16, T2
+        | addd      4, BASE, RD_E, RD
+        | ldd       5, STACK, SAVE_L, RB
+        | disp      ctpr1, ->vm_growstack_c
+        | wait_load T2, 0
         | --
-        | getfd 3, CARG2, (47 << 6), CARG2
-        | subd 4, RD, 0x8, RD
-        | std 5, RB, L->base, BASE
-        | nop 1
+        | getfd     2, T2, (47 << 6), T2
+        | subd      4, RD, 0x8, RD
+        | std       5, RB, L->base, BASE
         | --
-        | ldd 0, CARG2, CFUNC->f, CARG2
-        | ldd 2, DISPATCH, DISPATCH_GL(wrapf), CARG3
-        | ldd 3, RB, L->maxstack, TMP1
-        | addd 4, RD, 8*LUA_MINSTACK, TMP0
-        | nop 2
+        | ldd       0, T2, CFUNC->f, CARG2
+        | ldd       2, DISPATCH, DISPATCH_GL(wrapf), T3
+        | ldd       3, RB, L->maxstack, TMP1
+        | addd      4, RD, 8*LUA_MINSTACK, TMP0
         | --
-        | addd 0, CARG2, 0x0, KBASE
-        | addd 1, 0x0, ~LJ_VMST_C, TMP0
-        | cmpbedb 3, TMP0, TMP1, pred0
-        | addd 4, RB, 0x0, CARG1
-        | std 5, RB, L->top, RD
+        | addd      1, 0x0, ~LJ_VMST_C, TMP0
+        | cmpbedb   3, TMP0, TMP1, pred0
+        | wait_load CARG2, 1
         | --
-        | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0, pred0
-        | ct ctpr1, ~pred0                  // Need to grow stack?
+        | addd      0, CARG2, 0x0, KBASE
+        | addd      4, RB, 0x0, CARG1
+        | std       5, RB, L->top, RD
+        | wait_pred_ct pred0, LATENCY_LOAD
         | --
-        | movtd 0, CARG3, ctpr1              // (lua_State *L, lua_CFunction f)
+        | stw       2, DISPATCH, DISPATCH_GL(vmstate), TMP0, pred0
+        | ct        ctpr1, ~pred0           // vm_growstack_c(RB), Need to grow stack?
         | --
-        | call ctpr1, wbs = 0x8
+        | movtd     0, T3, ctpr1
         | --
-        | ldd 3, RB, L->base, BASE
-        | shld 4, CRET1, 0x3, RD            // return nsresult
-        | addd 5, 0x0, ~LJ_VMST_INTERP, TMP0
-        | disp ctpr1, ->vm_returnc
+        | call      ctpr1, wbs = 0x8        // (lua_State *L, lua_CFunction f)
         | --
-        | std 2, DISPATCH, DISPATCH_GL(cur_L), RB
-        | addd 3, BASE, RD, RA
-        | stw 5, DISPATCH, DISPATCH_GL(vmstate), TMP0
+        | ldd       3, RB, L->base, BASE
+        | shld      4, CRET1, 0x3, RD       // return nsresult
+        | addd      5, 0x0, ~LJ_VMST_INTERP, TMP0
+        | disp      ctpr1, ->vm_returnc
         | --
-        | ldd 0, BASE, -8, PC               // Fetch PC of caller
-        | ldd 3, RB, L->top, TMP0
-        | nop 2
+        | std       2, DISPATCH, DISPATCH_GL(cur_L), RB
+        | addd      3, BASE, RD, RA
+        | stw       5, DISPATCH, DISPATCH_GL(vmstate), TMP0
         | --
-        | subd 3, TMP0, RA, RA              // RA = (L->top - (L->base+nresults))*8
-        | ct ctpr1
+        | ldd       0, BASE, -8, PC         // Fetch PC of caller
+        | ldd       3, RB, L->top, TMP0
+        | wait_load TMP0, 0
+        | --
+        | subd      3, TMP0, RA, RA         // RA = (L->top - (L->base+nresults))*8
+        | ct        ctpr1                   // vm_returnc(BASE, RA, RD, PC)
         | --
         break;
 
