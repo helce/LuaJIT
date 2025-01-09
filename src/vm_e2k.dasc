@@ -3452,6 +3452,7 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- String library -----------------------------------------------------
     |
     |->ff_string_byte:
+    | todo
     | ldd 3, BASE, 0x0, RB
     | disp ctpr1, ->fff_fallback
     | nop 2
@@ -3486,6 +3487,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_string_char:
+    | todo
     | ffgccheck
     | ldd 3, BASE, 0x0, TMP0
     | addd 4, 0x0, 0x1, TMP1
@@ -3513,6 +3515,7 @@ static void build_subroutines(BuildCtx *ctx)
     | // Fall through
     |
     |->fff_newstr:
+    | todo
     | disp ctpr1, extern lj_str_new         // (lua_State *L, char *str, size_t l)
     | --
     | ldd 0, STACK, SAVE_L, RB
@@ -3543,6 +3546,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_string_sub:
+    | todo
     | ffgccheck
     | lddsm 3, BASE, 0x10, TMP0
     | addd 4, 0x0, 0x0, RA
@@ -3731,6 +3735,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.macro .ffunc_bit, name
     |->ff_bit_..name:
+    | todo
     | lddsm 3, BASE, 0x0, TMP0
     | cmpbdb 4, RD, (1+1)*8, pred0
     | disp ctpr1, ->fff_fallback
@@ -3811,6 +3816,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.macro .ffunc_bit_sh, name, ins
     |->ff_..bit_..name:
+    | todo
     | lddsm 3, BASE, 0x0, CARG1
     | cmpbdb 4, RD, (2+1)*8, pred0
     | lddsm 5, BASE, 0x8, CARG2
