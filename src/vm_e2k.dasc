@@ -3946,6 +3946,7 @@ static void build_subroutines(BuildCtx *ctx)
     | do_fault
     |
     |->vm_rethook:                          // Dispatch target for return hooks.
+    | todo
     | .wide off
     | ldb 0, DISPATCH, DISPATCH_GL(hookmask), RD
     | cmpandedb 0, RD, HOOK_ACTIVE, pred0
@@ -4005,10 +4006,11 @@ static void build_subroutines(BuildCtx *ctx)
     | do_fault
     |
     |->vm_callhook:                         // Dispatch target for call hooks.
-    | std 2, STACK, SAVE_PC, PC
+    | std       2, STACK, SAVE_PC, PC
     | --
     |
     |->vm_hotcall:                          // Hot call counter underflow.
+    | todo
     | .wide off
     | addd 0, BASE, RD, RD
     | subd 0, RD, 0x8, RD
@@ -4034,6 +4036,7 @@ static void build_subroutines(BuildCtx *ctx)
     | .wide on
     |
     |->vm_profhook:                         // Dispatch target for profiler hook.
+    | todo
 #if LJ_HASPROFILE
     | .wide off
     | ldd 0, STACK, SAVE_L, RB
