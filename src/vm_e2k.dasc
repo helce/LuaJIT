@@ -1076,6 +1076,49 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr3                       // Jump to the insn handler for stage E.
     | --
     |
+    |->vm_restart_pipeline_static:
+    | pipe_setwd
+    | --
+    | ldw       0, PC, 0, INSN_E            // Load insns.
+    | ldwsm     2, PC, 4, INSN_B
+    | ldwsm     3, PC, 8, INSN_L
+    | ldwsm     5, PC,12, INSN_D
+    | --
+    | ldwsm     0, PC,16, INSN_S
+    | addd      1, PC, 4, PC                // FIXME: insn hanlders expect it to be NPC but not current PC
+    | wait_load INSN_E, 1
+    | --
+    | shld      0, INSN_E, 0x3, OP_E        // Scale opcode fields.
+    | shldsm    2, INSN_B, 0x3, OP_B
+    | shldsm    3, INSN_L, 0x3, OP_L
+    | shldsm    5, INSN_D, 0x3, OP_D
+    | --
+    | andd      0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | anddsm    2, OP_B, 0x7f8, OP_B
+    | anddsm    3, OP_L, 0x7f8, OP_L
+    | --
+    | addd      0, OP_E, DISPATCH, OP_E
+    | --
+    | ldd       0, OP_E, GG_DISP2STATIC, OP_E   // Load pointers to insn handlers.
+    | lddsm     2, OP_B, DISPATCH, OP_B
+    | shrd      1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
+    | shrd      3, INSN_E, 0x15, RB_E
+    | shrd      4, INSN_E, 0xd, T0
+    | --
+    | andd      1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
+    | andd      3, RB_E, 0x7f8, RB_E
+    | andd      4, T0, 0x7f8, RC_E
+    | andd      5, T0, 0x7fff8, RD_E
+    | wait_load OP_E, 1
+    | --
+    | movtd     0, OP_E, ctpr3              // Prepare an insn handler for stage E.
+    | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
+    | shrdsm    4, INSN_B, 0x15, RB_B
+    | shrdsm    5, INSN_B, 0xd, RCD_B
+    | --
+    | ct        ctpr3                       // Jump to the insn handler for stage E.
+    | --
+    |
     |->vm_cpcall:                           // Setup protected C frame, call C.
     | // (lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
     | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
@@ -1839,33 +1882,25 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Argument coercion for 'for' statement ------------------------------
     |
     |->vmeta_for:
-    | todo
-    | disp ctpr1, extern lj_meta_for        // (lua_State *L, TValue *base)
+    | // RA
+    | disp      ctpr1, extern lj_meta_for
     | --
-    | ldd 0, STACK, SAVE_L, RB
-    | addd 1, RA, 0x0, CARG2
-    | ldwsm 2, PC, -4, TMP0
-    | nop 2
+    | setwd_call
+    | ldd       0, STACK, SAVE_L, RB
+    | wait_load RB, 0
     | --
-    | andd 0, TMP0, 0xff, TMP1
-    | addd 1, RB, 0x0, CARG1
-    | std 2, RB, L->base, BASE
-    | shrd 3, TMP0, 0x5, RA
+    | addd      1, RB, 0x0, CARG1
+    | std       2, RB, L->base, BASE
+    | addd      3, RA, 0x0, CARG2
     | --
-    | shld 1, TMP1, 0x3, TMP1
-    | std 2, STACK, SAVE_PC, PC
-    | andd 3, RA, 0x7f8, RA
-    | call ctpr1, wbs = 0x8
+    | std       2, STACK, SAVE_PC, PC
+    | call      ctpr1, wbs = 0x8            // lj_meta_for(lua_State *L, TValue *base)
     | --
-    | addd 0, DISPATCH, TMP1, TMP1
+    | disp      ctpr1, ->vm_restart_pipeline_static // TODO: inline
+    | subd      0, PC, 4, PC                // Current PC.
+    | ldd       3, RB, L->base, BASE
     | --
-    | ldd 0, TMP1, GG_DISP2STATIC, TMP1
-    | ldd 3, RB, L->base, BASE
-    | nop 2
-    | --
-    | movtd 0, TMP1, ctpr1
-    | --
-    | ct ctpr1
+    | ct        ctpr1                       // vm_restart_pipeline_static(PC)
     | --
     |
     |//-----------------------------------------------------------------------
@@ -7319,7 +7354,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_pred_ct pred2, 1
         | --
         | std       5, RA, 0x18, TMP0, pred2
-        | ct        ctpr2, ~pred2           // vmeta_for(TODO)
+        | ct        ctpr2, ~pred2           // vmeta_for(RA)
         | --
         | pass      pred0, p0
         | pass      pred1, p1
