@@ -2690,270 +2690,273 @@ static void build_subroutines(BuildCtx *ctx)
     |.macro coroutine_resume_wrap, resume
     |.if resume
     |->ff_coroutine_resume:
-    | todo
-    | ldd 3, BASE, -8, PC
-    | ldd 5, BASE, 0x0, RB
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | // RD_E
+    | addd      0, RD_E, 0, RD
+    | ldd       3, BASE, -8, PC
+    | ldd       5, BASE, 0x0, RB
+    | disp      ctpr1, ->fff_fallback
+    | wait_load RB, 0
     | --
-    | sard 3, RB, 0x2f, ITYPE
-    | getfd 4, RB, (47 << 6), RB
+    | sard      3, RB, 0x2f, ITYPE
+    | getfd     4, RB, (47 << 6), RB
     | --
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | cmpesb 4, ITYPE, LJ_TTHREAD, pred1
-    | nop 1
+    | cmpbdb    3, RD, (1+1)*8, pred0
+    | cmpesb    4, ITYPE, LJ_TTHREAD, pred1
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | std 2, STACK, SAVE_PC, PC, pred0
-    | ct ctpr1, ~pred0
+    | std       2, STACK, SAVE_PC, PC, pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
     |.else
     |->ff_coroutine_wrap_aux:
-    | todo
-    | ldd 3, BASE, -16, RB
-    | ldd 5, BASE, -8, PC
-    | nop 2
+    | // RD_E
+    | addd      0, RD_E, 0, RD
+    | ldd       3, BASE, -16, RB
+    | ldd       5, BASE, -8, PC
+    | wait_load RB, 0
     | --
-    | getfd 3, RB, (47 << 6), RB
+    | getfd     3, RB, (47 << 6), RB
     | --
-    | ldd 3, RB, CFUNC->upvalue[0].gcr, RB
-    | nop 2
+    | ldd       3, RB, CFUNC->upvalue[0].gcr, RB
+    | wait_load RB, 0
     | --
-    | std 2, STACK, SAVE_PC, PC
-    | getfd 3, RB, (47 << 6), RB
+    | std       2, STACK, SAVE_PC, PC
+    | getfd     3, RB, (47 << 6), RB
     | --
     |.endif
-    | ldd 3, RB, L->cframe, TMP0
-    | addd 4, RB, 0x0, TMP1
-    | ldbsm 5, RB, L->status, CARG1
+    | setwd_call
+    | ldd       3, RB, L->cframe, TMP0
+    | addd      4, RB, 0x0, TMP1
+    | ldbsm     5, RB, L->status, CARG1
     | --
-    | lddsm 3, RB, L->top, RA
-    | disp ctpr1, ->fff_fallback
-    | nop 1
+    | lddsm     3, RB, L->top, RA
+    | disp      ctpr1, ->fff_fallback
+    | wait_load TMP0, 1
     | --
-    | cmpedb 3, TMP0, 0x0, pred0
+    | cmpedb    3, TMP0, 0x0, pred0
     | cmpbedbsm 4, CARG1, LUA_YIELD, pred1
-    | lddsm 5, RB, L->base, TMP0
+    | lddsm     5, RB, L->base, TMP0
     | --
-    | cmpedb 3, CARG1, LUA_YIELD, pred2
+    | cmpedb    3, CARG1, LUA_YIELD, pred2
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp p0, p1, p4
-    | pass p4, pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     p0, p1, p4
+    | pass      p4, pred0
     | --
-    | cmpbedb 3, RA, TMP0, pred1            // Check for presence of initial func.
-    | ct ctpr1, ~pred0
+    | cmpbedb   3, RA, TMP0, pred1          // Check for presence of initial func.
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | nop 1
     | --
-    | lddsm 0, RB, L->maxstack, TMP0
-    | pass pred1, p0
-    | pass pred2, p1
-    | landp p0, ~p1, p4
-    | landp ~p0, ~p1, p5
-    | pass p4, pred0
-    | pass p5, pred1                        // Status != LUA_YIELD (i.e. 0)?
+    | lddsm     0, RB, L->maxstack, TMP0
+    | pass      pred1, p0
+    | pass      pred2, p1
+    | landp     p0, ~p1, p4
+    | landp     ~p0, ~p1, p5
+    | pass      p4, pred0
+    | pass      p5, pred1                   // Status != LUA_YIELD (i.e. 0)?
     | --
-    | ldd 3, RA, -8, PC, pred1              // Move initial function up.
-    | ct ctpr1, pred0
-    | nop 2
+    | ldd       3, RA, -8, PC, pred1        // Move initial function up.
+    | ct        ctpr1, pred0                // fff_fallback(RD)
     | --
-    | addd 4, RA, 0x8, RA, pred1
-    | std 5, RA, 0x0, PC, pred1
+    | wait_load PC, 1
+    | --
+    | addd      4, RA, 0x8, RA, pred1
+    | std       5, RA, 0x0, PC, pred1
     | --
     |.if resume
-    | addd 3, RA, RD, PC                       // Check stack space (-1-thread).
+    | addd      3, RA, RD, PC               // Check stack space (-1-thread).
     | --
-    | subd 0, PC, 0x10, PC
+    | subd      0, PC, 0x10, PC
     | --
     |.else
-    | addd 3, RA, RD, PC                       // Check stack space (-1).
+    | addd      3, RA, RD, PC               // Check stack space (-1).
     | --
-    | subd 0, PC, 0x8, PC
-    | --
-    |.endif
-    | cmpbedb 0, PC, TMP0, pred0
-    | ldd 2, STACK, SAVE_L, CARG1
-    | disp ctpr2, >2
-    | nop 2
-    | --
-    | std 2, CARG1, L->base, BASE, pred0
-    | std 5, RB, L->top, PC, pred0
-    | ct ctpr1, ~pred0
-    | --
-    |.if resume
-    | addd 3, BASE, 0x8, BASE                  // Keep resumed thread in stack for GC.
+    | subd      0, PC, 0x8, PC
     | --
     |.endif
-    | std 2, CARG1, L->top, BASE
-    | disp ctpr3, >1
+    | cmpbedb   0, PC, TMP0, pred0
+    | ldd       2, STACK, SAVE_L, CARG1
+    | disp      ctpr2, >2
+    | wait_load CARG1, 0
+    | --
+    | std       2, CARG1, L->base, BASE, pred0
+    | std       5, RB, L->top, PC, pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
     |.if resume
-    | addd 3, BASE, RD, RB                     // RB = end of source for stack move.
+    | addd      3, BASE, 0x8, BASE          // Keep resumed thread in stack for GC.
     | --
-    | subd 3, RB, 0x18, RB
+    |.endif
+    | std       2, CARG1, L->top, BASE
+    | disp      ctpr3, >1
+    | --
+    |.if resume
+    | addd      3, BASE, RD, RB             // RB = end of source for stack move.
+    | --
+    | subd      3, RB, 0x18, RB
     | --
     |.else
-    | addd 3, BASE, RD, RB                     // RB = end of source for stack move.
+    | addd      3, BASE, RD, RB             // RB = end of source for stack move.
     | --
-    | subd 3, RB, 0x10, RB
+    | subd      3, RB, 0x10, RB
     | --
     |.endif
-    | cmpedb 0, PC, RA, pred0
-    | subd 3, RB, PC, RB                       // Relative to PC.
-    | disp ctpr1, ->vm_resume               // (lua_State *L, TValue *base, 0, 0)
-    | nop 2
+    | cmpedb    0, PC, RA, pred0
+    | subd      3, RB, PC, RB               // Relative to PC.
+    | disp      ctpr1, ->vm_resume
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr2, pred0
+    | ct        ctpr2, pred0                // >2
+    | --
     |1: // Move args to coroutine.
-    | ldd 0, PC, RB, RC
-    | nop 2
+    | ldd       0, PC, RB, RC
+    | wait_load RC, 0
     | --
-    | subd 1, PC, 0x8, PC
-    | std 2, PC, -8, RC
+    | subd      1, PC, 0x8, PC
+    | std       2, PC, -8, RC
     | --
-    | cmpedb 0, PC, RA, pred0
-    | nop 2
+    | cmpedb    0, PC, RA, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr3, ~pred0
+    | ct        ctpr3, ~pred0               // <1
     |2:
-    | addd 0, RA, 0x0, CARG2
-    | addd 1, TMP1, 0x0, CARG1
-    | call ctpr1, wbs = 0x8
+    | addd      0, RA, 0x0, CARG2
+    | addd      1, TMP1, 0x0, CARG1
+    | call      ctpr1, wbs = 0x8            // vm_resume(lua_State *L, TValue *base, 0, 0)
     | --
-    | ldd 0, STACK, SAVE_L, RB
-    | addd 1, TMP1, 0x0, PC
-    | addd 2, 0x0, ~LJ_VMST_INTERP, TMP0
-    | disp ctpr2, >7
-    | nop 2
+    | ldd       0, STACK, SAVE_L, RB
+    | addd      1, TMP1, 0x0, PC
+    | addd      2, 0x0, ~LJ_VMST_INTERP, TMP0
+    | disp      ctpr2, >7
+    | wait_load RB, 0
     | --
-    | ldd 3, RB, L->base, BASE
-    | nop 2
+    | ldd       3, RB, L->base, BASE
     | --
-    | cmpbedb 0, CRET1, LUA_YIELD, pred0
-    | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0
-    | std 5, DISPATCH, DISPATCH_GL(cur_L), RB
-    | nop 2
+    | cmpbedb   0, CRET1, LUA_YIELD, pred0
+    | stw       2, DISPATCH, DISPATCH_GL(vmstate), TMP0
+    | std       5, DISPATCH, DISPATCH_GL(cur_L), RB
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr2, ~pred0
+    | ct        ctpr2, ~pred0               // >7
     |3:
-    | ldd 0, PC, L->base, RA
-    | ldd 2, PC, L->top, KBASE
-    | lddsm 3, RB, L->maxstack, TMP0
-    | disp ctpr1, >5
-    | nop 2
+    | ldd       0, PC, L->base, RA
+    | ldd       2, PC, L->top, KBASE
+    | lddsm     3, RB, L->maxstack, TMP0
+    | disp      ctpr1, >5
+    | wait_load RA, 0
     | --
-    | std 2, PC, L->top, RA                 // Clear coroutine stack.
-    | subd 3, KBASE, RA, PC
-    | disp ctpr2, >8
+    | std       2, PC, L->top, RA           // Clear coroutine stack.
+    | subd      3, KBASE, RA, PC
+    | disp      ctpr2, >8
     | --
-    | cmpedb 3, PC, 0x0, pred0
-    | disp ctpr3, >4
-    | nop 2
+    | cmpedb    3, PC, 0x0, pred0
+    | disp      ctpr3, >4
+    | wait_pred_ct pred0, 0
     | --
-    | addd 3, BASE, PC, RD, ~pred0
-    | ct ctpr1, pred0                       // No results?
+    | addd      3, BASE, PC, RD, ~pred0
+    | ct        ctpr1, pred0                // >5, No results?
     | --
-    | cmpbedb 3, RD, TMP0, pred0
-    | addd 4, BASE, 0x0, CARG1
-    | nop 2
+    | cmpbedb   3, RD, TMP0, pred0
+    | addd      4, BASE, 0x0, CARG1
+    | wait_pred_ct pred0, 0
     | --
-    | subd 3, CARG1, RA, RB, pred0
-    | ct ctpr2, ~pred0                      // Need to grow stack?
+    | subd      3, CARG1, RA, RB, pred0
+    | ct        ctpr2, ~pred0               // >8, Need to grow stack?
     |4: // Move results from coroutine.
-    | ldd 3, RA, 0x0, RD
-    | nop 2
+    | ldd       3, RA, 0x0, RD
+    | wait_load RD, 0
     | --
-    | addd 4, RA, 0x8, RA
-    | std 5, RA, RB, RD
+    | addd      4, RA, 0x8, RA
+    | std       5, RA, RB, RD
     | --
-    | cmpedb 3, RA, KBASE, pred0
-    | nop 2
+    | cmpedb    3, RA, KBASE, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr3, ~pred0
+    | ct        ctpr3, ~pred0               // <4
     |5:
     |.if resume
-    | addd 3, PC, (1+1)*8, RD               // (nresults+1)*8 = (1 + true)*8 + results*8.
-    | addd 4, 0x0, U64x(0xfffeffff,0xffffffff), ITYPE
+    | addd      3, PC, (1+1)*8, RD          // (nresults+1)*8 = (1 + true)*8 + results*8.
+    | addd      4, 0x0, U64x(0xfffeffff,0xffffffff), ITYPE
     | --
-    | std 5, BASE, -8, ITYPE                // Prepend true to results.
+    | std       5, BASE, -8, ITYPE          // Prepend true to results.
     |.else
-    | addd 3, PC, 1*8, RD                   // (nresults+1)*8 = 8 + results*8.
+    | addd      3, PC, 1*8, RD              // (nresults+1)*8 = 8 + results*8.
     |.endif
     |6:
-    | ldd 0, STACK, SAVE_PC, PC
-    | disp ctpr1, ->BC_RET_Z
+    | ldd       0, STACK, SAVE_PC, PC
+    | disp      ctpr1, ->BC_RET_Z
     | --
-    | stw 2, STACK, MULTRES, RD
-    | disp ctpr2, ->vm_return
+    | stw       2, STACK, MULTRES, RD
+    | disp      ctpr2, ->vm_return
     | --
     |.if resume
-    | subd 3, 0x0, 0x8, RA
+    | subd      3, 0x0, 0x8, RA
     | --
     |.else
-    | addd 3, 0x0, 0x0, RA
+    | addd      3, 0x0, 0x0, RA
     | --
     |.endif
     | cmpandesb 0, PC, FRAME_TYPE, pred0
-    | nop 2
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr1, pred0
+    | ct        ctpr1, pred0                // BC_RET_Z(RA, RD, PC)
     | --
     | ct        ctpr2                       // vm_return(RA, RD)
     |7: // Coroutine returned with error (at co->top-1).
     |.if resume
-    | ldd 0, PC, L->top, RA
-    | addd 1, 0x0, U64x(0xffff7fff,0xffffffff), ITYPE
-    | disp ctpr1, <6
-    | nop 1
+    | ldd       0, PC, L->top, RA
+    | addd      3, 0x0, U64x(0xffff7fff,0xffffffff), ITYPE
+    | disp      ctpr1, <6
     | --
-    | std 5, BASE, -8, ITYPE                // Prepend false to results.
+    | std       5, BASE, -8, ITYPE          // Prepend false to results.
+    | wait_load RA, 1
     | --
-    | subd 0, RA, 0x8, RA
+    | subd      0, RA, 0x8, RA
     | --
-    | std 2, PC, L->top, RA                 // Clear error from coroutine stack.
+    | std       2, PC, L->top, RA           // Clear error from coroutine stack.
     | --
     | // Copy error message.
-    | ldd 0, RA, 0x0, RD
-    | nop 2
+    | ldd       0, RA, 0x0, RD
+    | wait_load RD, 0
     | --
-    | addd 4, 0x0, (1+2)*8, RD              // (nresults+1)*8 = (1 + false + error)*8.
-    | std 5, BASE, 0x0, RD
-    | ct ctpr1
+    | addd      4, 0x0, (1+2)*8, RD         // (nresults+1)*8 = (1 + false + error)*8.
+    | std       5, BASE, 0x0, RD
+    | ct        ctpr1                       // <6
     | --
     |.else
-    | disp ctpr1, extern lj_ffh_coroutine_wrap_err // (lua_State *L, lua_State *co)
+    | disp      ctpr1, extern lj_ffh_coroutine_wrap_err // (lua_State *L, lua_State *co)
     | --
-    | addd 0, PC, 0x0, CARG2
-    | addd 1, RB, 0x0, CARG1
-    | nop 3
+    | addd      0, PC, 0x0, CARG2
+    | addd      1, RB, 0x0, CARG1
     | --
-    | call ctpr1, wbs = 0x8
+    | call      ctpr1, wbs = 0x8            // lj_ffh_coroutine_wrap_err(lua_State *L, lua_State *co)
     | --
     | // Error function does not return.
     |.endif
     |8:  // Handle stack expansion on return from yield.
-    | disp ctpr1, extern lj_state_growstack // (lua_State *L, int n)
+    | disp      ctpr1, extern lj_state_growstack
     | --
-    | addd 0, TMP1, 0x0, RA
-    | shrd 1, PC, 0x3, PC
-    | nop 3
+    | addd      0, TMP1, 0x0, RA
+    | shrd      1, PC, 0x3, PC
     | --
-    | addd 0, PC, 0x0, CARG2
-    | addd 1, RB, 0x0, CARG1
-    | std 2, RA, L->top, KBASE              // Undo coroutine stack clearing.
-    | call ctpr1, wbs = 0x8
+    | addd      0, PC, 0x0, CARG2
+    | addd      1, RB, 0x0, CARG1
+    | std       2, RA, L->top, KBASE        // Undo coroutine stack clearing.
     | --
-    | ldd 3, RB, L->base, BASE
-    | disp ctpr2, <3                        // Retry the stack move.
-    | nop 4
+    | call      ctpr1, wbs = 0x8            // lj_state_growstack(lua_State *L, int n)
     | --
-    | addd 0, TMP1, 0x0, PC
-    | ct ctpr2
+    | ldd       3, RB, L->base, BASE
+    | disp      ctpr2, <3
+    | --
+    | addd      0, TMP1, 0x0, PC
+    | --
+    | ct        ctpr2                       // <3, Retry the stack move.
     | --
     |.endmacro
     |
