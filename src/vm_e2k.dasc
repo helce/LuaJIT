@@ -6914,10 +6914,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ITERN:
-        | todo
         | // ins_A RA = base*8, (RB = (nresults+1)*8, RC = (nargs+1)*8 (2+1)*8)
         | // Unsupported. Just label for compatibility
         |->vm_IITERN:
+        | todo
         | addd 2, PC, 0x4, PC
         | addd 3, BASE, RA, TMP0
         | disp ctpr1, >3
