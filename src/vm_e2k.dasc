@@ -1036,6 +1036,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vm_restart_pipeline:
+    | // PC
     | pipe_setwd
     | --
     | ldw       0, PC, 0, INSN_E            // Load insns.
@@ -1077,6 +1078,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->vm_restart_pipeline_static:
+    | // PC
     | pipe_setwd
     | --
     | ldw       0, PC, 0, INSN_E            // Load insns.
@@ -1106,6 +1108,50 @@ static void build_subroutines(BuildCtx *ctx)
     | shrd      4, INSN_E, 0xd, T0
     | --
     | andd      1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
+    | andd      3, RB_E, 0x7f8, RB_E
+    | andd      4, T0, 0x7f8, RC_E
+    | andd      5, T0, 0x7fff8, RD_E
+    | wait_load OP_E, 1
+    | --
+    | movtd     0, OP_E, ctpr3              // Prepare an insn handler for stage E.
+    | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
+    | shrdsm    4, INSN_B, 0x15, RB_B
+    | shrdsm    5, INSN_B, 0xd, RCD_B
+    | --
+    | ct        ctpr3                       // Jump to the insn handler for stage E.
+    | --
+    |
+    |// Restart pipeline with a custom RA field.
+    |->vm_restart_pipeline_static_ra:
+    | // PC, RA
+    | pipe_setwd
+    | --
+    | ldw       0, PC, 0, INSN_E            // Load insns.
+    | ldwsm     2, PC, 4, INSN_B
+    | ldwsm     3, PC, 8, INSN_L
+    | ldwsm     5, PC,12, INSN_D
+    | --
+    | ldwsm     0, PC,16, INSN_S
+    | addd      1, PC, 4, PC                // FIXME: insn hanlders expect it to be NPC but not current PC
+    | wait_load INSN_E, 1
+    | --
+    | shld      0, INSN_E, 0x3, OP_E        // Scale opcode fields.
+    | shldsm    2, INSN_B, 0x3, OP_B
+    | shldsm    3, INSN_L, 0x3, OP_L
+    | shldsm    5, INSN_D, 0x3, OP_D
+    | --
+    | andd      0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | anddsm    2, OP_B, 0x7f8, OP_B
+    | anddsm    3, OP_L, 0x7f8, OP_L
+    | --
+    | addd      0, OP_E, DISPATCH, OP_E
+    | --
+    | ldd       0, OP_E, GG_DISP2STATIC, OP_E   // Load pointers to insn handlers.
+    | lddsm     2, OP_B, DISPATCH, OP_B
+    | shrd      3, INSN_E, 0x15, RB_E       // Scale other fields for stage E.
+    | shrd      4, INSN_E, 0xd, T0
+    | --
+    | addd      1, RA, 0, RA_E              // Extract other fields for stage E.
     | andd      3, RB_E, 0x7f8, RB_E
     | andd      4, T0, 0x7f8, RC_E
     | andd      5, T0, 0x7fff8, RD_E
@@ -4006,61 +4052,76 @@ static void build_subroutines(BuildCtx *ctx)
     | do_fault
     |
     |->vm_rethook:                          // Dispatch target for return hooks.
-    | todo
-    | .wide off
-    | ldb 0, DISPATCH, DISPATCH_GL(hookmask), RD
+    | ldb       0, DISPATCH, DISPATCH_GL(hookmask), RD
+    | addd      1, RA_E, 0, RA
+    | disp      ctpr1, >5
+    | --
+    | disp      ctpr2, >1
+    | wait_load RD, 1
+    | --
     | cmpandedb 0, RD, HOOK_ACTIVE, pred0
-    | disp ctpr1, >5                        // Hook already active?
-    | ct ctpr1, ~pred0
-    | disp ctpr1, >1
-    | ct ctpr1
-    | .wide on
+    | wait_pred_ct pred0, 0
+    | --
+    | ct        ctpr1, ~pred0               // >5, Hook already active?
+    | --
+    | ct        ctpr2
+    | --
     |
     |->vm_inshook:                          // Dispatch target for instr/line hooks.
-    | todo
-    | .wide off
-    | ldb 0, DISPATCH, DISPATCH_GL(hookmask), RD
+    | // RA_E
+    | ldb       0, DISPATCH, DISPATCH_GL(hookmask), RD
+    | ldwsm     3, DISPATCH, DISPATCH_GL(hookcount), TMP0
+    | addd      1, RA_E, 0, RA
+    | disp      ctpr1, >5
+    | --
+    | disp      ctpr2, >1
+    | wait_load RD, 1
+    | --
     | cmpandedb 0, RD, HOOK_ACTIVE, pred0
-    | disp ctpr1, >5                        // Hook already active?
-    | ct ctpr1, ~pred0
-    | cmpandedb 0, RD, LUA_MASKLINE|LUA_MASKCOUNT, pred0
-    | disp ctpr1, >5
-    | ct ctpr1, pred0
-    | ldw 0, DISPATCH, DISPATCH_GL(hookcount), TMP0
-    | subd 0, TMP0, 0x1, TMP0
-    | stw 2, DISPATCH, DISPATCH_GL(hookcount), TMP0
-    | cmpedb 0, TMP0, 0x0, pred0
-    | disp ctpr1, >1
-    | ct ctpr1, pred0
-    | cmpandedb 0, RD, LUA_MASKLINE, pred0
-    | disp ctpr1, >5
-    | ct ctpr1, pred0
+    | cmpandedb 1, RD, LUA_MASKLINE|LUA_MASKCOUNT, pred1
+    | subdsm    3, TMP0, 0x1, TMP0
+    | --
+    | cmpandedb 0, RD, LUA_MASKLINE, pred3
+    | cmpedbsm  3, TMP0, 0x0, pred2
+    | wait_pred_ct pred0, 1
+    | --
+    | ct        ctpr1, ~pred0               // >5, Hook already active?
+    | --
+    | ct        ctpr1, pred1                // >5, Hook already active?
+    | --
+    | stw       5, DISPATCH, DISPATCH_GL(hookcount), TMP0
+    | ct        ctpr2, pred2                // >1
+    | --
+    | ct        ctpr1, pred3                // >5, Hook already active?
+    | --
     |1:
-    | ldd 0, STACK, SAVE_L, RB
-    | std 2, RB, L->base, BASE
-    | addd 0, PC, 0x0, CARG2
-    | addd 0, RB, 0x0, CARG1
+    | disp      ctpr1, extern lj_dispatch_ins
+    | --
+    | setwd_call
+    | ldd       0, STACK, SAVE_L, RB
+    | wait_load RB, 0
+    | --
+    | addd      0, RB, 0x0, CARG1
+    | addd      1, PC, 0x0, CARG2
+    | std       2, RB, L->base, BASE
     | // SAVE_PC must hold the _previous_ PC. The callee updates it with PC.
-    | disp ctpr1, extern lj_dispatch_ins    // (lua_State *L, const BCIns *pc)
-    | call ctpr1, wbs = 0x8
+    | call      ctpr1, wbs = 0x8            // lj_dispatch_ins(lua_State *L, const BCIns *pc)
     |3:
-    | ldd 0, RB, L->base, BASE
+    | ldd       0, RB, L->base, BASE
+    | --
     |4:
-    | ldb 0, PC, PREV_PC_RA, RA
-    | shld 0, RA, 0x3, RA
+    | ldb       0, PC, PREV_PC_RA, RA
+    | wait_load RA, 0
+    | --
+    | shld      0, RA, 0x3, RA
+    | --
     |5:
-    | ldb 0, PC, PREV_PC_OP, TMP1
-    | shld 0, TMP1, 0x3, TMP1
-    | ldh 0, PC, PREV_PC_RD, RD
-    | shrd 0, RD, 0x5, RB
-    | shld 0, RD, 0x3, RD
-    | andd 0, RB, 0x7f8, RB
-    | andd 0, RD, 0x7f8, RC
-    | addd 0, DISPATCH, TMP1, TMP1
-    | ldd 0, TMP1, GG_DISP2STATIC, TMP1
-    | movtd 0, TMP1, ctpr1
-    | ct ctpr1
-    | .wide on
+    | // RA
+    | subd      0, PC, 4, PC                   // Current PC.
+    | disp      ctpr1, ->vm_restart_pipeline_static_ra // TODO: inline/optimize
+    | --
+    | ct        ctpr1
+    | --
     |
     |->cont_hook:                           // Continue from hook yield.
     | do_fault
