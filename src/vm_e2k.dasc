@@ -214,7 +214,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_returnc:
     |<
-    | addd 0, 0x0, LUA_YIELD, RRET1
+    | addd 0, 0x0, LUA_YIELD, CRET1
     | addd 3, RD, 0x8, RD                   // RD = (nresults+1)*8
     | disp ctpr1, ->vm_unwind_c_eh
     |>
@@ -393,11 +393,12 @@ static void build_subroutines(BuildCtx *ctx)
     | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
     | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
     | addd 0, RARG1, 0x0, STACK
-    | addd 1, RARG2, 0x0, RRET1             // Error return status for vm_pcall.
+    | addd 1, RARG2, 0x0, CRET1             // Error return status for vm_pcall.
     |>
     |->vm_unwind_c_eh:                      // Landing pad for external unwinder.
     |<
     | ldd 0, STACK, SAVE_L, RB
+    | addd 1, CRET1, 0x0, RRET1
     | return ctpr3
     | nop 2
     |>
