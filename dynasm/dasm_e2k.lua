@@ -11,7 +11,7 @@ local _info = {
   description = "DynASM E2K module",
   version =     "1.5.0",
   vernum =      10500,
-  release =     "2021-01-01",
+  release =     "2025-01-10",
   author =      "Svyatoslav Stupak",
   license =     "MIT",
 }
@@ -378,7 +378,7 @@ local map_op = {
   subd_5 = "ALU2PR_ALOPF1_0_0x3f_0x13",
   -- C.2.1.2 Multiplication operations
   smulx_4 = "ALU2_ALOPF11_0_0x1b_0x23_N_0x01_0xc0",
-  -- C.2.2. Comparaion of integer numbers operations
+  -- C.2.2 Comparaion of integer numbers operations
   cmpbsb_4 = "ALU2_ALOPF7_0_0x1b_0x20_0x1",
   cmpbsbsm_4 = "ALU2_ALOPF7_1_0x1b_0x20_0x1",
   cmpbdb_4 = "ALU2_ALOPF7_0_0x1b_0x21_0x1",
@@ -427,7 +427,7 @@ local map_op = {
   sars_4 = "ALU2_ALOPF1_0_0x3f_0x1c",
   sard_4 = "ALU2_ALOPF1_0_0x3f_0x1d",
   sardsm_4 = "ALU2_ALOPF1_1_0x3f_0x1d",
-  -- C.?.? Extract field
+  -- C.2.6.1 Field operations
   getfs_4 = "ALU2_ALOPF1_0_0x3f_0x1e",
   getfs_5 = "ALU2PR_ALOPF1_0_0x3f_0x1e",
   getfssm_4 = "ALU2_ALOPF1_1_0x3f_0x1e",
@@ -481,6 +481,18 @@ local map_op = {
   pass_2 = "PASS",
   -- C.10.1.2 Calculation of local predicate operations
   landp_3 = "LANDP_0x1",
+  -- C.11.7.2 Array write operations
+  staab_5 = "ALU3_ALOPF10_0_0x24_0x1c_N_0x01_0xc0",
+  staab_6 = "ALU3PR_ALOPF10_0_0x24_0x1c_N_0x01_0xc0",
+  staah_5 = "ALU3_ALOPF10_0_0x24_0x1d_N_0x01_0xc0",
+  staah_6 = "ALU3PR_ALOPF10_0_0x24_0x1d_N_0x01_0xc0",
+  staaw_5 = "ALU3_ALOPF10_0_0x24_0x1e_N_0x01_0xc0",
+  staaw_6 = "ALU3PR_ALOPF10_0_0x24_0x1e_N_0x01_0xc0",
+  staad_5 = "ALU3_ALOPF10_0_0x24_0x1f_N_0x01_0xc0",
+  staad_6 = "ALU3PR_ALOPF10_0_0x24_0x1f_N_0x01_0xc0",
+  incr_2 = "INCR",
+  -- C.11.7.5 Asynchronous swap operations to array prefetch buffer
+  fapb_10 = "FAPB",
   -- C.11.9.1 Operations "Loading from unsaved area"
   ldb_4 = "ALU2_ALOPF1_0_0x2d_0x64",
   ldb_5 = "ALU2PR_ALOPF1_0_0x2d_0x64",
@@ -507,80 +519,70 @@ local map_op = {
   -- C.12.12 "Forward tagged value" operations
   movtd_3 = "ALU1_ALOPF2_0_0x01_0x61_0xc0",
   movtdsm_3 = "ALU1_ALOPF2_1_0x01_0x61_0xc0",
-  -- C.14.2. Operations "Set registers" or "Check parameter areas"
+  -- C.14.1.1 Read operations from control registers
+  rrs_3 = "ALU1_ALOPF16_0_0x01_0x3e_0xc0_0x01_0xc0",
+  rrs_4 = "ALU1PR_ALOPF16_0_0x01_0x3e_0xc0_0x01_0xc0",
+  rrssm_3 = "ALU1_ALOPF16_1_0x01_0x3e_0xc0_0x01_0xc0",
+  rrssm_4 = "ALU1PR_ALOPF16_1_0x01_0x3e_0xc0_0x01_0xc0",
+  rrd_3 = "ALU1_ALOPF16_0_0x01_0x3f_0xc0_0x01_0xc0",
+  rrd_4 = "ALU1PR_ALOPF16_0_0x01_0x3f_0xc0_0x01_0xc0",
+  rrdsm_3 = "ALU1_ALOPF16_1_0x01_0x3f_0xc0_0x01_0xc0",
+  rrdsm_4 = "ALU1PR_ALOPF16_1_0x01_0x3f_0xc0_0x01_0xc0",
+  -- C.14.1.2 Write operations to control registers
+  rws_3 = "ALU1_ALOPF15_0_0x01_0x3c_0xc0_0x01_0xc0",
+  rws_4 = "ALU1PR_ALOPF15_0_0x01_0x3c_0xc0_0x01_0xc0",
+  rwssm_3 = "ALU1_ALOPF15_1_0x01_0x3c_0xc0_0x01_0xc0",
+  rwssm_4 = "ALU1PR_ALOPF15_1_0x01_0x3c_0xc0_0x01_0xc0",
+  rwd_3 = "ALU1_ALOPF15_0_0x01_0x3d_0xc0_0x01_0xc0",
+  rwd_4 = "ALU1PR_ALOPF15_0_0x01_0x3d_0xc0_0x01_0xc0",
+  rwdsm_3 = "ALU1_ALOPF15_1_0x01_0x3d_0xc0_0x01_0xc0",
+  rwdsm_4 = "ALU1PR_ALOPF15_1_0x01_0x3d_0xc0_0x01_0xc0",
+  -- C.14.2 Operations "Set registers" or "Check parameter areas"
   setwd_3 = "SETWD_0x0",
   setbn_3 = "SETBN_0x4",
-  -- C.15.1. Prepare to jump on literal disp
-  disp_2 = "DISP_DISP_0x0",
-  -- C.??.?. Prepare program for array prefetch buffer.
-  ldisp_2 = "DISP_DISP_0x1",
-  -- C.15.6. Prepare to return from call
-  return_1 = "DISP_RETURN_0x3",
-  -- C.17.1 Transfer of control operations
-  ct_2 = "CT",
-  ct_1 = "CT",
-  -- C.17.4 Call operations
-  call_2 = "CALL_0x5",
-  call_3 = "CALL_0x5",
-  -- C.??.? Ibranch operations
-  ibranch_1 = "IBRANCH",
-  ibranch_2 = "IBRANCH",
-  -- C.22.4. Push nop
-  nop_1 = "NOP",
-  -- C.??.?. Read and write state registers
-  rws_3 = "ALU1_ALOPF15_0_0x01_0x3c_0xc0_0x01_0xc0",
-  rwd_3 = "ALU1_ALOPF15_0_0x01_0x3d_0xc0_0x01_0xc0",
-  rrs_3 = "ALU1_ALOPF16_0_0x01_0x3e_0xc0_0x01_0xc0",
-  rrd_3 = "ALU1_ALOPF16_0_0x01_0x3f_0xc0_0x01_0xc0",
-  rws_4 = "ALU1PR_ALOPF15_0_0x01_0x3c_0xc0_0x01_0xc0",
-  rwd_4 = "ALU1PR_ALOPF15_0_0x01_0x3d_0xc0_0x01_0xc0",
-  rrs_4 = "ALU1PR_ALOPF16_0_0x01_0x3e_0xc0_0x01_0xc0",
-  rrd_4 = "ALU1PR_ALOPF16_0_0x01_0x3f_0xc0_0x01_0xc0",
-  rwssm_3 = "ALU1_ALOPF15_1_0x01_0x3c_0xc0_0x01_0xc0",
-  rwdsm_3 = "ALU1_ALOPF15_1_0x01_0x3d_0xc0_0x01_0xc0",
-  rrssm_3 = "ALU1_ALOPF16_1_0x01_0x3e_0xc0_0x01_0xc0",
-  rrdsm_3 = "ALU1_ALOPF16_1_0x01_0x3f_0xc0_0x01_0xc0",
-  rwssm_4 = "ALU1PR_ALOPF15_1_0x01_0x3c_0xc0_0x01_0xc0",
-  rwdsm_4 = "ALU1PR_ALOPF15_1_0x01_0x3d_0xc0_0x01_0xc0",
-  rrssm_4 = "ALU1PR_ALOPF16_1_0x01_0x3e_0xc0_0x01_0xc0",
-  rrdsm_4 = "ALU1PR_ALOPF16_1_0x01_0x3f_0xc0_0x01_0xc0",
-  -- C.??.?. Loop mode
-  loop_0 = "LOOP",
-  -- C.??.?. Advance loop counter
-  alct_0 = "SHORT_16",
-  alcf_0 = "SHORT_17",
-  -- C.??.?. Advance based predicate registers
-  abpt_0 = "SHORT_18",
-  abpf_0 = "SHORT_19",
-  -- C.??.?. Advance based registers
-  abnt_0 = "SHORT_21",
-  abnf_0 = "SHORT_22",
-  -- C.??.?. Start and stop array prefetching
-  bap_0 = "SHORT_28",
-  eap_0 = "SHORT_29",
-  -- C.??.?. Write AAU registers.
-  staab_5 = "ALU3_ALOPF10_0_0x24_0x1c_N_0x01_0xc0",
-  staah_5 = "ALU3_ALOPF10_0_0x24_0x1d_N_0x01_0xc0",
-  staaw_5 = "ALU3_ALOPF10_0_0x24_0x1e_N_0x01_0xc0",
-  staad_5 = "ALU3_ALOPF10_0_0x24_0x1f_N_0x01_0xc0",
-  staab_6 = "ALU3PR_ALOPF10_0_0x24_0x1c_N_0x01_0xc0",
-  staah_6 = "ALU3PR_ALOPF10_0_0x24_0x1d_N_0x01_0xc0",
-  staaw_6 = "ALU3PR_ALOPF10_0_0x24_0x1e_N_0x01_0xc0",
-  staad_6 = "ALU3PR_ALOPF10_0_0x24_0x1f_N_0x01_0xc0",
-  incr_2 = "INCR",
-  -- C.??.?. Write AAU registers.
+  -- C.14.4.2 Write operations to AAU registers
   aaurw_3 = "ALU2_AAURW_0_0x24_0x1e_N_0x01_0xc0",
   aaurwd_3 = "ALU2_AAURW_0_0x24_0x1f_N_0x01_0xc0",
   aaurwq_3 = "ALU2_AAURWQ_0_0x04_0x3f_N_0x01_0xc0",
-  -- C.??.?. Move data from APB
+  -- C.15.1 Prepare to jump on literal disp
+  disp_2 = "DISP_DISP_0x0",
+  -- C.15.6 Prepare to return from call
+  return_1 = "DISP_RETURN_0x3",
+  -- C.15.7 Prepare program for array prefetch buffer.
+  ldisp_2 = "DISP_DISP_0x1",
+  -- C.17.1 Transfer of control operations
+  ct_2 = "CT",
+  ct_1 = "CT",
+  -- C.17.3 Ibranch operations
+  ibranch_1 = "IBRANCH",
+  ibranch_2 = "IBRANCH",
+  -- C.17.4 Call operations
+  call_2 = "CALL_0x5",
+  call_3 = "CALL_0x5",
+  -- C.19.3.1 Advance based numeric registers
+  abnt_0 = "SHORT_21",
+  abnf_0 = "SHORT_22",
+  -- C.19.3.2 Advance based predicate registers
+  abpt_0 = "SHORT_18",
+  abpf_0 = "SHORT_19",
+  -- C.19.3.4 Advance loop counter
+  alct_0 = "SHORT_16",
+  alcf_0 = "SHORT_17",
+  -- C.19.5.1 Begin array prefetch
+  bap_0 = "SHORT_28",
+  -- C.19.5.2 End array prefetch
+  eap_0 = "SHORT_29",
+  -- C.19.6 Array prefetch buffer transfer operations
   movab_6 = "MOVA_0x1",
   movah_6 = "MOVA_0x2",
   movaw_6 = "MOVA_0x3",
   movad_6 = "MOVA_0x4",
   movaq_6 = "MOVA_0x5",
   movaqp_6 = "MOVA_0x7",
-  -- C.??.?. APB program
-  fapb_10 = "FAPB",
+  -- C.22.4 Push nop
+  nop_1 = "NOP",
+  -- Loop mode flag
+  loop_0 = "LOOP",
   -- Generate wide instruction
   ["--_0"] = "GEN",
 }
@@ -793,13 +795,13 @@ local function gen_code_src3(opnd)
   return value
 end
 
-local function gen_code_state_reg(opnd, field)
+local function gen_code_state_reg(opnd)
   local value = 0
   local sr = check_operand(opnd)
   if sr.t == "SREG" then
     value = sr.n
   else
-    werror("operand of type: "..sr.t.." unsupported for "..field)
+    werror("operand of type: "..sr.t.." is not a state register")
   end
   return value
 end
@@ -935,7 +937,7 @@ local function generate_setbn_oper(opc, rsz_seq, rbs_seq, rcur_seq)
   local rcur = assert(tonumber(sub(rcur_seq, 8)), "Incorrect rcur set")
   if (rbs == nil) or (rsz == nil) or (rcur == nil) then werror("Incorrect frame info") end
   if (rbs > 63) or (rsz > 63) or (rcur > 63) then werror("Incorrect frame info") end
-  -- 32Bit opc(4), setbp(1), setbn(1), unused(3), psz(5), rcur(6), rsz(6), rbs(6)
+  -- 32bit opc(4), setbp(1), setbn(1), unused(3), psz(5), rcur(6), rsz(6), rbs(6)
   if wide_instr["CS1"] ~= nil then
     opc = band(sar(wide_instr["CS1"].value,28), 0xf)
     if (opc ~= 0x0) and (opc ~= 0x1) and (opc ~= 0x4) then
@@ -961,13 +963,13 @@ local function generate_setwd_oper(opc, wsz_seq, nfx_seq, dbl_seq)
   local dbl = assert(tonumber(sub(dbl_seq, 7)), "Incorrect dbl set")
   if (wsz == nil) or (nfx == nil) or (dbl == nil) then werror("Incorrect frame info") end
   if (wsz > 127) or (nfx > 1) or (dbl > 1) then werror("Incorrect frame info") end
-  -- 32Bit unused_hi(15), rpsz(5), wsz(7), nfx(1), dbl(1), unused_lo(3)
+  -- 32bit unused_hi(15), rpsz(5), wsz(7), nfx(1), dbl(1), unused_lo(3)
   code = shl(code,7) + wsz
   code = shl(code,1) + nfx
   code = shl(code,1) + dbl
   code = shl(code,3) + 0x0
   if wide_instr["CS1"] ~= nil then
-    -- 32Bit opc(4), param(28)
+    -- 32bit opc(4), param(28)
     local cur_opc = band(sar(wide_instr["CS1"].value,28), 0xf)
     if (cur_opc ~= 0x0) and (cur_opc ~= 0x1) and (cur_opc ~= 0x4) then
       werror("CS1 already busy")
@@ -988,7 +990,7 @@ end
 
 local function generate_ct_oper_raw(ctpr, opnd2)
   local code = 0
-  -- 32Bit, ipd(2),eap(1),bap(1),rp_hi(1),vfdi(1),rp_lo(1),abg(2),abn(2),type(1),
+  -- 32bit, ipd(2),eap(1),bap(1),rp_hi(1),vfdi(1),rp_lo(1),abg(2),abn(2),type(1),
   --        abp(2),alc(2),aa(4),ctop(2),unused(1),ctcond(9)
   code = 0x3
   code = shl(code,20) + ctpr
@@ -1038,7 +1040,7 @@ local function generate_call_oper(opc, opnd1, opnd2, opnd3)
   generate_ct_oper(opnd1, opnd3)
   local wbs = tonumber(sub(opnd2, 7))
   if wbs == nil then werror("incorrect wbs value") end
-  -- 32Bit opc(4), unused(21), wbs(7)
+  -- 32bit opc(4), unused(21), wbs(7)
   code = opc
   code = shl(code,21) + 0x0
   code = shl(code,7) + wbs
@@ -1050,7 +1052,7 @@ local function generate_disp_oper(oper, opc, opnd1, opnd2)
   local ctpr = check_operand(opnd1)
   assert(ctpr.t == "CTPR" and (opc ~= 0x1 or ctpr.n == 2), "Incorrect register for dist")
   assert(wide_instr["CS0"] == nil, "CS0 already busy")
-  -- 32Bit, ctpr(2), opcode(2), disp_value(28)
+  -- 32bit, ctpr(2), opcode(2), disp_value(28)
   code = ctpr.n
   code = shl(code,2) + opc
   code = shl(code,28) + 0x0
@@ -1072,6 +1074,33 @@ local function generate_ibranch_oper(opnd1, opnd2)
   assert(label.t == "NUM_UNDEF", "Incorrect label set")
   wide_instr["CS0"] = { value=0, action="LABEL", lit=label.n }
   generate_ct_oper_raw(0, opnd2)
+end
+
+local function gen_code_staa_oper(channel, spec, cop, pair, mode, src4, aad, index, incr, lit, incr_op)
+  local src = gen_code_src3(src4)
+  if pair and band(src, 1) ~= 0 then
+    werror(src4.." must be even")
+  end
+
+  if lit ~= 0 then
+    add_literal(channel, { t = "NUM_32_STAA", n = lit })
+  end
+
+  local code = 0
+  -- 32bit, spec(1), cop(7), aad(5), index(4), incr(3), mode(2), lts(2), src4(8)
+  code = spec
+  code = shl(code,7) + cop
+  code = shl(code,5) + aad
+  code = shl(code,4) + index
+  code = shl(code,3) + incr
+  code = shl(code,2) + mode
+  code = shl(code,2) + 0 -- lts, will be filled latter
+  code = shl(code,8) + src
+  wide_instr["ALS"..channel] = { value=code, incr_op = incr_op }
+
+  if pair then
+    wide_instr["ALS5"] = { value=bor(code, 1) }
+  end
 end
 
 local function gen_code_alf1(channel, spec, cop, src1, src2, dst)
@@ -1107,8 +1136,30 @@ local function gen_code_alf3(channel, spec, cop, src1, src2, src3)
   wide_instr["ALS"..channel] = { value=code }
 end
 
+local function gen_code_alf5(channel, spec, cop, opce, src2, sreg)
+  local code = 0
+  -- 32bit, spec(1), cop(7), opce(8), src2(8), reg#(8)
+  code = spec
+  code = shl(code,7) + cop
+  code = shl(code,8) + opce
+  code = shl(code,8) + gen_code_src2(src2, channel)
+  code = shl(code,8) + gen_code_state_reg(sreg)
+  wide_instr["ALS"..channel] = { value=code }
+end
+
+local function gen_code_alf6(channel, spec, cop, none, sreg, dst)
+  local code = 0
+  -- 32bit, spec(1), cop(7), reg#(8), none(8), dst(8)
+  code = spec
+  code = shl(code,7) + cop
+  code = shl(code,8) + gen_code_state_reg(sreg)
+  code = shl(code,8) + none
+  code = shl(code,8) + gen_code_dst(dst)
+  wide_instr["ALS"..channel] = { value=code }
+end
+
 local function gen_code_alf7(channel, spec, cop, opce, src1, src2, pred)
-    -- 32Bit, spec(1), cop(7), src1(8), src2(8), cmpopce(3), pdst(5)
+    -- 32bit, spec(1), cop(7), src1(8), src2(8), cmpopce(3), pdst(5)
     code = spec
     code = shl(code,7) + cop
     code = shl(code,8) + gen_code_src1(src1)
@@ -1118,31 +1169,11 @@ local function gen_code_alf7(channel, spec, cop, opce, src1, src2, pred)
     wide_instr["ALS"..channel] = { value=code }
 end
 
-local function gen_code_staa_oper(channel, spec, cop, pair, mode, src4, aad, index, incr, lit, incr_op)
-  local src = gen_code_src3(src4)
-  if pair and band(src, 1) ~= 0 then
-    werror(src4.." must be even")
-  end
-
-  if lit ~= 0 then
-    add_literal(channel, { t = "NUM_32_STAA", n = lit })
-  end
-
-  local code = 0
-  -- 32bit, spec(1), cop(7), aad(5), index(4), incr(3), mode(2), lts(2), src4(8)
-  code = spec
-  code = shl(code,7) + cop
-  code = shl(code,5) + aad
-  code = shl(code,4) + index
-  code = shl(code,3) + incr
-  code = shl(code,2) + mode
-  code = shl(code,2) + 0 -- lts, will be filled latter
-  code = shl(code,8) + src
-  wide_instr["ALS"..channel] = { value=code, incr_op = incr_op }
-
-  if pair then
-    wide_instr["ALS5"] = { value=bor(code, 1) }
-  end
+local function gen_code_alf10(channel, spec, cop, pair, src4, aad, ind, lit)
+  local aad = gen_code_for(aad, "AAD")
+  local ind = gen_code_for(ind, "AASTI")
+  local lit = assert(tonumber(lit), "Invalid operand for literal")
+  gen_code_staa_oper(channel, spec, cop, pair, 0, src4, aad, ind, 0, lit, true)
 end
 
 local function gen_code_incr_oper(channel, incr)
@@ -1154,13 +1185,6 @@ local function gen_code_incr_oper(channel, incr)
   local als = wide_instr["ALS"..channel]
   als.value = bor(als.value, code)
   als.incr_op = nil
-end
-
-local function gen_code_alf10(channel, spec, cop, pair, src4, aad, ind, lit)
-  local aad = gen_code_for(aad, "AAD")
-  local ind = gen_code_for(ind, "AASTI")
-  local lit = assert(tonumber(lit), "Invalid operand for literal")
-  gen_code_staa_oper(channel, spec, cop, pair, 0, src4, aad, ind, 0, lit, true)
 end
 
 local function gen_code_aaurw(channel, spec, cop, pair, src4, dst)
@@ -1205,28 +1229,6 @@ local function gen_code_alef2(channel, ales_opc2, ales_opce)
   wide_instr["ALES"..channel] = { value=code }
 end
 
-local function gen_code_alf15(channel, spec, cop, opce, src2, dst)
-  local code = 0
-  -- 32bit, spec(1), cop(7), opce(8), src2(8), dst(8)
-  code = spec
-  code = shl(code,7) + cop
-  code = shl(code,8) + opce
-  code = shl(code,8) + gen_code_src2(src2, channel)
-  code = shl(code,8) + gen_code_state_reg(dst, "dst")
-  wide_instr["ALS"..channel] = { value=code }
-end
-
-local function gen_code_alf16(channel, spec, cop, opce, src1, dst)
-  local code = 0
-  -- 32bit, spec(1), cop(7), src1(8), opce(8), dst(8)
-  code = spec
-  code = shl(code,7) + cop
-  code = shl(code,8) + gen_code_state_reg(src1, channel, "src1")
-  code = shl(code,8) + opce
-  code = shl(code,8) + gen_code_dst(dst)
-  wide_instr["ALS"..channel] = { value=code }
-end
-
 local function generate_alu_oper(format, spec, channel, op_channel, cop, opce, ales_opc2, ales_opce, opnd1, opnd2, opnd3, opnd4)
   local code = 0
   assert(channel >=0 and channel <= 5, "Incorrect channel should be 1-5")
@@ -1247,10 +1249,10 @@ local function generate_alu_oper(format, spec, channel, op_channel, cop, opce, a
   elseif format == "ALOPF7" then
     gen_code_alf7(channel, spec, cop, opce, opnd1, opnd2, opnd3)
   elseif format == "ALOPF15" then
-    gen_code_alf15(channel, spec, cop, opce, opnd1, opnd2)
+    gen_code_alf5(channel, spec, cop, opce, opnd1, opnd2)
     gen_code_alef2(channel, ales_opc2, ales_opce)
   elseif format == "ALOPF16" then
-    gen_code_alf16(channel, spec, cop, opce, opnd1, opnd2)
+    gen_code_alf6(channel, spec, cop, opce, opnd1, opnd2)
     gen_code_alef2(channel, ales_opc2, ales_opce)
   elseif format == "ALOPF10" then
     gen_code_alf10(channel, spec, cop, pair, opnd1, opnd2, opnd3, opnd4)
@@ -1444,11 +1446,12 @@ local function generate_mova_oper(opc, channel, area, ind, am, be, dst)
 end
 
 local function generate_fapb_oper(opnd, dcd, fmt, mrng, d, incr, ind, asz, abs, disp)
-  -- fapb ct=1, dcd=0, fmt=4, mrng=8, d=0, incr=0, ind=2, asz=5, abs=0, disp=0
+  -- fapb ct=1, dcd=0, fmt=4, mrng=8, d=0, incr=0, ind=2, asz=5, abs=0, disp=0 
   -- fapb dpl=0, dcd=0, fmt=3, mrng=4, d=0, incr=0, ind=1, asz=5, abs=0, disp=0
   --
-  -- |63  32|31|30|29 28|27 25|24  20|19 15|14  12|11  8|7 5|4 0|
-  -- | disp |ct|si| dcd | fmt | mrng | aad | incr | ind |asz|abs|
+  -- APF1 32bit, ct(1),unused(1),dcd(2),fmt(3),mrng(5),d(5),incr(3),ind(4),asz(3),abs(5)
+  -- APF2 32bit, dpl(1),unused(1),dcd(2),fmt(3),mrng(5),d(5),incr(3),ind(4),asz(3),abs(5)
+  -- APLF1-2 32bit, disp(32)
 
   local lo = 0
   if not wide_capture then
@@ -1469,12 +1472,12 @@ local function generate_fapb_oper(opnd, dcd, fmt, mrng, d, incr, ind, asz, abs, 
   local hi = named_operand(disp, "disp", 0, 0xffffffff)
 
   if not wide_capture then
-    wide_instr["FAPB0"] = { lo = lo, hi = hi }
+    wide_instr["APS0"] = { lo = lo, hi = hi }
   else
-    if wide_instr["FAPB1"] ~= nil then
-      werror("FAPB1 already busy")
+    if wide_instr["APS1"] ~= nil then
+      werror("APS1 already busy")
     end
-    wide_instr["FAPB1"] = { lo = lo, hi = hi }
+    wide_instr["APS1"] = { lo = lo, hi = hi }
   end
 end
 
@@ -1771,12 +1774,12 @@ local function wide_gen(force)
   end
   -- Stop capturing bundle instructions.
   wide_capture = false
-  if wide_instr["FAPB0"] ~= nil then
-    wputw(wide_instr["FAPB0"].lo)
-    wputw(wide_instr["FAPB0"].hi)
-    if wide_instr["FAPB1"] ~= nil then
-      wputw(wide_instr["FAPB1"].lo)
-      wputw(wide_instr["FAPB1"].hi)
+  if wide_instr["APS0"] ~= nil then
+    wputw(wide_instr["APS0"].lo)
+    wputw(wide_instr["APS0"].hi)
+    if wide_instr["APS1"] ~= nil then
+      wputw(wide_instr["APS1"].lo)
+      wputw(wide_instr["APS1"].hi)
     else
       wputw(0)
       wputw(0)
