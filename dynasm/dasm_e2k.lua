@@ -124,6 +124,14 @@ local function wflush(term)
   secpos = 1 -- The actionlist offset occupies a buffer position, too.
 end
 
+-- Add escaped word to action list.
+local function wputw(n)
+  if band(sar(n, 24), 0xff) == 0xff then
+    waction("ESC")
+  end
+  actlist[#actlist+1] = n
+end
+
 ------------------------------------------------------------------------------
 
 -- Global label name -> global label number. With auto assignment on 1st use.
@@ -217,6 +225,9 @@ local lpred_list = {}   -- Local predicates
 local lipred_list = {}  -- Inversed local predicates
 local ctpr_list = {}    -- Ctprs
 local greg_list = {}    -- Gregs
+local aad_list = {}     -- Array descriptor registers
+local aasti_list = {}   -- Array store index registers
+local aaincr_list = {}  -- Array index increase registers
 
 -- Helper function to fill register maps.
 local function mkrmap(reg_type, reg_num)
@@ -237,6 +248,12 @@ local function mkrmap(reg_type, reg_num)
       lipred_list["~p"..n] = n
     elseif reg_type == "CTPR" then
       ctpr_list["ctpr"..(n+1)] = n + 1
+    elseif reg_type == "AAD" then
+      aad_list["aad"..n] = n
+    elseif reg_type == "AASTI" then
+      aasti_list["aasti"..n] = n
+    elseif reg_type == "AAINCR" then
+      aaincr_list["aaincr"..n] = n
     end
   end
 end
@@ -249,6 +266,95 @@ mkrmap("IPRED", 31)
 mkrmap("LPRED", 6)
 mkrmap("LIPRED", 6)
 mkrmap("CTPR", 2)
+mkrmap("AAD", 31)
+mkrmap("AASTI", 15)
+mkrmap("AAINCR", 7)
+
+local sreg_list = {}    -- State regs
+sreg_list["psr"]          = 0x00
+sreg_list["wd"]           = 0x01
+sreg_list["core_mode"]    = 0x04
+sreg_list["cwd"]          = 0x06
+sreg_list["psp.hi"]       = 0x07
+sreg_list["psp.lo"]       = 0x09
+sreg_list["pshtp"]        = 0x0b
+sreg_list["pcsp.hi"]      = 0x0d
+sreg_list["pcsp.lo"]      = 0x0f
+sreg_list["pcshtp"]       = 0x13
+sreg_list["ctpr1"]        = 0x15
+sreg_list["ctpr2"]        = 0x16
+sreg_list["ctpr3"]        = 0x17
+sreg_list["sbr"]          = 0x1e
+sreg_list["cutd"]         = 0x21
+sreg_list["eir"]          = 0x23
+sreg_list["tsd"]          = 0x24 -- deprecated
+sreg_list["cuir"]         = 0x25
+sreg_list["oscud.hi"]     = 0x26
+sreg_list["oscud.lo"]     = 0x27
+sreg_list["osgd.hi"]      = 0x28
+sreg_list["osgd.lo"]      = 0x29
+sreg_list["osem"]         = 0x2a
+sreg_list["usd.hi"]       = 0x2c
+sreg_list["usd.lo"]       = 0x2d
+sreg_list["tr"]           = 0x2e -- deprecated
+sreg_list["osr0"]         = 0x2f
+sreg_list["cud.hi"]       = 0x30
+sreg_list["cud.lo"]       = 0x31
+sreg_list["gd.hi"]        = 0x32
+sreg_list["gd.lo"]        = 0x33
+sreg_list["cs.hi"]        = 0x34
+sreg_list["cs.lo"]        = 0x35
+sreg_list["ds.hi"]        = 0x36
+sreg_list["ds.lo"]        = 0x37
+sreg_list["es.hi"]        = 0x38
+sreg_list["es.lo"]        = 0x39
+sreg_list["fs.hi"]        = 0x3a
+sreg_list["fs.lo"]        = 0x3b
+sreg_list["gs.hi"]        = 0x3c
+sreg_list["gs.lo"]        = 0x3d
+sreg_list["ss.hi"]        = 0x3e
+sreg_list["ss.lo"]        = 0x3f
+sreg_list["dibcr"]        = 0x40
+sreg_list["dimcr"]        = 0x41
+sreg_list["dibsr"]        = 0x42
+sreg_list["dtcr"]         = 0x43
+sreg_list["dibar0"]       = 0x48
+sreg_list["dibar1"]       = 0x49
+sreg_list["dibar2"]       = 0x4a
+sreg_list["dibar3"]       = 0x4b
+sreg_list["dimar0"]       = 0x4c
+sreg_list["dimar1"]       = 0x4d
+sreg_list["dtarf"]        = 0x4e
+sreg_list["dtart"]        = 0x4f
+sreg_list["cr0.hi"]       = 0x51
+sreg_list["cr0.lo"]       = 0x53
+sreg_list["cr1.hi"]       = 0x55
+sreg_list["cr1.lo"]       = 0x57
+sreg_list["sclkm1"]       = 0x70
+sreg_list["sclkm2"]       = 0x71
+sreg_list["cu_hw0"]       = 0x78
+sreg_list["upsr"]         = 0x80
+sreg_list["ip"]           = 0x81
+sreg_list["nip"]          = 0x82
+sreg_list["lsr"]          = 0x83
+sreg_list["pfpfr"]        = 0x84
+sreg_list["fpcr"]         = 0x85
+sreg_list["fpsr"]         = 0x86
+sreg_list["ilcr"]         = 0x87
+sreg_list["br"]           = 0x88
+sreg_list["bgr"]          = 0x89
+sreg_list["idr"]          = 0x8a
+sreg_list["clkr"]         = 0x90
+sreg_list["rndpr"]        = 0x91
+sreg_list["sclkr"]        = 0x92
+sreg_list["tir.hi"]       = 0x9c
+sreg_list["tir.lo"]       = 0x9d
+sreg_list["rpr"]          = 0xa0
+sreg_list["sbbp"]         = 0xa1
+sreg_list["rpr.hi"]       = 0xa2
+sreg_list["upsrm"]        = 0xc0
+sreg_list["lsr1"]         = 0xc3 -- v5+
+sreg_list["ilcr1"]        = 0xc7 -- v5+
 
 -- Reverse defines for registers.
 function _M.revdef(s)
@@ -321,6 +427,15 @@ local map_op = {
   sars_4 = "ALU2_ALOPF1_0_0x3f_0x1c",
   sard_4 = "ALU2_ALOPF1_0_0x3f_0x1d",
   sardsm_4 = "ALU2_ALOPF1_1_0x3f_0x1d",
+  -- C.?.? Extract field
+  getfs_4 = "ALU2_ALOPF1_0_0x3f_0x1e",
+  getfs_5 = "ALU2PR_ALOPF1_0_0x3f_0x1e",
+  getfssm_4 = "ALU2_ALOPF1_1_0x3f_0x1e",
+  getfssm_5 = "ALU2PR_ALOPF1_1_0x3f_0x1e",
+  getfd_4 = "ALU2_ALOPF1_0_0x3f_0x1f",
+  getfd_5 = "ALU2PR_ALOPF1_0_0x3f_0x1f",
+  getfdsm_4 = "ALU2_ALOPF1_1_0x3f_0x1f",
+  getfdsm_5 = "ALU2PR_ALOPF1_1_0x3f_0x1f",
   -- C.2.7.1 Sign or zero extension
   sxt_4 = "ALU2_ALOPF1_0_0x3f_0xc",
   sxt_5 = "ALU2PR_ALOPF1_0_0x3f_0xc",
@@ -397,6 +512,8 @@ local map_op = {
   setbn_3 = "SETBN_0x4",
   -- C.15.1. Prepare to jump on literal disp
   disp_2 = "DISP_DISP_0x0",
+  -- C.??.?. Prepare program for array prefetch buffer.
+  ldisp_2 = "DISP_DISP_0x1",
   -- C.15.6. Prepare to return from call
   return_1 = "DISP_RETURN_0x3",
   -- C.17.1 Transfer of control operations
@@ -404,13 +521,98 @@ local map_op = {
   ct_1 = "CT",
   -- C.17.4 Call operations
   call_2 = "CALL_0x5",
+  call_3 = "CALL_0x5",
+  -- C.??.? Ibranch operations
+  ibranch_1 = "IBRANCH",
+  ibranch_2 = "IBRANCH",
   -- C.22.4. Push nop
   nop_1 = "NOP",
+  -- C.??.?. Read and write state registers
+  rws_3 = "ALU1_ALOPF15_0_0x01_0x3c_0xc0_0x01_0xc0",
+  rwd_3 = "ALU1_ALOPF15_0_0x01_0x3d_0xc0_0x01_0xc0",
+  rrs_3 = "ALU1_ALOPF16_0_0x01_0x3e_0xc0_0x01_0xc0",
+  rrd_3 = "ALU1_ALOPF16_0_0x01_0x3f_0xc0_0x01_0xc0",
+  rws_4 = "ALU1PR_ALOPF15_0_0x01_0x3c_0xc0_0x01_0xc0",
+  rwd_4 = "ALU1PR_ALOPF15_0_0x01_0x3d_0xc0_0x01_0xc0",
+  rrs_4 = "ALU1PR_ALOPF16_0_0x01_0x3e_0xc0_0x01_0xc0",
+  rrd_4 = "ALU1PR_ALOPF16_0_0x01_0x3f_0xc0_0x01_0xc0",
+  rwssm_3 = "ALU1_ALOPF15_1_0x01_0x3c_0xc0_0x01_0xc0",
+  rwdsm_3 = "ALU1_ALOPF15_1_0x01_0x3d_0xc0_0x01_0xc0",
+  rrssm_3 = "ALU1_ALOPF16_1_0x01_0x3e_0xc0_0x01_0xc0",
+  rrdsm_3 = "ALU1_ALOPF16_1_0x01_0x3f_0xc0_0x01_0xc0",
+  rwssm_4 = "ALU1PR_ALOPF15_1_0x01_0x3c_0xc0_0x01_0xc0",
+  rwdsm_4 = "ALU1PR_ALOPF15_1_0x01_0x3d_0xc0_0x01_0xc0",
+  rrssm_4 = "ALU1PR_ALOPF16_1_0x01_0x3e_0xc0_0x01_0xc0",
+  rrdsm_4 = "ALU1PR_ALOPF16_1_0x01_0x3f_0xc0_0x01_0xc0",
+  -- C.??.?. Loop mode
+  loop_0 = "LOOP",
+  -- C.??.?. Advance loop counter
+  alct_0 = "SHORT_16",
+  alcf_0 = "SHORT_17",
+  -- C.??.?. Advance based predicate registers
+  abpt_0 = "SHORT_18",
+  abpf_0 = "SHORT_19",
+  -- C.??.?. Advance based registers
+  abnt_0 = "SHORT_21",
+  abnf_0 = "SHORT_22",
+  -- C.??.?. Start and stop array prefetching
+  bap_0 = "SHORT_28",
+  eap_0 = "SHORT_29",
+  -- C.??.?. Write AAU registers.
+  staab_5 = "ALU3_ALOPF10_0_0x24_0x1c_N_0x01_0xc0",
+  staah_5 = "ALU3_ALOPF10_0_0x24_0x1d_N_0x01_0xc0",
+  staaw_5 = "ALU3_ALOPF10_0_0x24_0x1e_N_0x01_0xc0",
+  staad_5 = "ALU3_ALOPF10_0_0x24_0x1f_N_0x01_0xc0",
+  staab_6 = "ALU3PR_ALOPF10_0_0x24_0x1c_N_0x01_0xc0",
+  staah_6 = "ALU3PR_ALOPF10_0_0x24_0x1d_N_0x01_0xc0",
+  staaw_6 = "ALU3PR_ALOPF10_0_0x24_0x1e_N_0x01_0xc0",
+  staad_6 = "ALU3PR_ALOPF10_0_0x24_0x1f_N_0x01_0xc0",
+  incr_2 = "INCR",
+  -- C.??.?. Write AAU registers.
+  aaurw_3 = "ALU2_AAURW_0_0x24_0x1e_N_0x01_0xc0",
+  aaurwd_3 = "ALU2_AAURW_0_0x24_0x1f_N_0x01_0xc0",
+  aaurwq_3 = "ALU2_AAURWQ_0_0x04_0x3f_N_0x01_0xc0",
+  -- C.??.?. Move data from APB
+  movab_6 = "MOVA_0x1",
+  movah_6 = "MOVA_0x2",
+  movaw_6 = "MOVA_0x3",
+  movad_6 = "MOVA_0x4",
+  movaq_6 = "MOVA_0x5",
+  movaqp_6 = "MOVA_0x7",
+  -- C.??.?. APB program
+  fapb_10 = "FAPB",
   -- Generate wide instruction
   ["--_0"] = "GEN",
 }
 
 ------------------------------------------------------------------------------
+
+local function assert_syllable(name)
+  if wide_instr[name] ~= nil then
+    werror(name.." already busy")
+  end
+end
+
+local function syllable(name)
+  if wide_instr[name] == nil then
+    wide_instr[name] = { value = 0 }
+  end
+  return wide_instr[name]
+end
+
+local function syllable_bor(name, value)
+  local syll = syllable(name, default)
+  syll.value = bor(syll.value, value)
+end
+
+local function syllable_set_unchecked(name, value)
+  wide_instr[name] = { value = value }
+end
+
+local function syllable_set(name, value)
+  assert_syllable(name)
+  syllable_set_unchecked(name, value)
+end
 
 local function parse_label(label, def)
   local prefix = sub(label, 1, 2)
@@ -442,6 +644,40 @@ local function parse_label(label, def)
   werror("bad label `"..label.."'")
 end
 
+local function set_concrete_const_type(operand, raw)
+  if operand.t ~= "CONST" then return end
+
+  local error = false
+  local n = operand.n
+  if n >= 0 and n <= 0xf then
+    operand.t = "NUM_4"
+  elseif n >= 0 and n <= 0x1f then
+    operand.t = "NUM_5"
+  elseif raw then
+    if n >= 0 and n <= 0xffff then
+      operand.t = "NUM_16"
+    elseif n >= 0 and n <= 0xffffffff then
+      operand.t = "NUM_32"
+    else
+      error = true
+    end
+  else
+    if n >= -0x8000 and n <= 0x7fff then
+      operand.t = "NUM_16"
+      operand.n = band(n, 0xffff)
+    elseif n >= -0x80000000 and n <= 0x7fffffff then
+      operand.t = "NUM_32"
+      operand.n = band(n, 0xffffffff)
+    else
+      error = true
+    end
+  end
+
+  if error then
+    werror("operand: "..tohex(n).." is unsupported size")
+  end
+end
+
 local function check_operand(opnd)
   local operand = {}
   if rreg_list[opnd] then
@@ -460,34 +696,55 @@ local function check_operand(opnd)
     operand = {t = "LIPRED", n = lipred_list[opnd]}
   elseif ctpr_list[opnd] then
     operand = {t = "CTPR", n = ctpr_list[opnd]}
+  elseif aad_list[opnd] then
+    operand = {t = "AAD", n = aad_list[opnd]}
+  elseif aasti_list[opnd] then
+    operand = {t = "AASTI", n = aasti_list[opnd]}
+  elseif aaincr_list[opnd] then
+    operand = {t = "AAINCR", n = aaincr_list[opnd]}
+  elseif sreg_list[opnd] then
+    operand = {t = "SREG", n = sreg_list[opnd]}
+  elseif opnd == 'loop_end' then
+    operand = {t = "LOOP_END", n = 0 }
+  elseif opnd == '~loop_end' then
+    operand = {t = "NOT_LOOP_END", n = 0 }
   else
     if match(opnd, "^U64x%(.*%)$") then
       local u64 = {}
       for j in gmatch(opnd, "0x[%da-f]+") do u64[#u64 + 1] = j end
       operand = {t = "NUM_64", hi = tonumber(u64[1], 16), lo = tonumber(u64[2], 16)}
-    elseif tonumber(opnd) ~= nil then
-      operand = {t = "CONST", n = tonumber(opnd)}
-    elseif tonumber(opnd, 16) ~= nil then
-      operand = {t = "CONST", n = tonumber(opnd,16)}
     else
-      operand = {t = "NUM_UNDEF", n = opnd}
-    end
-  end
-  -- set concrete const type
-  if operand.t == "CONST" then
-    if operand.n <= 0xf then
-      operand.t = "NUM_4"
-    elseif operand.n <= 0x1f then
-      operand.t = "NUM_5"
-    elseif operand.n <= 0xffff then
-      operand.t = "NUM_16"
-    elseif operand.n <= 0xffffffff then
-      operand.t = "NUM_32"
-    else
-      werror("operand: "..tohex(operand.n).." is unsupported size")
+      local o = opnd
+      local raw = false
+      if match(o, "^raw%(.*%)$") then
+        raw = true
+        o = sub(o, 5, -2)
+      end
+
+      if tonumber(o) ~= nil then
+        operand = {t = "CONST", n = tonumber(o)}
+        set_concrete_const_type(operand, raw)
+      elseif tonumber(o, 16) ~= nil then
+        operand = {t = "CONST", n = tonumber(o, 16)}
+        set_concrete_const_type(operand, raw)
+      else
+        operand = {t = "NUM_UNDEF", n = opnd}
+      end
     end
   end
   return operand
+end
+
+local function named_operand_raw(opnd, name)
+  assert(sub(opnd, 0, #name + 1) == name.."=", "Incorrect operand \""..opnd.."\" for "..name)
+  return assert(sub(opnd, #name + 2), "Incorrect "..name.." set")
+end
+
+local function named_operand(opnd, name, min, max)
+  local raw = named_operand_raw(opnd, name)
+  local value = assert(tonumber(raw), "Incorrect "..name.." set")
+  assert(value >= min and value <= max, "Value for "..name.." must be in range "..min.."..="..max)
+  return value
 end
 
 local function gen_code_dst(opnd)
@@ -536,13 +793,33 @@ local function gen_code_src3(opnd)
   return value
 end
 
+local function gen_code_state_reg(opnd, field)
+  local value = 0
+  local sr = check_operand(opnd)
+  if sr.t == "SREG" then
+    value = sr.n
+  else
+    werror("operand of type: "..sr.t.." unsupported for "..field)
+  end
+  return value
+end
+
+local function gen_code_for(opnd, name)
+  local tmp = check_operand(opnd)
+  if tmp.t == name then
+    return tmp.n
+  else
+    werror("operand of type: "..tmp.t.." unsupported for "..name)
+  end
+end
+
 local function add_literal(channel, src2)
   if wide_instr["LITERALS"] == nil then
     wide_instr["LITERALS"] = {}
   end
 
   local literals = wide_instr["LITERALS"]
-  if src2.t == "NUM_16" or src2.t == "NUM_32" then
+  if src2.t == "NUM_16" or src2.t == "NUM_32" or src2.t == "NUM_32_STAA" then
     for i,j in ipairs(literals) do
       if j.t == src2.t and j.n == src2.n then
         j.channels[#j.channels+1] = channel
@@ -640,6 +917,16 @@ local function gen_code_pred(opnd)
   return pred.n
 end
 
+local function generate_setmas(channel, mas)
+  if wide_instr["CS1"] == nil then
+    wide_instr["CS1"] = { value = shl(0x6, 28) }
+  elseif sar(wide_instr["CS1"].value, 28) ~= 0x6 then
+    werror("CS1 already busy")
+  end
+  local offset = ({21, -1, 14, 7, -1, 0})[channel + 1]
+  wide_instr["CS1"].value = bor(wide_instr["CS1"].value, shl(mas, offset))
+end
+
 local function generate_setbn_oper(opc, rsz_seq, rbs_seq, rcur_seq)
   local code = 0
   local param_code = 0
@@ -699,13 +986,12 @@ local function generate_setwd_oper(opc, wsz_seq, nfx_seq, dbl_seq)
   wide_instr["CS1"] = { value=cs_code }
 end
 
-local function generate_ct_oper(opnd1, opnd2)
+local function generate_ct_oper_raw(ctpr, opnd2)
   local code = 0
-  local ctpr = check_operand(opnd1)
   -- 32Bit, ipd(2),eap(1),bap(1),rp_hi(1),vfdi(1),rp_lo(1),abg(2),abn(2),type(1),
   --        abp(2),alc(2),aa(4),ctop(2),unused(1),ctcond(9)
   code = 0x3
-  code = shl(code,20) + ctpr.n
+  code = shl(code,20) + ctpr
   code = shl(code,10)
   if opnd2 ~= nil then
     -- ct(4), pred_num(5)
@@ -715,6 +1001,10 @@ local function generate_ct_oper(opnd1, opnd2)
       value = 0x3
     elseif pred.t == "PRED" then
       value = 0x2
+    elseif pred.t == "LOOP_END" then
+      value = 0x4
+    elseif pred.t == "NOT_LOOP_END" then
+      value = 0x5
     else
       werror("Operand of type: "..pred.t.." unsupported for condition")
     end
@@ -734,10 +1024,18 @@ local function generate_ct_oper(opnd1, opnd2)
   end
 end
 
-local function generate_call_oper(opc, opnd1, opnd2)
+local function generate_ct_oper(opnd1, opnd2)
+  local ctpr = check_operand(opnd1)
+  if ctpr.t ~= "CTPR" then
+    werror("Operand of type: "..ctpr.t.." unsupported for ctpr")
+  end
+  generate_ct_oper_raw(ctpr.n, opnd2)
+end
+
+local function generate_call_oper(opc, opnd1, opnd2, opnd3)
   local code = 0
   if wide_instr["CS1"] ~= nil then werror("CS1 already busy") end
-  generate_ct_oper(opnd1)
+  generate_ct_oper(opnd1, opnd3)
   local wbs = tonumber(sub(opnd2, 7))
   if wbs == nil then werror("incorrect wbs value") end
   -- 32Bit opc(4), unused(21), wbs(7)
@@ -750,7 +1048,7 @@ end
 local function generate_disp_oper(oper, opc, opnd1, opnd2)
   local code = 0
   local ctpr = check_operand(opnd1)
-  assert(ctpr.t == "CTPR", "Incorrect register for dist")
+  assert(ctpr.t == "CTPR" and (opc ~= 0x1 or ctpr.n == 2), "Incorrect register for dist")
   assert(wide_instr["CS0"] == nil, "CS0 already busy")
   -- 32Bit, ctpr(2), opcode(2), disp_value(28)
   code = ctpr.n
@@ -766,6 +1064,14 @@ local function generate_disp_oper(oper, opc, opnd1, opnd2)
   else
     werror("Unsupported disp operation")
   end
+end
+
+local function generate_ibranch_oper(opnd1, opnd2)
+  assert(wide_instr["CS0"] == nil, "CS0 already busy")
+  local label = check_operand(opnd1)
+  assert(label.t == "NUM_UNDEF", "Incorrect label set")
+  wide_instr["CS0"] = { value=0, action="LABEL", lit=label.n }
+  generate_ct_oper_raw(0, opnd2)
 end
 
 local function gen_code_alf1(channel, spec, cop, src1, src2, dst)
@@ -812,6 +1118,77 @@ local function gen_code_alf7(channel, spec, cop, opce, src1, src2, pred)
     wide_instr["ALS"..channel] = { value=code }
 end
 
+local function gen_code_staa_oper(channel, spec, cop, pair, mode, src4, aad, index, incr, lit, incr_op)
+  local src = gen_code_src3(src4)
+  if pair and band(src, 1) ~= 0 then
+    werror(src4.." must be even")
+  end
+
+  if lit ~= 0 then
+    add_literal(channel, { t = "NUM_32_STAA", n = lit })
+  end
+
+  local code = 0
+  -- 32bit, spec(1), cop(7), aad(5), index(4), incr(3), mode(2), lts(2), src4(8)
+  code = spec
+  code = shl(code,7) + cop
+  code = shl(code,5) + aad
+  code = shl(code,4) + index
+  code = shl(code,3) + incr
+  code = shl(code,2) + mode
+  code = shl(code,2) + 0 -- lts, will be filled latter
+  code = shl(code,8) + src
+  wide_instr["ALS"..channel] = { value=code, incr_op = incr_op }
+
+  if pair then
+    wide_instr["ALS5"] = { value=bor(code, 1) }
+  end
+end
+
+local function gen_code_incr_oper(channel, incr)
+  assert(channel == 2 or channel == 5, "Incorrect channel should be 2 or 5")
+  if wide_instr["ALS"..channel] == nil or not wide_instr["ALS"..channel].incr_op then
+    werror("Invalid main operation")
+  end
+  local code = 0x400 + shl(gen_code_for(incr, "AAINCR"), 12)
+  local als = wide_instr["ALS"..channel]
+  als.value = bor(als.value, code)
+  als.incr_op = nil
+end
+
+local function gen_code_alf10(channel, spec, cop, pair, src4, aad, ind, lit)
+  local aad = gen_code_for(aad, "AAD")
+  local ind = gen_code_for(ind, "AASTI")
+  local lit = assert(tonumber(lit), "Invalid operand for literal")
+  gen_code_staa_oper(channel, spec, cop, pair, 0, src4, aad, ind, 0, lit, true)
+end
+
+local function gen_code_aaurw(channel, spec, cop, pair, src4, dst)
+  local mode = nil
+  local aad = 0
+  local index = 0
+  local incr = 0
+
+  local reg = check_operand(dst)
+  if reg.t == "AAD" then
+    mode = 0
+    aad = reg.n
+  elseif reg.t == "AASTI" then
+    mode = 1
+    index = reg.n
+  elseif reg.t == "AAIND" then
+    mode = 2
+    index = reg.n
+  elseif reg.t == "AAINCR" then
+    mode = 3
+    incr = reg.n
+  else
+    werror("operand of type: "..reg.t.." is not an AAU register")
+  end
+
+  gen_code_staa_oper(channel, spec, cop, pair, mode, src4, aad, index, incr, 0, false)
+end
+
 local function gen_code_alef1(channel, ales_opc2, src3)
   local code = 0
   -- 16bit, opc2(8), src3(8)
@@ -826,6 +1203,28 @@ local function gen_code_alef2(channel, ales_opc2, ales_opce)
   code = ales_opc2
   code = shl(code,8) + ales_opce
   wide_instr["ALES"..channel] = { value=code }
+end
+
+local function gen_code_alf15(channel, spec, cop, opce, src2, dst)
+  local code = 0
+  -- 32bit, spec(1), cop(7), opce(8), src2(8), dst(8)
+  code = spec
+  code = shl(code,7) + cop
+  code = shl(code,8) + opce
+  code = shl(code,8) + gen_code_src2(src2, channel)
+  code = shl(code,8) + gen_code_state_reg(dst, "dst")
+  wide_instr["ALS"..channel] = { value=code }
+end
+
+local function gen_code_alf16(channel, spec, cop, opce, src1, dst)
+  local code = 0
+  -- 32bit, spec(1), cop(7), src1(8), opce(8), dst(8)
+  code = spec
+  code = shl(code,7) + cop
+  code = shl(code,8) + gen_code_state_reg(src1, channel, "src1")
+  code = shl(code,8) + opce
+  code = shl(code,8) + gen_code_dst(dst)
+  wide_instr["ALS"..channel] = { value=code }
 end
 
 local function generate_alu_oper(format, spec, channel, op_channel, cop, opce, ales_opc2, ales_opce, opnd1, opnd2, opnd3, opnd4)
@@ -847,6 +1246,25 @@ local function generate_alu_oper(format, spec, channel, op_channel, cop, opce, a
     gen_code_alf3(channel, spec, cop, opnd1, opnd2, opnd3)
   elseif format == "ALOPF7" then
     gen_code_alf7(channel, spec, cop, opce, opnd1, opnd2, opnd3)
+  elseif format == "ALOPF15" then
+    gen_code_alf15(channel, spec, cop, opce, opnd1, opnd2)
+    gen_code_alef2(channel, ales_opc2, ales_opce)
+  elseif format == "ALOPF16" then
+    gen_code_alf16(channel, spec, cop, opce, opnd1, opnd2)
+    gen_code_alef2(channel, ales_opc2, ales_opce)
+  elseif format == "ALOPF10" then
+    gen_code_alf10(channel, spec, cop, pair, opnd1, opnd2, opnd3, opnd4)
+    gen_code_alef2(channel, ales_opc2, ales_opce)
+  elseif sub(format, 0, 5) == "AAURW" then
+    local pair = format == "AAURWQ"
+    if pair and wide_instr["ALS5"] ~= nil then werror("ALS5 already busy") end
+    gen_code_aaurw(channel, spec, cop, pair, opnd1, opnd2)
+    gen_code_alef2(channel, ales_opc2, ales_opce)
+    generate_setmas(channel, 0x3f)
+    if pair then
+      gen_code_alef2(5, ales_opc2, ales_opce)
+      generate_setmas(5, 0x3f)
+    end
   elseif format == "ALOPF21" then
     gen_code_alf1(channel, spec, cop, opnd1, opnd2, opnd4)
     gen_code_alef1(channel, ales_opc2, opnd3)
@@ -928,6 +1346,15 @@ local function generate_landp_oper(opc, opnd1, opnd2, opnd3)
   wide_instr["PLS"..pls] = { value=bor(code, clp_code) }
 end
 
+local function generate_short_oper(opnd)
+  local value = shl(1, tonumber(opnd))
+  if wide_instr["SS"] ~= nil then
+    wide_instr["SS"].value = bor(wide_instr["SS"].value, value)
+  else
+    wide_instr["SS"] = { value=value }
+  end
+end
+
 local function generate_pass_oper(opnd1, opnd2)
   local pred1 = check_operand(opnd1)
   local pred2 = check_operand(opnd2)
@@ -978,14 +1405,76 @@ local function generate_pass_oper(opnd1, opnd2)
   end
 end
 
+local function generate_loop_oper()
+  if wide_instr["LOOP"] == nil then
+    wide_instr["LOOP"] = true
+  else
+    werror("Loop mode already set")
+  end
+end
+
 local function generate_nop_oper(opnd)
   local val = tonumber(opnd)
   if val == nil then werror("Incorrect nop value") end
   if val == 0 then wwarn("Ignoring nop 0") end
-  if wide_instr["NOP"] == nil then
+  if wide_instr["NOP"] == nil or wide_instr["NOP"].value < val then
     wide_instr["NOP"] = { value=val }
+  end
+end
+
+local function generate_mova_oper(opc, channel, area, ind, am, be, dst)
+  local area = named_operand(area, "area", 0, 63)
+  local ind = named_operand(ind, "ind", 0, 31)
+  local am = named_operand(am, "am", 0, 1)
+  local be = named_operand(be, "be", 0, 1)
+
+  dst = gen_code_dst(dst)
+  if band(channel, 1) == 0 then
+    dst = shl(dst, 8)
+  end
+
+  local aas = bor(am, shl(ind, 1))
+  aas = bor(aas, shl(area, 6))
+  aas = bor(aas, shl(opc, 12))
+  aas = bor(aas, shl(be, 15))
+
+  syllable_set("AAS"..(channel + 2), aas)
+  syllable_bor("SS", shl(1, 12 + channel))
+  syllable_bor("AAS"..({0, 0, 1, 1})[channel + 1], dst)
+end
+
+local function generate_fapb_oper(opnd, dcd, fmt, mrng, d, incr, ind, asz, abs, disp)
+  -- fapb ct=1, dcd=0, fmt=4, mrng=8, d=0, incr=0, ind=2, asz=5, abs=0, disp=0
+  -- fapb dpl=0, dcd=0, fmt=3, mrng=4, d=0, incr=0, ind=1, asz=5, abs=0, disp=0
+  --
+  -- |63  32|31|30|29 28|27 25|24  20|19 15|14  12|11  8|7 5|4 0|
+  -- | disp |ct|si| dcd | fmt | mrng | aad | incr | ind |asz|abs|
+
+  local lo = 0
+  if not wide_capture then
+    lo = named_operand(opnd, "ct", 0, 1)
   else
-    werror("Nop already set")
+    lo = named_operand(opnd, "dpl", 0, 1)
+  end
+  lo = shl(lo, 1) + 0
+  lo = shl(lo, 2) + named_operand(dcd, "dcd", 0, 3)
+  lo = shl(lo, 3) + named_operand(fmt, "fmt", 0, 7)
+  lo = shl(lo, 5) + named_operand(mrng, "mrng", 0, 31)
+  lo = shl(lo, 5) + named_operand(d, "d", 0, 31)
+  lo = shl(lo, 3) + named_operand(incr, "incr", 0, 7)
+  lo = shl(lo, 4) + named_operand(ind, "ind", 0, 15)
+  lo = shl(lo, 3) + named_operand(asz, "asz", 0, 7)
+  lo = shl(lo, 5) + named_operand(abs, "abs", 0, 31)
+
+  local hi = named_operand(disp, "disp", 0, 0xffffffff)
+
+  if not wide_capture then
+    wide_instr["FAPB0"] = { lo = lo, hi = hi }
+  else
+    if wide_instr["FAPB1"] ~= nil then
+      werror("FAPB1 already busy")
+    end
+    wide_instr["FAPB1"] = { lo = lo, hi = hi }
   end
 end
 
@@ -1019,12 +1508,34 @@ local function generate_lts16()
       if not found then
         -- Try 32-bit.
         lit.t = "NUM_32"
+        if band(lit.n, 0x8000) ~= 0 then
+          -- sign-extend to 32-bit
+          lit.n = bor(lit.n, 0xffff0000)
+        end
       end
     end
   end
 end
 
 local function generate_lts32()
+  -- Handle first because it is more restricted.
+  for i,lit in ipairs(wide_instr["LITERALS"]) do
+    if lit.t == "NUM_32_STAA" then
+      local found = false
+      for i,j in ipairs({ "LTS0", "LTS1", "LTS2" }) do
+        if wide_instr[j] == nil then
+          wide_instr[j] = { value=lit.n }
+          update_src2(lit.channels, i)
+          found = true
+          break
+        end
+      end
+      if not found then
+        return false
+      end
+    end
+  end
+
   for i,lit in ipairs(wide_instr["LITERALS"]) do
     if lit.t == "NUM_32" then
       local found = false
@@ -1186,9 +1697,20 @@ local function generate_hs_code()
     code = shl(code,2) + 0
   end
   code = shl(code,1) + 0 -- set x
-  code = shl(code,1) + 0 -- set lm (will not support loop mode in first steps)
+  if wide_instr["LOOP"] then
+    code = shl(code,1) + 1
+  else
+    code = shl(code,1)
+  end
   if wide_instr["NOP"] ~= nil then
-    code = shl(code,3) + wide_instr["NOP"].value -- set nop
+    local nops = wide_instr["NOP"]
+    if nops.value > 7 then
+      code = shl(code,3) + 7
+      nops.value = nops.value - 7 -- additional nops will be generated later
+    else
+      code = shl(code,3) + nops.value
+      wide_instr["NOP"] = nil -- do not generate additional nops after this bundle
+    end
   else
     code = shl(code,3) + 0
   end
@@ -1211,18 +1733,18 @@ local function generate_ins_code(hs_code, is_notaligned)
     if wide_instr[j] ~= nil then ins[#ins+1] = wide_instr[j] end
   end
   local half_syls = { "ALES0", "ALES1", "ALES3", "ALES4", "AAS0", "AAS1", "AAS2", "AAS3", "AAS4", "AAS5" }
-  local tmp_code = 0
+  local tmp_code = nil
   for i,j in ipairs(half_syls) do
     if wide_instr[j] ~= nil then
-      if tmp_code ~= 0 then
+      if tmp_code ~= nil then
         ins[#ins+1] = { value = shl(tmp_code, 16) + wide_instr[j].value}
-        tmp_code = 0
+        tmp_code = nil
       else
         tmp_code = wide_instr[j].value
       end
     end
   end
-  if tmp_code ~= 0 then ins[#ins+1] = { value = shl(tmp_code, 16) } end
+  if tmp_code ~= nil then ins[#ins+1] = { value = shl(tmp_code, 16) } end
   if is_notaligned then ins[#ins+1] = { value = 0x0 } end
   syls = { "LTS3", "LTS2", "LTS1", "LTS0", "PLS2", "PLS1", "PLS0" }
   for i,j in ipairs(syls) do
@@ -1249,30 +1771,55 @@ local function wide_gen(force)
   end
   -- Stop capturing bundle instructions.
   wide_capture = false
-  generate_lts()
-  local hs_code, is_notaligned = generate_hs_code()
-  local code = generate_ins_code(hs_code, is_notaligned)
-  local actions = {}
-  for i,j in ipairs(code) do
-    wputxw(j.value)
-    if j.action then
-      if j.action == "LABEL" then
-        local mode, n, s = parse_label(j.lit, false)
-        local ofs_e = #code - i + 1
-        local ofs_s = #code / 2
-        assert(ofs_e < 15, "Too big offset to CS0")
-        assert(ofs_s < 15, "Too big size of command")
-        actions[#actions+1] = { "REL_"..mode, n, s, ofs_e, ofs_s, 1 }
-      elseif j.action == "IMM" then
-        local ofs = #code - i + 1
-        actions[#actions+1] = { "IMM", 0, j.lit, ofs, nil, 1 }
-      else
-        werror("Incompatible action")
+  if wide_instr["FAPB0"] ~= nil then
+    wputw(wide_instr["FAPB0"].lo)
+    wputw(wide_instr["FAPB0"].hi)
+    if wide_instr["FAPB1"] ~= nil then
+      wputw(wide_instr["FAPB1"].lo)
+      wputw(wide_instr["FAPB1"].hi)
+    else
+      wputw(0)
+      wputw(0)
+    end
+  else
+    generate_lts()
+    local hs_code, is_notaligned = generate_hs_code()
+    local code = generate_ins_code(hs_code, is_notaligned)
+    local actions = {}
+    for i,j in ipairs(code) do
+      wputw(j.value)
+      if j.action then
+        if j.action == "LABEL" then
+          local mode, n, s = parse_label(j.lit, false)
+          local ofs_e = #code - i + 1
+          local ofs_s = #code / 2
+          assert(ofs_e < 15, "Too big offset to CS0")
+          assert(ofs_s < 15, "Too big size of command")
+          actions[#actions+1] = { "REL_"..mode, n, s, ofs_e, ofs_s, 1 }
+        elseif j.action == "IMM" then
+          local ofs = #code - i + 1
+          actions[#actions+1] = { "IMM", 0, j.lit, ofs, nil, 1 }
+        else
+          werror("Incompatible action")
+        end
       end
     end
-  end
-  for i,j in ipairs(actions) do
-    waction(j[1], j[2], j[3], j[4], j[5], j[6])
+    for i,j in ipairs(actions) do
+      waction(j[1], j[2], j[3], j[4], j[5], j[6])
+    end
+    if wide_instr["NOP"] ~= nil then
+      -- Generate additional nops after this bundle.
+      local nops = wide_instr["NOP"].value
+      while nops > 0 do
+        if nops < 8 then
+          wputw(shl(nops - 1, 7))
+        else
+          wputw(shl(7, 7))
+        end
+        wputw(0)
+        nops = nops - 8
+      end
+    end
   end
   for i in pairs(wide_instr) do
     wide_instr[i] = nil
@@ -1311,16 +1858,20 @@ map_op[".template__"] = function(params, template)
                             cop, opce, ales_opc2, ales_opce,
                             params[2], params[3], params[4])
       if op_type == "ALU2PR" then generate_alu_cond(channel, params[5]) end
-    elseif op_type == "ALU3" then
+    elseif op_type == "ALU3" or op_type == "ALU3PR" then
       local opce = op_info[6] -- May be nil, check later.
       local ales_opc2 = op_info[7] -- May be nil, check later.
       local ales_opce = op_info[8] -- May be nil, check later.
       generate_alu_oper(format, spec, channel, op_channel, 
                             cop, opce, ales_opc2, ales_opce,
                             params[2], params[3], params[4], params[5])
+      if op_type == "ALU3PR" then generate_alu_cond(channel, params[6]) end
     else
       werror("Unsupported ALU operation")
     end
+  elseif op_type == "INCR" then
+    local channel = assert(tonumber(params[1]), "Incorrect channel set")
+    gen_code_incr_oper(channel, params[2])
   elseif op_type == "DISP" then
     local operation = op_info[2]
     local opc = assert(tonumber(op_info[3]), "Incorrect opcode set")
@@ -1329,7 +1880,9 @@ map_op[".template__"] = function(params, template)
     generate_ct_oper(params[1], params[2])
   elseif op_type == "CALL" then
     local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
-    generate_call_oper(opc, params[1], params[2])
+    generate_call_oper(opc, params[1], params[2], params[3])
+  elseif op_type == "IBRANCH" then
+    generate_ibranch_oper(params[1], params[2])
   elseif op_type == "SETWD" then
     local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
     generate_setwd_oper(opc, params[1], params[2], params[3])
@@ -1341,11 +1894,22 @@ map_op[".template__"] = function(params, template)
   elseif op_type == "LANDP" then
     local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
     generate_landp_oper(opc, params[1], params[2], params[3])
+  elseif op_type == "SHORT" then
+    generate_short_oper(op_info[2])
   elseif op_type == "NOP" then
     generate_nop_oper(params[1])
+  elseif op_type == "LOOP" then
+    generate_loop_oper()
+  elseif op_type == "MOVA" then
+    local opc = assert(tonumber(op_info[2]), "Incorrect opcode set")
+    local channel = assert(tonumber(params[1]), "Incorrect channel set")
+    generate_mova_oper(opc, channel, params[2], params[3], params[4], params[5], params[6])
+  elseif op_type == "FAPB" then
+    generate_fapb_oper(params[1], params[2], params[3], params[4], params[5],
+                       params[6], params[7], params[8], params[9], params[10])
   elseif op_type == "GEN" then
     -- User requested to generate a bundle.
-    wide_gen(true)
+    wide_gen(false) -- relaxed wide gen so it can be used with empty wait macros
     if not wide_mode then
       wide_mode = true
       werror("Bundle end `--` cannot be used if wide mode is disabled")
