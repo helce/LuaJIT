@@ -7588,11 +7588,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_JMP:
         | // ins_AJ RA_E = unused, RD_E = target*8
         | subd      0, PC, BCBIAS_J*4, PC
-        | shrd      1, RD_E, 0x1, T0
-        | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
+        | shrd      1, RD_E, 1, T0
+        | disp      ctpr1, ->vm_restart_pipeline_fast
         | --
-        | addd      0, PC, T0, PC
-        | ct        ctpr1                   // vm_restart_pipeline
+        | ldb       0, PC, T0, RARG1
+        | addd      1, PC, T0, PC
+        | wait_load RARG1, 0
+        | --
+        | shld      0, RARG1, 3, RARG1
+        | --
+        | ldd       0, RARG1, DISPATCH, RARG1
+        | wait_load RARG1, 0                // Must be ready for vm_restart_pipeline_fast.
+        | ct        ctpr1                   // vm_restart_pipeline_fast(BCOp*)
         | --
         break;
 
