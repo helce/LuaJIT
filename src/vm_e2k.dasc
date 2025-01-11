@@ -6114,100 +6114,103 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
         | pipe_dispatch_load 3
-        | subd      4, KBASE, RC_E, S0
-        | ldd       5, BASE, RB_E, RB
+        | subd      4, KBASE, RC_E, RC
+        | ldd       5, BASE, RB_E, RB       // GCtab *
         | disp      ctpr1, ->vmeta_tgets
         | --
         | pipe_scale 0, 1, 2, 3
-        | addd      4, 0x0, LJ_TSTR, T1
-        | ldd       5, S0, -8, RC
+        | ldd       5, RC, -8, RC           // GCstr *
         | wait_load RB, 1
         | --
-        | sard      4, RB, 0x2f, ITYPE
-        | getfd     5, RB, (47 << 6), RB
+        | addd      0, 0x0, LJ_TSTR, T1
+        | sard      4, RB, 47, ITYPE
+        | getfd     5, RB, 47 << 6, RB
         | --
-        | cmpesb    3, ITYPE, LJ_TTAB, pred0
-        | shld      4, T1, 0x2f, T1
-        | wait_pred pred, 0
-        | wait_load RC, 2
-        | --
-        | ldd       2, RB, TAB->node, T2, pred0
-        | ldw       3, RB, TAB->hmask, S0, pred0    // RB = GCtab *, RC = GCstr *
-        | ldw       5, RC, STR->sid, S1, pred0
+        | shld      0, T1, 47, T1
+        | ldwsm     3, RB, TAB->hmask, S0
+        | cmpesb    4, ITYPE, LJ_TTAB, pred0
+        | ldwsm     5, RC, STR->sid, S1
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | lddsm     5, RB, TAB->node, T2
+        | wait_pred_ct pred0, 1
         | wait_load S0, 1
         | --
         | andd      4, S0, S1, S1, pred0    // idx = str->sid & tab->hmask
-        | ct        ctpr1, ~pred0
+        | ct        ctpr1, ~pred0           // vmeta_tgets(RB, RC)
         | --
         |->BC_TGETS_Z:
         | // (S1, RA_E, RC, T2, T1)
+        | // S1 = idx = (str->sid & tab->hmask)
+        | // RA_E = dst*8
+        | // RC = GCstr *
+        | // T2 = MRef *node
+        | // T1 = LJ_TSTR << 47
         | // TODO: convert to standard calling convention
         | shld      3, S1, 0x5, S0
         | shld      4, S1, 0x3, S1
+        | disp      ctpr1, <1
         | --
-        | subd      3, S0, S1, S1
+        | subd      3, S0, S1, S1           // idx*32 - idx*8 = idx * #NODE (24)
+        | disp      ctpr2, >2
         | --
-        | addd      3, T2, S1, S0           // node = tab->node + (idx*32-idx*8)
+        | addd      3, T2, S1, S0           // node = tab->node + idx * #NODE
         | ord       4, RC, T1, ITYPE
         | --
         | ldd       3, S0, NODE->key, S1
         | lddsm     5, S0, NODE->next, T5
-        | wait_load T5, 0
+        | --
         |1:
-        | disp      ctpr2, <1
+        | lddsm     3, S0, NODE->val, T4    // Get node value.
+        | wait_load S1, 1
+        | --
         | cmpedbsm  3, T5, 0x0, pred2
         | cmpedb    4, S1, ITYPE, pred3
-        | lddsm     5, S0, NODE->val, T4    // Get node value.
         | --
-        | disp ctpr1, >2
-        | pass pred3, p0
-        | pass pred2, p1
-        | landp ~p0, ~p1, p4
-        | pass p4, pred4
-        | landp ~p0, p1, p5
-        | pass p5, pred2
-        | wait_load T4, 0
+        | pass      pred3, p0
+        | pass      pred2, p1
+        | landp     ~p0, ~p1, p4
+        | landp     ~p0, p1, p5
+        | pass      p4, pred4
+        | pass      p5, pred2
         | --
         | addd      3, T5, 0x0, S0, ~pred3  // Follow hash chain.
         | addd      4, T4, 0x0, ITYPE, pred3
+        | wait_pred_ct pred4, 1
         | --
         | ldd       3, S0, NODE->key, S1, pred4
         | cmpedbsm  4, ITYPE, LJ_TNIL, pred1
         | lddsm     5, S0, NODE->next, T5, pred4
+        | ct        ctpr1, pred4            // <1
         | --
-        | ct ctpr2, pred4
-        | --
-        | addd 3, 0x0, LJ_TNIL, ITYPE, pred2 // End of hash chain: key not found, nil result.
-        | ct        ctpr1, pred2            // >2
+        | addd      3, 0x0, LJ_TNIL, ITYPE, pred2 // End of hash chain: key not found, nil result.
+        | ct        ctpr2, pred2            // >2
+        | wait_pred_ct pred1, 1
         | --
         | std       5, BASE, RA_E, ITYPE, ~pred1
         | pipe_dispatch_if 0, ctpr3, ~pred1
         | --
-        | ct        ctpr1, pred1            // >2
-        | --
         |2:
-        | disp ctpr1, ->vmeta_tgets
-        | ldd 3, RB, TAB->metatable, S0     //  Check for __index if table value is nil
+        | disp      ctpr1, ->vmeta_tgets
+        | ldd       3, RB, TAB->metatable, S0   //  Check for __index if table value is nil
         | wait_load S0, 0
         | --
-        | ldbsm 3, S0, TAB->nomm, S1
-        | cmpedb 4, S0, 0x0, pred0
+        | ldbsm     3, S0, TAB->nomm, S1
+        | cmpedb    4, S0, 0x0, pred0
         | wait_load S1, 0
         | --
         | cmpandedbsm 4, S1, 1<<MM_index, pred1
         | --
-        | pass pred0, p0                    // No metatable: done
-        | pass pred1, p1                    // 'no __index' flag set: done.
-        | landp ~p0, p1, p4
-        | pass p4, pred0
+        | pass      pred0, p0               // No metatable: done
+        | pass      pred1, p1               // 'no __index' flag set: done.
+        | landp     ~p0, p1, p4
+        | pass      p4, pred0
         | wait_pred_ct pred0, 0
         | --
         | std       5, BASE, RA_E, ITYPE, ~pred0
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
-        | ct        ctpr1                   // vmeta_tgets(TODO)
+        | ct        ctpr1                   // vmeta_tgets(RB, RC)
         | --
         break;
 
