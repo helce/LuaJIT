@@ -271,7 +271,7 @@
 |//   20  F
 |
 |// Prologue example:
-|//   | pipe_setwd
+|//   | setwd_pipe
 |//   | --
 |//   | ldwsm     0, PC, 0, INSN_E
 |//   | ldwsm     2, PC, 4, INSN_B
@@ -334,7 +334,7 @@
 |// Setup register window for the software pipeline.
 |//   r0..r15 - window registers
 |//   b0..b23 - pipeline (based/rotating) registers
-|.macro pipe_setwd
+|.macro setwd_pipe
 | setwd     wsz = 0x14, nfx = 0x1, dbl = 0x0
 | setbn     rsz = 0xb, rbs = 0x8, rcur = 0x0
 |.endmacro
@@ -998,7 +998,7 @@ static void build_subroutines(BuildCtx *ctx)
     | // (PC)
     | // RD = (nargs+1)*8
     | // RB = (nresults+1)*8
-    | pipe_setwd
+    | setwd_pipe
     | --
     | ldw       0, RARG1, 0, INSN_E         // Load insns.
     | ldwsm     2, RARG1, 4, INSN_B
@@ -1038,7 +1038,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_restart_pipeline:
     | // PC
-    | pipe_setwd
+    | setwd_pipe
     | --
     | ldw       0, PC, 0, INSN_E            // Load insns.
     | ldwsm     2, PC, 4, INSN_B
@@ -1080,7 +1080,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_restart_pipeline_static:
     | // PC
-    | pipe_setwd
+    | setwd_pipe
     | --
     | ldw       0, PC, 0, INSN_E            // Load insns.
     | ldwsm     2, PC, 4, INSN_B
@@ -1125,7 +1125,7 @@ static void build_subroutines(BuildCtx *ctx)
     |// Restart pipeline with a custom RA field.
     |->vm_restart_pipeline_static_ra:
     | // PC, RA
-    | pipe_setwd
+    | setwd_pipe
     | --
     | ldw       0, PC, 0, INSN_E            // Load insns.
     | ldwsm     2, PC, 4, INSN_B
@@ -4155,7 +4155,7 @@ static void build_subroutines(BuildCtx *ctx)
     | call      ctpr1, wbs = 0x8            // lj_dispatch_call(lua_State *L, const BCIns *pc)
     | --
     | // ASMFunction returned.
-    | pipe_setwd
+    | setwd_pipe
     | movtd     0, CRET1, ctpr3             // Prepare an insn handler for stage E.
     | addd      1, CRET1, 0x0, T0
     | ldd       2, RB, L->base, BASE
