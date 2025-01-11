@@ -7494,34 +7494,36 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_FORI:
         | // ins_AJ RA_E = base*8, RD_E = target*8 (after end of loop or start of loop)
         | pipe_dispatch_prep 0, ctpr3
-        | pipe_fetch 2
         | pipe_dispatch_load 3
-        | subd      1, PC, BCBIAS_J*4, T3
-        | addd      4, BASE, RA_E, RA
+        | addd      1, BASE, RA_E, RA
+        | addd      4, BASE, RA_E, T0
         | disp      ctpr2, ->vmeta_for
         | --
-        | shrd      1, RD_E, 0x1, T4
+        | subd      0, PC, BCBIAS_J*4, T3
+        | shrd      1, RD_E, 1, T4          // RD*4
         | ldd       2, RA, 0x10, RB
-        | ldd       3, RA, 0x0, S0
-        | addd      4, 0x0, 0x2f, T1
-        | ldd       5, RA, 0x8, S1
-        | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
+        | ldd       3, T0, 0x0, S0
+        | ldd       5, T0, 0x8, S1
+        | disp      ctpr1, ->vm_restart_pipeline_fast
         | --
-        | pipe_scale 0, 1, 2, 3
+        | pipe_scale 1, 2, 4, 5
+        | pipe_fetch 3
+        | ldb       0, T3, T4, RARG1        // Branch target insn opcode for fast restart.
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | wait_load S0, 2
+        | wait_load RB, 2
         | --
-        | addd      1, T3, T4, T3
-        | sard      2, RB, T1, ITYPE
-        | sard      3, S0, T1, T1
-        | sard      4, S1, T1, T2
+        | sard      1, RB, 47, ITYPE
+        | sard      3, S0, 47, T1
+        | sard      4, S1, 47, T2
         | --
         | cmplsb    0, ITYPE, LJ_TISNUM, pred3
+        | shld      2, RARG1, 3, RARG1
         | cmpbsb    1, ITYPE, LJ_TISNUM, pred0
         | cmpbsb    3, T1, LJ_TISNUM, pred1
         | cmpbsb    4, T2, LJ_TISNUM, pred2
         | --
+        | ldd       0, RARG1, DISPATCH, RARG1   // Dispatch for branch target.
         | pass      pred0, p0
         | pass      pred1, p1
         | pass      pred2, p2
@@ -7546,8 +7548,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p6, pred0
         | wait_pred_ct pred0, 0
         | --
-        | addd      0, T3, 0x0, PC, pred0
-        | ct        ctpr1, pred0            // vm_restart_pipeline
+        | addd      0, T3, T4, PC, pred0    // Set PC to branch target if taken.
+        | ct        ctpr1, pred0            // vm_restart_pipeline_fast(RARG1)
         | --
         | pipe_dispatch 0, ctpr3
         | --
