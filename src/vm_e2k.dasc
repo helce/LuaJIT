@@ -46,8 +46,9 @@
 |.define PC,        r7
 |.define DISPATCH,  r8
 |
-|.define TMP0,      r9
-|.define TMP1,      r10
+|// Callee saved temporary registers.
+|.define S0,        r9
+|.define S1,        r10
 |
 |.define RA,        r11
 |.define RB,        r12
@@ -568,21 +569,21 @@ static void build_subroutines(BuildCtx *ctx)
     | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
     | --
     | xord 1, PC, FRAME_C, PC
-    | subd 2, 0x0, 0x8, TMP1
+    | subd 2, 0x0, 0x8, S1
     | addd 3, RA, 0x0, CARG4
     | subd 4, RD, 0x8, CARG3
     | ldd 5, STACK, SAVE_L, RB
     | disp ctpr1, ->vm_returnp
     | --
     | cmpandesb 0, PC, FRAME_TYPE, pred0
-    | andd 1, PC, TMP1, TMP1
-    | addd 2, 0x0, ~LJ_VMST_C, TMP0
+    | andd 1, PC, S1, S1
+    | addd 2, 0x0, ~LJ_VMST_C, S0
     | cmpedb 3, CARG3, 0x0, pred1
     | disp ctpr2, >2
     | --
     | ldw 0, STACK, SAVE_NRES, RA, pred0
-    | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0, pred0
-    | subd 3, TMP1, BASE, PC, pred0
+    | stw 2, DISPATCH, DISPATCH_GL(vmstate), S0, pred0
+    | subd 3, S1, BASE, PC, pred0
     | ct        ctpr1, ~pred0               // vm_returnp(RA)
     | --
     | return ctpr3
@@ -595,15 +596,15 @@ static void build_subroutines(BuildCtx *ctx)
     | std 5, RB, L->base, PC
     | ct        ctpr2, pred1                // >2
     |1:                                     // Move results down.
-    | ldd 3, BASE, CARG4, TMP1
+    | ldd 3, BASE, CARG4, S1
     | subd 4, CARG3, 0x8, CARG3
     | --
     | cmpedb 4, CARG3, 0x0, pred0
     | wait_pred_ct pred0, 0
-    | wait_load TMP1, 1
+    | wait_load S1, 1
     | --
     | addd 3, BASE, 0x8, BASE
-    | std 5, BASE, -16, TMP1
+    | std 5, BASE, -16, S1
     | ct        ctpr1, ~pred0               // <1
     |2:
     | disp ctpr1, >4
@@ -614,42 +615,42 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr1, ~pred0               // >4, More/less results wanted?
     |3:
     | addd 2, 0x0, 0x0, RRET1               // Ok return status for vm_pcall.
-    | ldd 3, STACK, SAVE_CFRAME, TMP0       // Restore previous C frame.
+    | ldd 3, STACK, SAVE_CFRAME, S0         // Restore previous C frame.
     | subd 4, BASE, 0x10, BASE
     | nop 1
     | --
     | std 5, RB, L->top, BASE
     | --
-    | std 5, RB, L->cframe, TMP0
+    | std 5, RB, L->cframe, S0
     | ct        ctpr3                       // return
     |4:
-    | ldd 3, RB, L->maxstack, TMP0
-    | addd 4, 0x0, LJ_TNIL, TMP1
+    | ldd 3, RB, L->maxstack, S0
+    | addd 4, 0x0, LJ_TNIL, S1
     | disp ctpr1, >5
     | nop 1
     | --
     | cmpbsb 0, RA, RD, pred0
     | disp ctpr2, >6
     | --
-    | cmpbedb 3, BASE, TMP0, pred1
+    | cmpbedb 3, BASE, S0, pred1
     | nop 1
     | --
     | ct        ctpr1, pred0                // >5, Less results wanted?
     | --
     | disp ctpr1, <4
     | --
-    | subd 3, BASE, 0x10, TMP0, pred1
+    | subd 3, BASE, 0x10, S0, pred1
     | ct        ctpr2, ~pred1               // >6, Need to grow stack?
     | --
     | addd 3, BASE, 0x8, BASE
     | adds 4, RD, 0x8, RD
-    | std 5, TMP0, 0x0, TMP1                // Check stack size and fill up results with nil.
+    | std 5, S0, 0x0, S1                    // Check stack size and fill up results with nil.
     | return ctpr3
     | --
     | cmpesb 0, RA, RD, pred0
     | nop 1
     | --
-    | ldd 3, STACK, SAVE_CFRAME, TMP0, pred0 // Restore previous C frame.
+    | ldd 3, STACK, SAVE_CFRAME, S0, pred0 // Restore previous C frame.
     | subd 4, BASE, 0x10, BASE, pred0
     | ct        ctpr1, ~pred0               // <4, More/less results wanted?
     | --
@@ -657,7 +658,7 @@ static void build_subroutines(BuildCtx *ctx)
     | std 5, RB, L->top, BASE
     | nop 1
     | --
-    | std 5, RB, L->cframe, TMP0
+    | std 5, RB, L->cframe, S0
     | ct        ctpr3                       // return
     |5:                                     // Less results wanted.
     | disp ctpr1, <3
@@ -694,7 +695,7 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | shld 0, RA, 0x3, RA
-    | ldd 2, STACK, SAVE_CFRAME, TMP0       // Restore previous C frame.
+    | ldd 2, STACK, SAVE_CFRAME, S0       // Restore previous C frame.
     | return ctpr3
     | --
     | cmpesb 0, RA, RD, pred0
@@ -703,7 +704,7 @@ static void build_subroutines(BuildCtx *ctx)
     | subd 3, BASE, 0x10, BASE, pred0
     | ct        ctpr1, ~pred0               // <4, More/less results wanted?
     | --
-    | std 2, RB, L->cframe, TMP0
+    | std 2, RB, L->cframe, S0
     | std 5, RB, L->top, BASE
     | ct        ctpr3                       // return
     | --
@@ -722,10 +723,10 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | ldd 0, RB, L->glref, RB
-    | addd 1, 0x0, ~LJ_VMST_C, TMP0
+    | addd 1, 0x0, ~LJ_VMST_C, S0
     | nop 2
     | --
-    | stw 2, RB, GL->vmstate, TMP0
+    | stw 2, RB, GL->vmstate, S0
     | ct ctpr3
     | --
     |
@@ -742,7 +743,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd 3, 0x0, (1+1)*8, RD              // Really 1+2 results, incr. later.
     | disp ctpr1, ->vm_returnc
     | --
-    | addd 0, 0x0, ~LJ_VMST_INTERP, TMP0
+    | addd 0, 0x0, ~LJ_VMST_INTERP, S0
     | addd 3, 0x0, U64x(0xffff7fff,0xffffffff), RA
     | nop 1
     | --
@@ -759,7 +760,7 @@ static void build_subroutines(BuildCtx *ctx)
     | std 5, BASE, -16, RA           // Prepend false to error message.
     | --
     | subd 3, 0x0, 0x10, RA                 // Results start at BASE+RA = BASE-16.
-    | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0
+    | stw 2, DISPATCH, DISPATCH_GL(vmstate), S0
     | ct ctpr1                              // Increments RD/MULTRES and returns.
     | --
     |
@@ -877,7 +878,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd 2, RB, L->glref, DISPATCH         // Setup pointer to dispatch table.
     | --
     | addd 1, RARG2, 0x0, RA
-    | ldb 3, RB, L->status, TMP0
+    | ldb 3, RB, L->status, S0
     | addd 4, STACK, CFRAME_RESUME, KBASE
     | --
     | std 2, STACK, SAVE_CFRAME, RD
@@ -888,7 +889,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | addd 0, DISPATCH, GG_G2DISP, DISPATCH
     | std 2, STACK, SAVE_PC, RD             // Any value outside of bytecode is ok.
-    | cmpedb 3, TMP0, 0x0, pred0
+    | cmpedb 3, S0, 0x0, pred0
     | nop 2
     | --
     | std 2, STACK, SAVE_L, RARG1
@@ -897,18 +898,18 @@ static void build_subroutines(BuildCtx *ctx)
     |
     | // Resume after yield (like a return).
     | ldd 3, RB, L->base, BASE
-    | ldd 5, RB, L->top, TMP1
+    | ldd 5, RB, L->top, S1
     | disp ctpr2, ->BC_RET_Z
     | --
-    | addd 1, 0x0, ~LJ_VMST_INTERP, TMP0
+    | addd 1, 0x0, ~LJ_VMST_INTERP, S0
     | std 2, DISPATCH, DISPATCH_GL(cur_L), RB
     | disp      ctpr1, ->vm_return
     | --
-    | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0
+    | stw 2, DISPATCH, DISPATCH_GL(vmstate), S0
     | stb 5, RB, L->status, RD
     | --
     | ldd 3, BASE, -8, PC
-    | subd 4, TMP1, RA, RD
+    | subd 4, S1, RA, RD
     | subd 5, RA, BASE, RA                  // RA = resultofs
     | --
     | addd 3, RD, 0x8, RD                   // RD = (nresults+1)*8
@@ -963,7 +964,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |2: // Entry point for vm_resume/vm_cpcall (RA = base, RB = L, PC = ftype)
     | addd 0, PC, RA, PC
-    | addd 1, 0x0, ~LJ_VMST_INTERP, TMP0
+    | addd 1, 0x0, ~LJ_VMST_INTERP, S0
     | ldd 3, RB, L->base, BASE              // BASE = old base (used in vmeta_call).
     | ldd 5, RB, L->top, RD
     | disp ctpr1,  ->vmeta_call
@@ -971,7 +972,7 @@ static void build_subroutines(BuildCtx *ctx)
     | std 2, DISPATCH, DISPATCH_GL(cur_L), RB
     | --
     | ldd 0, RA, -16, RB                    // RB = LFUNC
-    | stw 2, DISPATCH, DISPATCH_GL(vmstate), TMP0
+    | stw 2, DISPATCH, DISPATCH_GL(vmstate), S0
     | nop 1
     | --
     | subd 0, PC, BASE, PC                  // PC = frame delta + frame type
@@ -1172,27 +1173,27 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | getsp 0, STACK_SPACE, STACK
     | addd 1, RARG1, 0x0, RB
-    | ldd 2, RARG1, L->top, TMP1
+    | ldd 2, RARG1, L->top, S1
     | --
-    | ldd 0, RB, L->stack, TMP0
+    | ldd 0, RB, L->stack, S0
     | ldd 2, RB, L->glref, DISPATCH         // Setup pointer to dispatch table.
     | nop 1
     | --
     | movtd 0, RARG4, ctpr1
     | std 2, STACK, SAVE_L, RB
     | --
-    | subd 0, TMP0, TMP1, TMP0
-    | addd 1, 0x0, 0x0, TMP1
+    | subd 0, S0, S1, S0
+    | addd 1, 0x0, 0x0, S1
     | std 2, STACK, SAVE_PC, RB
     | --
     | addd 0, DISPATCH, GG_G2DISP, DISPATCH
-    | stw 2, STACK, SAVE_ERRF, TMP1         // No error function.
+    | stw 2, STACK, SAVE_ERRF, S1           // No error function.
     | --
-    | ldd 0, RB, L->cframe, TMP0
-    | stw 2, STACK, SAVE_NRES, TMP0         // Neg. delta means cframe w/o frame.
+    | ldd 0, RB, L->cframe, S0
+    | stw 2, STACK, SAVE_NRES, S0           // Neg. delta means cframe w/o frame.
     | --
     | addd 0, RARG1, 0x0, CARG1
-    | std 2, STACK, SAVE_CFRAME, TMP0
+    | std 2, STACK, SAVE_CFRAME, S0
     | --
     | addd 0, RARG2, 0x0, CARG2
     | std 2, RB, L->cframe, STACK
@@ -1202,7 +1203,7 @@ static void build_subroutines(BuildCtx *ctx)
     | call ctpr1, wbs = 0x8                 // (lua_State *L, lua_CFunction func, void *ud)
     | --
     | // TValue * (new base) or NULL returned.
-    | lddsm 0, STACK, SAVE_CFRAME, TMP0     // Restore previous C frame.
+    | lddsm 0, STACK, SAVE_CFRAME, S0       // Restore previous C frame.
     | cmpedb 1, CRET1, 0x0, pred0
     | disp ctpr1, <2
     | --
@@ -1210,7 +1211,7 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 1
     | --
     | addd 0, 0x0, 0x0, RRET1, pred0        // Ok return status for vm_pcall.
-    | std 2, RB, L->cframe, TMP0, pred0
+    | std 2, RB, L->cframe, S0, pred0
     | ct ctpr3, pred0
     | --
     | addd 0, CRET1, 0x0, RA
@@ -1229,11 +1230,11 @@ static void build_subroutines(BuildCtx *ctx)
     | andd 2, PC, raw(0xfff8), PC
     | addd 3, BASE, RA, RA
     | addd 4, BASE, 0x0, RB
-    | addd 5, 0x0, LJ_TNIL, TMP0
+    | addd 5, 0x0, LJ_TNIL, S0
     | disp ctpr2, >1
     | --
     | subd 3, BASE, PC, BASE                // Restore caller BASE.
-    | addd 4, RA, RD, TMP1
+    | addd 4, RA, RD, S1
     | addd 5, RA, 0x0, CRET1
     | disp ctpr1, ->cont_ffi_callback
     | --
@@ -1245,7 +1246,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | cmpbedb 0, RA, 0x1, pred0
     | cmpedb 1, RA, 0x1, pred1
-    | std 5, TMP1, -8, TMP0                 // Ensure one valid arg.
+    | std 5, S1, -8, S0                     // Ensure one valid arg.
     | nop 2
     | --
     |.if FFI
@@ -1279,7 +1280,7 @@ static void build_subroutines(BuildCtx *ctx)
     |->cont_cat:                            // BASE = base, CRET1 = result, RB = mbase
     | setwd_call
     | ldb       0, PC, PREV_PC_RB, T3
-    | lddsm     2, CRET1, 0x0, TMP0
+    | lddsm     2, CRET1, 0x0, S0
     | subd      3, RB, 0x20, RB
     | disp      ctpr1, ->cont_ra
     | --
@@ -1301,7 +1302,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | shrd      0, CARG3, 0x3, CARG3
     | addd      1, RB, 0x0, CARG2
-    | std       2, RB, 0x0, TMP0
+    | std       2, RB, 0x0, S0
     | nop 1
     | --
     | std       2, CARG1, L->base, BASE
@@ -1317,20 +1318,20 @@ static void build_subroutines(BuildCtx *ctx)
     | // (RB, RC)
     | disp      ctpr1, >1
     | addd      0, 0x0, LJ_TSTR, ITYPE
-    | ldb       2, PC, PREV_PC_OP, TMP1
+    | ldb       2, PC, PREV_PC_OP, S1
     | --
     | shld      0, ITYPE, 0x2f, ITYPE
-    | addd      1, DISPATCH, DISPATCH_GL(tmptv), TMP0 // Store GStr * in g->tmptv
-    | addd      2, DISPATCH, DISPATCH_GL(tmptv2), T2 // Store fn->l.env in g->tmptv2.
+    | addd      1, DISPATCH, DISPATCH_GL(tmptv), S0     // Store GStr * in g->tmptv
+    | addd      2, DISPATCH, DISPATCH_GL(tmptv2), T2    // Store fn->l.env in g->tmptv2.
     | --
     | ord       0, RC, ITYPE, RC            // RC = GCstr *
     | addd      1, 0x0, LJ_TTAB, RA
     | --
-    | cmpedb    0, TMP1, BC_GGET, pred0
+    | cmpedb    0, S1, BC_GGET, pred0
     | shld      1, RA, 0x2f, RA
-    | std       2, TMP0, 0x0, RC
+    | std       2, S0, 0x0, RC
     | --
-    | addd      0, TMP0, 0x0, RC
+    | addd      0, S0, 0x0, RC
     | ord       1, RA, RB, RA               // RB = GCtab * ?
     | --
     | addd      0, BASE, RB_E, RB, ~pred0
@@ -1341,17 +1342,17 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vmeta_tgetb:
     | // PC
-    | ldb       0, PC, PREV_PC_RC, TMP1
+    | ldb       0, PC, PREV_PC_RC, S1
     | addd      1, BASE, RB_E, RB
     | addd      2, RA_E, 0, RA
     | disp      ctpr1, >1
-    | wait_load TMP1, 0
+    | wait_load S1, 0
     | --
-    | istofd    0, TMP1, TMP0
+    | istofd    0, S1, S0
     | addd      2, DISPATCH, DISPATCH_GL(tmptv), RC
-    | wait      TMP0, 0, 4
+    | wait      S0, 0, 4
     | --
-    | std       2, RC, 0x0, TMP0
+    | std       2, RC, 0x0, S0
     | ct        ctpr1                       // >1
     | --
     |
@@ -1444,7 +1445,7 @@ static void build_subroutines(BuildCtx *ctx)
     |->vmeta_tsets:
     | // RA, RB, RC
     | setwd_call
-    | ldb       0, PC, PREV_PC_OP, TMP0
+    | ldb       0, PC, PREV_PC_OP, S0
     | addd      1, 0x0, LJ_TSTR, ITYPE
     | ldbsm     2, PC, PREV_PC_RB, T1       // Reload TValue *t from RB.
     | addd      3, 0x0, LJ_TTAB, T2
@@ -1453,13 +1454,13 @@ static void build_subroutines(BuildCtx *ctx)
     | shld      0, ITYPE, 0x2f, ITYPE
     | shld      1, T2, 0x2f, CARG2
     | --
-    | ord       0, RC, ITYPE, TMP1          // STR:RC = GCstr *
+    | ord       0, RC, ITYPE, S1            // STR:RC = GCstr *
     | addd      1, STACK, STACK_TMP, CARG3
-    | wait_load TMP0, 2
+    | wait_load S0, 2
     | --
-    | cmpedb    0, TMP0, BC_GSET, pred0
+    | cmpedb    0, S0, BC_GSET, pred0
     | shld      1, T1, 0x3, T1
-    | std       2, STACK, STACK_TMP, TMP1
+    | std       2, STACK, STACK_TMP, S1
     | wait_pred pred0, 0
     | --
     | addd      0, BASE, T1, CARG2, ~pred0
@@ -1472,18 +1473,18 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vmeta_tsetb:
     | setwd_call
-    | ldb       0, PC, PREV_PC_RC, TMP0
+    | ldb       0, PC, PREV_PC_RC, S0
     | ldb       2, PC, PREV_PC_RB, RB       // Reload TValue *t from RB.
     | disp      ctpr1, >1
-    | wait_load TMP0, 0
+    | wait_load S0, 0
     | --
-    | istofd    0, TMP0, TMP0
+    | istofd    0, S0, S0
     | shld      1, RB, 0x3, RB
-    | wait      TMP0, 0, 2
+    | wait      S0, 0, 2
     | --
     | addd      0, STACK, STACK_TMP, CARG3
     | addd      1, BASE, RB, CARG2
-    | std       2, STACK, STACK_TMP, TMP0
+    | std       2, STACK, STACK_TMP, S0
     | ct        ctpr1                       // >1
     | --
     |
@@ -1594,14 +1595,14 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | setwd_call
     | ldh       0, PC, PREV_PC_RD, RD
-    | addd      1, PC, 0x4, TMP0
+    | addd      1, PC, 0x4, S0
     | ldb       2, PC, PREV_PC_RA, RA
     | --
     | ldd       0, STACK, SAVE_L, RB
-    | subd      1, TMP0, BCBIAS_J*4, TMP1
+    | subd      1, S0, BCBIAS_J*4, S1
     | ldb       2, PC, PREV_PC_OP, CARG4
     | --
-    | ldh       0, TMP0, PREV_PC_RD, TMP0
+    | ldh       0, S0, PREV_PC_RD, S0
     | wait_load RB, 1
     | --
     | shld      0, RD, 0x3, RD
@@ -1612,7 +1613,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      1, BASE, RD, CARG3          // TODO: use RD_E
     | std       2, RB, L->base, BASE
     | --
-    | shld      0, TMP0, 0x2, TMP0
+    | shld      0, S0, 0x2, S0
     | std       2, STACK, SAVE_PC, PC
     | call      ctpr1, wbs = 0x8            // lj_meta_comp(lua_State *L, TValue *o1, *o2, int op)
     | --
@@ -1626,7 +1627,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, PC, 0x4, PC, pred0
     | ct        ctpr2, ~pred0               // vmeta_binop(CRET1)
     | --
-    | addd      0, TMP1, TMP0, PC, ~pred1
+    | addd      0, S1, S0, PC, ~pred1
     | --
     | ins_next
     |
@@ -1635,17 +1636,17 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd       0, CRET1, 0x0, ITYPE
     | addd      1, PC, 0x4, PC
     | --
-    | ldh       0, PC, PREV_PC_RD, TMP0
-    | subd      1, PC, BCBIAS_J*4, TMP1
+    | ldh       0, PC, PREV_PC_RD, S0
+    | subd      1, PC, BCBIAS_J*4, S1
     | wait_load ITYPE, 1
     | --
     | sard      0, ITYPE, 0x2f, ITYPE
     | --
     | cmpbsb    0, ITYPE, LJ_TISTRUECOND, pred0
-    | shld      1, TMP0, 0x2, TMP0
+    | shld      1, S0, 0x2, S0
     | wait_pred pred0, 0
     | --
-    | addd      0, TMP1, TMP0, PC, pred0    // Branch if result is true.
+    | addd      0, S1, S0, PC, pred0        // Branch if result is true.
     | --
     | ins_next                              // TODO: inline
     |
@@ -1653,17 +1654,17 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd       0, CRET1, 0x0, ITYPE
     | addd      1, PC, 0x4, PC
     | --
-    | ldh       0, PC, PREV_PC_RD, TMP0
-    | subd      1, PC, BCBIAS_J*4, TMP1
+    | ldh       0, PC, PREV_PC_RD, S0
+    | subd      1, PC, BCBIAS_J*4, S1
     | wait_load ITYPE, 0
     | --
     | sard      0, ITYPE, 0x2f, ITYPE
     | --
     | cmpbsb    0, ITYPE, LJ_TISTRUECOND, pred0
-    | shld      1, TMP0, 0x2, TMP0
+    | shld      1, S0, 0x2, S0
     | wait_pred pred0, 0
     | --
-    | addd      0, TMP1, TMP0, PC, ~pred0   // Branch if result is false.
+    | addd      0, S1, S0, PC, ~pred0       // Branch if result is false.
     | --
     | ins_next                              // TODO: inline
     |
@@ -1676,9 +1677,9 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      1, RB, 0x0, T4
     | getfd     3, RD, (47 << 6), RD
     | --
-    | ldh       0, PC, PREV_PC_RD, TMP0
+    | ldh       0, PC, PREV_PC_RD, S0
     | subd      2, PC, 0x4, PC
-    | subd      3, PC, BCBIAS_J*4, TMP1
+    | subd      3, PC, BCBIAS_J*4, S1
     | wait_load RB, 1
     | --
     | addd      0, RA, 0x0, CARG2
@@ -1687,14 +1688,14 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      3, T4, 0x0, CARG4
     | --
     | addd      0, RD, 0x0, CARG3
-    | shld      1, TMP0, 0x2, TMP0
+    | shld      1, S0, 0x2, S0
     | std       2, STACK, SAVE_PC, PC
     | call      ctpr1, wbs = 0x8            // lj_meta_equal(lua_State *L, GCobj *o1, *o2, int ne)
     | --
     | // 0/1 or TValue * (metamethod) returned.
     | cmpbedb   0, CRET1, 0x1, pred0
     | cmpbdb    1, CRET1, 0x1, pred1
-    | addd      2, TMP1, 0x4, TMP1
+    | addd      2, S1, 0x4, S1
     | ldd       3, RB, L->base, BASE
     | disp      ctpr2, ->vmeta_binop
     | wait      ctpr2, 0, 5
@@ -1702,7 +1703,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, PC, 0x4, PC, pred0
     | ct        ctpr2, ~pred0               // vmeta_binop(BASE, CRET1)
     | --
-    | addd      0, TMP1, TMP0, PC, ~pred1
+    | addd      0, S1, S0, PC, ~pred1
     | --
     | ins_next
     |
@@ -1715,14 +1716,14 @@ static void build_subroutines(BuildCtx *ctx)
     | subd      1, PC, 0x4, PC
     | --
     | ldw       0, PC, PREV_PC_OP, CARG2
-    | ldh       2, PC, PREV_PC_RD, TMP0
+    | ldh       2, PC, PREV_PC_RD, S0
     | --
-    | subd      0, PC, BCBIAS_J*4, TMP1
+    | subd      0, PC, BCBIAS_J*4, S1
     | addd      1, RB, 0x0, CARG1
     | std       2, RB, L->base, BASE
     | --
-    | addd      0, TMP1, 0x4, TMP1
-    | shld      1, TMP0, 0x2, TMP0
+    | addd      0, S1, 0x4, S1
+    | shld      1, S0, 0x2, S0
     | std       2, STACK, SAVE_PC, PC
     | call      ctpr1, wbs = 0x8            // lj_meta_equal_cd(lua_State *L, BCIns ins)
     | --
@@ -1735,7 +1736,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, PC, 0x4, PC, pred0
     | ct        ctpr2, ~pred0               // vmeta_binop(CRET1)
     | --
-    | addd      0, TMP1, TMP0, PC, ~pred1
+    | addd      0, S1, S0, PC, ~pred1
     | --
     | ins_next
     |.endif
@@ -1906,12 +1907,12 @@ static void build_subroutines(BuildCtx *ctx)
     | std 2, STACK, SAVE_PC, PC
     | call ctpr1, wbs = 0x8
     | --
-    | ldd 0, STACK, SAVE_L, TMP0
+    | ldd 0, STACK, SAVE_L, S0
     | ldd 2, RA, -16, RB
     | disp ctpr2, ->BC_CALLT_Z
     | nop 2
     | --
-    | ldd 3, TMP0, L->base, BASE
+    | ldd 3, S0, L->base, BASE
     | addd 4, RD, 0x8, RD
     | nop 2
     | --
@@ -1959,15 +1960,15 @@ static void build_subroutines(BuildCtx *ctx)
     |.macro ffgccheck
     | // RD = (nargs+1)*8
     | setwd_call
-    | ldd       0, DISPATCH, DISPATCH_GL(gc.total), TMP1
-    | ldd       2, DISPATCH, DISPATCH_GL(gc.threshold), TMP0
+    | ldd       0, DISPATCH, DISPATCH_GL(gc.total), S1
+    | ldd       2, DISPATCH, DISPATCH_GL(gc.threshold), S0
     | ldd       3, STACK, SAVE_L, T1
     | disp      ctpr2, >1
     | --
     | disp      ctpr1, extern lj_gc_step
-    | wait_load TMP0, 1
+    | wait_load S0, 1
     | --
-    | cmpbdb    0, TMP1, TMP0, pred0
+    | cmpbdb    0, S1, S0, pred0
     | disp      ctpr3, ->fff_fallback
     | wait_pred_ct pred0, 0
     | --
@@ -2076,10 +2077,10 @@ static void build_subroutines(BuildCtx *ctx)
     | getfd     4, RB, (47 << 6), RB
     | addd      5, 0x0, LJ_TSTR, ITYPE
     | --
-    | addd      3, RB, RC, TMP0
+    | addd      3, RB, RC, S0
     | shld      4, ITYPE, 0x2f, ITYPE
     | --
-    | ldd       3, TMP0, ((char *)(&((GCfuncC *)0)->upvalue)), RC
+    | ldd       3, S0, ((char *)(&((GCfuncC *)0)->upvalue)), RC
     | wait_load RC, 0
     | --
     | ord       3, RC, ITYPE, RC
@@ -2125,17 +2126,17 @@ static void build_subroutines(BuildCtx *ctx)
     | xord      4, ITYPE, -1, ITYPE
     | ct        ctpr2, ~pred0               // >1
     | --
-    | shld      0, ITYPE, 0x3, TMP0
+    | shld      0, ITYPE, 0x3, S0
     | --
-    | addd      0, TMP0, DISPATCH_GL(gcroot[GCROOT_BASEMT]), TMP0
+    | addd      0, S0, DISPATCH_GL(gcroot[GCROOT_BASEMT]), S0
     | --
-    | ldd       0, DISPATCH, TMP0, RB
+    | ldd       0, DISPATCH, S0, RB
     | wait_load RB, 0
     | --
     |1:
-    | lddsm     0, DISPATCH, DISPATCH_GL(gcroot)+8*(GCROOT_MMNAME+MM_metatable), TMP1
+    | lddsm     0, DISPATCH, DISPATCH_GL(gcroot)+8*(GCROOT_MMNAME+MM_metatable), S1
     | cmpedb    3, RB, 0x0, pred0
-    | addd      4, 0x0, LJ_TNIL, TMP0
+    | addd      4, 0x0, LJ_TNIL, S0
     | ord       5, RC, RB, RC
     | --
     | ldwsm     3, RB, TAB->hmask, RA
@@ -2146,14 +2147,14 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | shld      0, ITYPE, 0x2f, ITYPE
     | addd      4, 0x0, (1+1)*8, RD
-    | std       5, BASE, -16, TMP0, pred0
+    | std       5, BASE, -16, S0, pred0
     | ct        ctpr1, pred0                // fff_res(RD)
     | --
-    | ldw       0, TMP1, STR->sid, TMP0
-    | wait_load TMP0, 0
+    | ldw       0, S1, STR->sid, S0
+    | wait_load S0, 0
     | --
-    | andd      0, RA, TMP0, RA
-    | ord       1, TMP1, ITYPE, TMP1
+    | andd      0, RA, S0, RA
+    | ord       1, S1, ITYPE, S1
     | disp      ctpr2, >3
     | --
     | smulx     0, RA, #NODE, RA
@@ -2162,11 +2163,11 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, RA, T1, RA
     | --
     |2: // Rearranged logic, because we expect _not_ to find the key.
-    | ldd       0, RA, NODE->key, TMP0
+    | ldd       0, RA, NODE->key, S0
     | disp      ctpr3, <2
-    | wait_load TMP0, 0
+    | wait_load S0, 0
     | --
-    | cmpedb    0, TMP0, TMP1, pred0
+    | cmpedb    0, S0, S1, pred0
     | wait_pred_ct pred0, 0
     | --
     | ldd       0, RA, NODE->next, RA, ~pred0
@@ -2202,13 +2203,13 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd       0, BASE, 0x8, RA
     | wait_load RB, 1
     | --
-    | addd      3, RB, 0x0, TMP1
+    | addd      3, RB, 0x0, S1
     | sard      4, RB, 0x2f, ITYPE
     | getfd     5, RB, (47 << 6), RB
     | --
     | cmpbdb    3, RD, (2+1)*8, pred0
     | cmpesb    4, ITYPE, LJ_TTAB, pred1
-    | lddsm     5, RB, TAB->metatable, TMP0
+    | lddsm     5, RB, TAB->metatable, S0
     | --
     | sard      3, RA, 0x2f, ITYPE
     | getfd     4, RA, (47 << 6), RA
@@ -2220,7 +2221,7 @@ static void build_subroutines(BuildCtx *ctx)
     | pass      p4, pred0
     | wait_pred_ct pred0, 0
     | --
-    | cmpedbsm  3, TMP0, 0x0, pred1
+    | cmpedbsm  3, S0, 0x0, pred1
     | ct        ctpr1, ~pred0
     | --
     | pass      pred1, p0
@@ -2231,21 +2232,21 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ldd       0, BASE, -8, PC, pred0
     | lddsm     2, DISPATCH, DISPATCH_GL(gc.grayagain), T1
-    | ldbsm     3, RB, TAB->marked, TMP0
+    | ldbsm     3, RB, TAB->marked, S0
     | ct        ctpr1, ~pred0
     | --
     | // Fast path: no mt for table yet and not clearing the mt.
     | std       2, RB, TAB->metatable, RA
-    | std       5, BASE, -16, TMP1          // Return original table.
+    | std       5, BASE, -16, S1            // Return original table.
     | disp      ctpr1, ->fff_res
-    | wait_load TMP0, 1
+    | wait_load S0, 1
     | --
-    | cmpandedb 3, TMP0, LJ_GC_BLACK, pred0     // isblack(table)
-    | andd      4, TMP0, ~LJ_GC_BLACK, TMP0     // black2gray(tab)
+    | cmpandedb 3, S0, LJ_GC_BLACK, pred0   // isblack(table)
+    | andd      4, S0, ~LJ_GC_BLACK, S0     // black2gray(tab)
     | wait_pred_ct pred0, 0
     | --
     | addd      3, 0x0, (1+1)*8, RD, pred0
-    | stb       5, RB, TAB->marked, TMP0, ~pred0
+    | stb       5, RB, TAB->marked, S0, ~pred0
     | ct        ctpr1, pred0
     | --
     | // Possible write barrier. Table is black, but skip iswhite(mt) check.
@@ -2327,14 +2328,14 @@ static void build_subroutines(BuildCtx *ctx)
     | // RD_E = (nargs+1)*8
     | ldd       0, BASE, -8, PC
     | addd      1, RD_E, 0, RD
-    | ldd       2, DISPATCH, DISPATCH_GL(gcroot[GCROOT_BASEMT_NUM]), TMP0
+    | ldd       2, DISPATCH, DISPATCH_GL(gcroot[GCROOT_BASEMT_NUM]), S0
     | ldd       3, BASE, 0x0, RB
     | disp      ctpr1, ->fff_fallback
     | --
     | disp      ctpr2, ->fff_res
-    | wait_load TMP0, 1
+    | wait_load S0, 1
     | --
-    | cmpedb    3, TMP0, 0x0, pred3
+    | cmpedb    3, S0, 0x0, pred3
     | cmpbdb    4, RD, (1+1)*8, pred0
     | sard      5, RB, 0x2f, ITYPE
     | --
@@ -2375,15 +2376,15 @@ static void build_subroutines(BuildCtx *ctx)
     | call      ctpr1, wbs = 0x8            // lj_strfmt_num(lua_State *L, lua_Number *np)
     | --
     | // GCstr returned.
-    | addd      2, 0x0, LJ_TSTR, TMP1
+    | addd      2, 0x0, LJ_TSTR, S1
     | ldd       3, RB, L->base, BASE
     | disp      ctpr2, ->fff_res
     | --
-    | shld      0, TMP1, 0x2f, TMP1
+    | shld      0, S1, 0x2f, S1
     | --
-    | ord       0, TMP1, CRET1, TMP1
+    | ord       0, S1, CRET1, S1
     | --
-    | std       2, BASE, -16, TMP1
+    | std       2, BASE, -16, S1
     | --
     | addd      3, 0x0, (1+1)*8, RD
     | --
@@ -2406,10 +2407,10 @@ static void build_subroutines(BuildCtx *ctx)
     | sardsm    3, T1, 0x2f, ITYPE
     | getfdsm   4, T1, (47 << 6), T1
     | --
-    | addd      0, 0x0, LJ_TNIL, TMP0
+    | addd      0, 0x0, LJ_TNIL, S0
     | cmpesbsm  3, ITYPE, LJ_TTAB, pred2
     | --
-    | std       5, BASE, 0x8, TMP0, pred1   // Set missing 2nd arg to nil
+    | std       5, BASE, 0x8, S0, pred1     // Set missing 2nd arg to nil
     | pass      pred0, p0
     | pass      pred2, p1
     | landp     ~p0, p1, p4
@@ -2429,7 +2430,7 @@ static void build_subroutines(BuildCtx *ctx)
     | // 1=found, 0=end, -1=error returned.
     | cmpledb   0, CRET1, 0x0, pred0
     | cmpldb    1, CRET1, 0x0, pred1
-    | addd      3, 0x0, LJ_TNIL, TMP0
+    | addd      3, 0x0, LJ_TNIL, S0
     | disp      ctpr2, ->fff_res
     | --
     | addd      4, 0x0, (1+2)*8, RD         // Found key/value
@@ -2445,7 +2446,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr1, pred3                // fff_fallback(RD), Invalid key.
     | --
     | addd      4, 0x0, (1+1)*8, RD, pred2
-    | std       5, BASE, -16, TMP0, pred2   // End of traversal: return nil.
+    | std       5, BASE, -16, S0, pred2     // End of traversal: return nil.
     | ct        ctpr2                       // fff_res(RD)
     | --
     |
@@ -2457,13 +2458,13 @@ static void build_subroutines(BuildCtx *ctx)
     | disp      ctpr1, ->fff_fallback
     | wait_load RB, 0
     | --
-    | addd      3, RB, 0x0, TMP1
+    | addd      3, RB, 0x0, S1
     | sard      4, RB, 0x2f, ITYPE
     | getfd     5, RB, (47 << 6), RB
     | --
     | cmpbdb    3, RD, (1+1)*8, pred0
     | cmpesb    4, ITYPE, LJ_TTAB, pred1
-    | lddsm     5, RB, TAB->metatable, TMP0
+    | lddsm     5, RB, TAB->metatable, S0
     | --
     | addd      3, 0x0, LJ_TFUNC, ITYPE
     | getfdsm   4, T1, (47 << 6), T1
@@ -2480,21 +2481,21 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
 #if LJ_52
-    | cmpedb    3, TMP0, 0, pred0
+    | cmpedb    3, S0, 0, pred0
     | wait_pred_ct pred0, 0
     | --
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
 #endif
     | ldd       0, BASE, -8, PC
-    | addd      1, 0x0, LJ_TNIL, TMP0
+    | addd      1, 0x0, LJ_TNIL, S0
     | ord       3, T2, ITYPE, T2
     | --
     | std       2, BASE, -16, T2
-    | std       5, BASE, -8, TMP1
+    | std       5, BASE, -8, S1
     | --
     | addd      4, 0x0, (1+3)*8, RD
-    | std       5, BASE, 0x0, TMP0
+    | std       5, BASE, 0x0, S0
     | ct        ctpr2                       // fff_res(RD)
     | --
     |
@@ -2503,12 +2504,12 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, RD_E, 0, RD
     | lddsm     3, BASE, 0x0, RB
     | cmpbdb    4, RD_E, (2+1)*8, pred0
-    | ldd       5, BASE, 0x8, TMP0
+    | ldd       5, BASE, 0x8, S0
     | disp      ctpr1, ->fff_fallback
-    | wait_load TMP0, 0
+    | wait_load S0, 0
     | --
-    | sard      3, TMP0, 0x2f, TMP1
-    | faddd     4, TMP0, U64x(0x3ff00000,0x00000000), TMP0   // +1.0e0
+    | sard      3, S0, 0x2f, S1
+    | faddd     4, S0, U64x(0x3ff00000,0x00000000), S0  // +1.0e0
     | disp      ctpr2, >1
     | --
     | sard      3, RB, 0x2f, ITYPE
@@ -2516,7 +2517,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr1, pred0                // fff_fallback(RD)
     | --
     | cmpesb    3, ITYPE, LJ_TTAB, pred0
-    | cmpbsb    4, TMP1, LJ_TISNUM, pred1
+    | cmpbsb    4, S1, LJ_TISNUM, pred1
     | ldw       5, RB, TAB->asize, T3
     | disp      ctpr3, ->fff_res
     | --
@@ -2531,8 +2532,8 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
     | lddsm     3, RB, TAB->array, RD
-    | fdtoistr  4, TMP0, T2
-    | std       5, BASE, -16, TMP0
+    | fdtoistr  4, S0, T2
+    | std       5, BASE, -16, S0
     | wait      T2, 0, 4 + 2             // extra fp->int
     | --
     | cmpbsb    3, T2, T3, pred0
@@ -2544,11 +2545,11 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      3, RD, RA, RD, pred0
     | ct        ctpr2, ~pred0               // >1, Not in array part?
     | --
-    | ldw       3, RD, 0x0, TMP0
+    | ldw       3, RD, 0x0, S0
     | lddsm     5, RD, 0x0, RB
-    | wait_load TMP0, 0
+    | wait_load S0, 0
     | --
-    | cmpesb    3, TMP0, LJ_TNIL, pred0
+    | cmpesb    3, S0, LJ_TNIL, pred0
     | wait_pred_ct pred0, 0
     | --
     | addd      3, 0x0, (0+1)*8, RD, pred0
@@ -2575,11 +2576,11 @@ static void build_subroutines(BuildCtx *ctx)
     | // cTValue * or NULL returned.
     | lddsm     0, CRET1, 0x0, RB
     | cmpedb    1, CRET1, 0x0, pred0
-    | ldwsm     2, CRET1, 0x0, TMP0
+    | ldwsm     2, CRET1, 0x0, S0
     | disp      ctpr3, ->fff_res
-    | wait_load TMP0, 0
+    | wait_load S0, 0
     | --
-    | cmpesbsm 1, TMP0, LJ_TNIL, pred1
+    | cmpesbsm 1, S0, LJ_TNIL, pred1
     | --
     | pass      pred0, p0
     | pass      pred1, p1
@@ -2605,13 +2606,13 @@ static void build_subroutines(BuildCtx *ctx)
     | wait_load T1, 0
     | --
     | andd      2, T1, T2, T1
-    | addd      3, RB, 0x0, TMP1
+    | addd      3, RB, 0x0, S1
     | sard      4, RB, 0x2f, ITYPE
     | andd      5, RB, T2, RB
     | --
     | cmpbdb    3, RD, (1+1)*8, pred0
     | cmpesb    4, ITYPE, LJ_TTAB, pred1
-    | lddsm     5, RB, TAB->metatable, TMP0
+    | lddsm     5, RB, TAB->metatable, S0
     | --
     | lddsm     0, T1, CFUNC->upvalue[0], T2
     | addd      1, 0x0, LJ_TFUNC, ITYPE
@@ -2626,7 +2627,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
 #if LJ_52
-    | cmpedb    3, TMP0, 0x0, pred0
+    | cmpedb    3, S0, 0x0, pred0
     | wait_pred_ct pred0, 0
     | --
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
@@ -2636,12 +2637,12 @@ static void build_subroutines(BuildCtx *ctx)
     | ord       1, T2, ITYPE, T2
     | disp      ctpr1, ->fff_res
     | --
-    | addd      1, 0x0, 0x0, TMP0
-    | std       2, BASE, -8, TMP1
+    | addd      1, 0x0, 0x0, S0
+    | std       2, BASE, -8, S1
     | std       5, BASE, -16, T2
     | --
     | addd      4, 0x0, (1+3)*8, RD
-    | std       5, BASE, 0x0, TMP0
+    | std       5, BASE, 0x0, S0
     | ct        ctpr1                       // fff_res(RD)
     | --
     |
@@ -2667,16 +2668,16 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | addd      0, PC, RB, PC               // Remember active hook before pcall.
     | subd      3, RD, 0x8, KBASE
-    | addd      4, RA, RD, TMP0
+    | addd      4, RA, RD, S0
     | // Note: this does a (harmless) copy of the function to the PC slot, too.
     |1:
-    | ldd       3, TMP0, -24, RB
+    | ldd       3, S0, -24, RB
     | cmpbedb   4, KBASE, 0x0, pred0
     | wait_pred_ct pred0, 0
     | --
-    | addd      3, RA, KBASE, TMP0, ~pred0
+    | addd      3, RA, KBASE, S0, ~pred0
     | subd      4, KBASE, 0x8, KBASE, ~pred0
-    | std       5, TMP0, -16, RB
+    | std       5, S0, -16, RB
     | ct        ctpr2, ~pred0               // <1
     | --
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
@@ -2735,19 +2736,19 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      3, RD, 0x0, KBASE
     | --
     | andd      0, RB, 0x1, RB
-    | addd      3, RA, KBASE, TMP0
+    | addd      3, RA, KBASE, S0
     | --
     | addd      0, PC, RB, PC               // Remember active hook before pcall.
     | subd      3, KBASE, 0x8, KBASE
     | // Note: this does a (harmless) copy of the function to the PC slot, too.
     |1:
-    | ldd       3, TMP0, -24, RB
+    | ldd       3, S0, -24, RB
     | cmpbedb   4, KBASE, 0x0, pred0
     | wait_pred_ct pred0, 0
     | --
-    | addd      3, RA, KBASE, TMP0, ~pred0
+    | addd      3, RA, KBASE, S0, ~pred0
     | subd      4, KBASE, 0x8, KBASE, ~pred0
-    | std       5, TMP0, -16, RB
+    | std       5, S0, -16, RB
     | ct        ctpr2, ~pred0               // <1
     | --
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
@@ -2816,17 +2817,17 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |.endif
     | setwd_call
-    | ldd       3, RB, L->cframe, TMP0
-    | addd      4, RB, 0x0, TMP1
+    | ldd       3, RB, L->cframe, S0
+    | addd      4, RB, 0x0, S1
     | ldbsm     5, RB, L->status, CARG1
     | --
     | lddsm     3, RB, L->top, RA
     | disp      ctpr1, ->fff_fallback
-    | wait_load TMP0, 1
+    | wait_load S0, 1
     | --
-    | cmpedb    3, TMP0, 0x0, pred0
+    | cmpedb    3, S0, 0x0, pred0
     | cmpbedbsm 4, CARG1, LUA_YIELD, pred1
-    | lddsm     5, RB, L->base, TMP0
+    | lddsm     5, RB, L->base, S0
     | --
     | cmpedb    3, CARG1, LUA_YIELD, pred2
     | --
@@ -2835,11 +2836,11 @@ static void build_subroutines(BuildCtx *ctx)
     | landp     p0, p1, p4
     | pass      p4, pred0
     | --
-    | cmpbedb   3, RA, TMP0, pred1          // Check for presence of initial func.
+    | cmpbedb   3, RA, S0, pred1            // Check for presence of initial func.
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | nop 1
     | --
-    | lddsm     0, RB, L->maxstack, TMP0
+    | lddsm     0, RB, L->maxstack, S0
     | pass      pred1, p0
     | pass      pred2, p1
     | landp     p0, ~p1, p4
@@ -2866,7 +2867,7 @@ static void build_subroutines(BuildCtx *ctx)
     | subd      0, PC, 0x8, PC
     | --
     |.endif
-    | cmpbedb   0, PC, TMP0, pred0
+    | cmpbedb   0, PC, S0, pred0
     | ldd       2, STACK, SAVE_L, CARG1
     | disp      ctpr2, >2
     | wait_load CARG1, 0
@@ -2913,19 +2914,19 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr3, ~pred0               // <1
     |2:
     | addd      0, RA, 0x0, CARG2
-    | addd      1, TMP1, 0x0, CARG1
+    | addd      1, S1, 0x0, CARG1
     | call      ctpr1, wbs = 0x8            // vm_resume(lua_State *L, TValue *base, 0, 0)
     | --
     | ldd       0, STACK, SAVE_L, RB
-    | addd      1, TMP1, 0x0, PC
-    | addd      2, 0x0, ~LJ_VMST_INTERP, TMP0
+    | addd      1, S1, 0x0, PC
+    | addd      2, 0x0, ~LJ_VMST_INTERP, S0
     | disp      ctpr2, >7
     | wait_load RB, 0
     | --
     | ldd       3, RB, L->base, BASE
     | --
     | cmpbedb   0, CRET1, LUA_YIELD, pred0
-    | stw       2, DISPATCH, DISPATCH_GL(vmstate), TMP0
+    | stw       2, DISPATCH, DISPATCH_GL(vmstate), S0
     | std       5, DISPATCH, DISPATCH_GL(cur_L), RB
     | wait_pred_ct pred0, 0
     | --
@@ -2933,7 +2934,7 @@ static void build_subroutines(BuildCtx *ctx)
     |3:
     | ldd       0, PC, L->base, RA
     | ldd       2, PC, L->top, KBASE
-    | lddsm     3, RB, L->maxstack, TMP0
+    | lddsm     3, RB, L->maxstack, S0
     | disp      ctpr1, >5
     | wait_load RA, 0
     | --
@@ -2948,7 +2949,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      3, BASE, PC, RD, ~pred0
     | ct        ctpr1, pred0                // >5, No results?
     | --
-    | cmpbedb   3, RD, TMP0, pred0
+    | cmpbedb   3, RD, S0, pred0
     | addd      4, BASE, 0x0, CARG1
     | wait_pred_ct pred0, 0
     | --
@@ -3028,7 +3029,7 @@ static void build_subroutines(BuildCtx *ctx)
     |8:  // Handle stack expansion on return from yield.
     | disp      ctpr1, extern lj_state_growstack
     | --
-    | addd      0, TMP1, 0x0, RA
+    | addd      0, S1, 0x0, RA
     | shrd      1, PC, 0x3, PC
     | --
     | addd      0, PC, 0x0, CARG2
@@ -3040,7 +3041,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd       3, RB, L->base, BASE
     | disp      ctpr2, <3
     | --
-    | addd      0, TMP1, 0x0, PC
+    | addd      0, S1, 0x0, PC
     | --
     | ct        ctpr2                       // <3, Retry the stack move.
     | --
@@ -3057,17 +3058,17 @@ static void build_subroutines(BuildCtx *ctx)
     | return    ctpr3
     | wait_load RB, 1
     | --
-    | ldd       0, RB, L->cframe, TMP0
-    | addd      3, BASE, RD, TMP1
-    | wait_load TMP0, 0
+    | ldd       0, RB, L->cframe, S0
+    | addd      3, BASE, RD, S1
+    | wait_load S0, 0
     | --
-    | cmpandedb 0, TMP0, CFRAME_RESUME, pred0
+    | cmpandedb 0, S0, CFRAME_RESUME, pred0
     | wait_pred_ct pred0, 0
     | --
     | ct        ctpr1, pred0                // fff_fallback(RD)
     | --
     | std       2, RB, L->base, BASE
-    | subd      3, TMP1, 0x8, RD
+    | subd      3, S1, 0x8, RD
     | --
     | std       2, RB, L->top, RD
     | addd      3, 0x0, 0x0, RD
@@ -3118,7 +3119,7 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | sard 3, CARG1, 0x2f, ITYPE
-    | fsqrtid 5, CARG1, TMP1
+    | fsqrtid 5, CARG1, S1
     | --
     | cmpbdb 3, RD, (1+1)*8, pred0
     | cmpbsb 4, ITYPE, LJ_TISNUM, pred1
@@ -3130,18 +3131,18 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ct ctpr1, ~pred0
     | --
-    | fsqrttd 5, CARG1, TMP1, TMP0
+    | fsqrttd 5, CARG1, S1, S0
     | --
     | // fallthrough
     |
     |->fff_resb:
-    | // RD, TMP0
+    | // RD, S0
     | ldd       0, BASE, -8, PC
     | wait_load PC, 1
-    | wait      TMP0, 1, 4
+    | wait      S0, 1, 4
     | --
     | addd      3, 0x0, (1+1)*8, RD
-    | std       5, BASE, -16, TMP0
+    | std       5, BASE, -16, S0
     | --
     | // fallthrough
     |
@@ -3151,7 +3152,7 @@ static void build_subroutines(BuildCtx *ctx)
     | stw       5, STACK, MULTRES, RD
     | disp      ctpr1, ->vm_return
     | --
-    | addd      4, 0x0, LJ_TNIL, TMP1
+    | addd      4, 0x0, LJ_TNIL, S1
     | disp      ctpr2, >2
     | --
     | ldb       3, PC, PREV_PC_RB, RB, pred0
@@ -3170,11 +3171,11 @@ static void build_subroutines(BuildCtx *ctx)
     | shld      3, RA, 0x3, T5
     | ct        ctpr2, pred1                // >2
     |1:                                     // Fill up results with nil.
-    | subd      3, RD, 0x18, TMP0
+    | subd      3, RD, 0x18, S0
     | addd      4, RD, 0x8, RD
     | --
     | cmpbedb   3, RB, RD, pred1
-    | std       5, BASE, TMP0, TMP1
+    | std       5, BASE, S0, S1
     | wait_pred_ct pred1, 0
     | --
     | ct        ctpr3, ~pred1               // <1
@@ -3205,10 +3206,10 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | call      ctpr1, wbs = 0x8
     | --
-    | addd      0, CRET1, 0x0, TMP0
+    | addd      0, CRET1, 0x0, S0
     | disp      ctpr1, ->fff_resb
     | --
-    | ct        ctpr1                       // fff_resb(RD, TMP0)
+    | ct        ctpr1                       // fff_resb(RD, S0)
     | --
     |.endmacro
     |
@@ -3242,10 +3243,10 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | call      ctpr1, wbs = 0x8            // log
     | --
-    | addd      0, CRET1, 0x0, TMP0
+    | addd      0, CRET1, 0x0, S0
     | disp      ctpr2, ->fff_resb
     | --
-    | ct        ctpr2                       // fff_resb(RD, TMP0)
+    | ct        ctpr2                       // fff_resb(RD, S0)
     | --
     |
     |.macro math_extern, func
@@ -3275,10 +3276,10 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | call      ctpr1, wbs = 0x8
     | --
-    | addd      0, CRET1, 0x0, TMP0
+    | addd      0, CRET1, 0x0, S0
     | disp      ctpr2, ->fff_resb
     | --
-    | ct        ctpr2                       // fff_resb(RD, TMP0)
+    | ct        ctpr2                       // fff_resb(RD, S0)
     | --
     |.endmacro
     |
@@ -3286,7 +3287,7 @@ static void build_subroutines(BuildCtx *ctx)
     |->ff_math_ .. func:
     | // RD_E
     | ldd       3, BASE, 0x0, T1
-    | addd      4, 0x0, 0x2f, TMP0
+    | addd      4, 0x0, 0x2f, S0
     | ldd       5, BASE, 0x8, T2
     | disp      ctpr2, ->fff_fallback
     | --
@@ -3296,11 +3297,11 @@ static void build_subroutines(BuildCtx *ctx)
     | setwd_call
     | addd      0, RD_E, 0, RD
     | cmpbdb    3, RD_E, (2+1)*8, pred0
-    | sard      4, T1, TMP0, ITYPE
-    | sard      5, T2, TMP0, TMP1
+    | sard      4, T1, S0, ITYPE
+    | sard      5, T2, S0, S1
     | --
     | cmpbsb    3, ITYPE, LJ_TISNUM, pred1
-    | cmpbsb    4, TMP1, LJ_TISNUM, pred2
+    | cmpbsb    4, S1, LJ_TISNUM, pred2
     | --
     | addd      0, T1, 0, CARG1
     | addd      1, T2, 0, CARG2
@@ -3316,10 +3317,10 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | call      ctpr1, wbs = 0x8
     | --
-    | addd      3, CRET1, 0x0, TMP0
+    | addd      3, CRET1, 0x0, S0
     | disp      ctpr1, ->fff_resb
     | --
-    | ct        ctpr1                       // fff_resb(RD, TMP0)
+    | ct        ctpr1                       // fff_resb(RD, S0)
     | --
     |.endmacro
     |
@@ -3340,22 +3341,22 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->ff_math_ldexp:
     | // RD_E
-    | ldd       3, BASE, 0x0, TMP0
+    | ldd       3, BASE, 0x0, S0
     | addd      4, 0x0, 0x2f, CARG2
-    | ldd       5, BASE, 0x8, TMP1
+    | ldd       5, BASE, 0x8, S1
     | disp      ctpr1, ->fff_fallback
-    | wait_load TMP0, 0
+    | wait_load S0, 0
     | --
     | addd      0, RD_E, 0, RD
     | cmpbdb    3, RD_E, (2+1)*8, pred0
-    | sard      4, TMP0, CARG2, ITYPE
-    | sard      5, TMP1, CARG2, CARG1
+    | sard      4, S0, CARG2, ITYPE
+    | sard      5, S1, CARG2, CARG1
     | disp      ctpr2, ->fff_res
     | --
     | cmpbsb    3, ITYPE, LJ_TISNUM, pred1
     | cmpbsb    4, CARG1, LJ_TISNUM, pred2
     | --
-    | fdtoidtr  3, TMP1, TMP1
+    | fdtoidtr  3, S1, S1
     | --
     | pass      pred0, p0
     | pass      pred1, p1
@@ -3364,14 +3365,14 @@ static void build_subroutines(BuildCtx *ctx)
     | landp     p4, p2, p5
     | pass      p5, pred0
     | --
-    | fscaled   4, TMP0, TMP1, TMP0
+    | fscaled   4, S0, S1, S0
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
     | ldd       0, BASE, -8, PC
     | wait_load PC, 0
     | --
     | addd      3, 0x0, (1+1)*8, RD
-    | std       5, BASE, -16, TMP0
+    | std       5, BASE, -16, S0
     | ct        ctpr2                       // fff_res(RD)
     | --
     |
@@ -3403,16 +3404,16 @@ static void build_subroutines(BuildCtx *ctx)
     | call      ctpr1, wbs = 0x8            // frexp(f64, int*)
     | --
     | ldd       0, BASE, -8, PC
-    | ldw       2, STACK, STACK_TMP, TMP0
+    | ldw       2, STACK, STACK_TMP, S0
     | disp      ctpr1, ->fff_res
-    | wait_load TMP0, 0
+    | wait_load S0, 0
     | --
-    | istofd    0, TMP0, TMP0
+    | istofd    0, S0, S0
     | std       5, BASE, -16, CRET1
-    | wait      TMP0, 0, 4
+    | wait      S0, 0, 4
     | --
     | addd      3, 0x0, (1+2)*8, RD
-    | std       5, BASE, -8, TMP0
+    | std       5, BASE, -8, S0
     | ct        ctpr1                       // fff_res(RD)
     | --
     |
@@ -3454,15 +3455,15 @@ static void build_subroutines(BuildCtx *ctx)
     |.macro math_minmax, name, ins
     |->ff_ .. name:
     | // RD_E = (nargs+1)*8
-    | ldd       3, BASE, 0x0, TMP0
+    | ldd       3, BASE, 0x0, S0
     | disp      ctpr1, ->fff_fallback
     | --
     | disp      ctpr2, ->fff_resb
     | --
     | disp      ctpr3, >1
-    | wait_load TMP0, 2
+    | wait_load S0, 2
     | --
-    | sard      3, TMP0, 0x2f, ITYPE
+    | sard      3, S0, 0x2f, ITYPE
     | --
     | addd      0, RD_E, 0, RD
     | cmpbdb    3, RD_E, (1+1)*8, pred0
@@ -3478,21 +3479,21 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr1, ~pred0
     |1: //  Handle numbers or integers.
     | cmpbsb    3, RA, RD, pred0
-    | addd      4, BASE, RA, TMP1
+    | addd      4, BASE, RA, S1
     | --
-    | lddsm     3, TMP1, -8, TMP1
+    | lddsm     3, S1, -8, S1
     | wait_pred_ct pred0, 1
     | --
-    | ct        ctpr2, ~pred0               /// fff_resb(RD, TMP0)
+    | ct        ctpr2, ~pred0               /// fff_resb(RD, S0)
     | --
-    | sard      3, TMP1, 0x2f, ITYPE
+    | sard      3, S1, 0x2f, ITYPE
     | --
     | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
     | wait_pred_ct pred0, 0
     | --
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
-    | ins       3, TMP0, TMP1, TMP0
+    | ins       3, S0, S1, S0
     | addd      4, RA, 0x8, RA
     | ct        ctpr3                       // <1
     | --
@@ -3519,7 +3520,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | cmpedb    3, RD, (1+1)*8, pred0
     | cmpesb    4, ITYPE, LJ_TSTR, pred1
-    | ldwsm     5, RB, STR->len, TMP0
+    | ldwsm     5, RB, STR->len, S0
     | --
     | pass      pred0, p0
     | pass      pred1, p1
@@ -3531,26 +3532,26 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ldd       2, BASE, -8, PC
     | ldbsm     3, RB, STR[1], RB
-    | cmpbsbsm  4, TMP0, 0x1, pred1
+    | cmpbsbsm  4, S0, 0x1, pred1
     | wait_load RB, 0
     | wait_pred_ct pred1, 0
     | --
     | addd      2, 0x0, (0+1)*8, RD, pred1
-    | istofd    3, RB, TMP0
+    | istofd    3, RB, S0
     | ct        ctpr2, pred1                // fff_res(RD), Return no results for empty string.
     | --
-    | ct        ctpr3                       // fff_resb(RD, TMP0)
+    | ct        ctpr3                       // fff_resb(RD, S0)
     | --
     |
     |->ff_string_char:
     | addd      1, RD_E, 0, RD              // used in ffgccheck
     | ffgccheck
-    | ldd       3, BASE, 0x0, TMP0
-    | addd      4, 0x0, 0x1, TMP1           // used in fff_newstr
-    | wait_load TMP0, 0
+    | ldd       3, BASE, 0x0, S0
+    | addd      4, 0x0, 0x1, S1             // used in fff_newstr
+    | wait_load S0, 0
     | --
-    | sard      3, TMP0, 0x2f, ITYPE
-    | fdtoistr  4, TMP0, RB
+    | sard      3, S0, 0x2f, ITYPE
+    | fdtoistr  4, S0, RB
     | --
     | cmpedb    3, RD, (1+1)*8, pred0
     | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
@@ -3573,7 +3574,7 @@ static void build_subroutines(BuildCtx *ctx)
     | // Fall through
     |
     |->fff_newstr:
-    | // RD, TMP1
+    | // RD, S1
     | disp      ctpr1, extern lj_str_new
     | --
     | setwd_call
@@ -3583,7 +3584,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, RD, 0x0, CARG2
     | addd      1, RB, 0x0, CARG1
     | std       2, RB, L->base, BASE
-    | sxt       3, 0x2, TMP1, CARG3         // Zero-extended to size_t.
+    | sxt       3, 0x2, S1, CARG3           // Zero-extended to size_t.
     | --
     | std       2, STACK, SAVE_PC, PC
     | call      ctpr1, wbs = 0x8            // lj_str_new(lua_State *L, char *str, size_t l)
@@ -3607,14 +3608,14 @@ static void build_subroutines(BuildCtx *ctx)
     |->ff_string_sub:
     | addd      1, RD_E, 0, RD              // used in ffgccheck
     | ffgccheck
-    | lddsm     3, BASE, 0x10, TMP0
+    | lddsm     3, BASE, 0x10, S0
     | addd      4, 0x0, 0x0, RA
-    | adds      5, 0x0, -1, TMP1
-    | wait_pred_ct TMP0, 0
+    | adds      5, 0x0, -1, S1
+    | wait_pred_ct S0, 0
     | --
     | cmpbdb    3, RD, (1+2)*8, pred0
     | cmpbedb   4, RD, (1+2)*8, pred1
-    | sardsm    5, TMP0, 0x2f, ITYPE
+    | sardsm    5, S0, 0x2f, ITYPE
     | --
     | cmpbsbsm  3, ITYPE, LJ_TISNUM, pred2
     | --
@@ -3627,24 +3628,24 @@ static void build_subroutines(BuildCtx *ctx)
     | pass      p5, pred1
     | wait_pred_ct pred0, 0
     | --
-    | fdtoistr  3, TMP0, TMP1, pred1
+    | fdtoistr  3, S0, S1, pred1
     | ct        ctpr3, ~pred0               // fff_fallback(RD), prepared in ffgccheck
     | --
     | ldd       3, BASE, 0x0, RB
     | addd      4, 0x0, U64x(0x00007fff,0xffffffff), T1
-    | ldd       5, BASE, 0x8, TMP0
+    | ldd       5, BASE, 0x8, S0
     | disp      ctpr1, >2
     | wait_load RB, 0
     | --
     | sard      3, RB, 0x2f, ITYPE
     | andd      4, RB, T1, RB
-    | sard      5, TMP0, 0x2f, T1
+    | sard      5, S0, 0x2f, T1
     | --
     | cmpesb    3, ITYPE, LJ_TSTR, pred0
     | cmpbsb    4, T1, LJ_TISNUM, pred1
     | ldwsm     5, RB, STR->len, RC
     | --
-    | fdtoistr  3, TMP0, RA
+    | fdtoistr  3, S0, RA
     | pass      pred0, p0
     | pass      pred1, p1
     | landp     p0, p1, p4
@@ -3653,9 +3654,9 @@ static void build_subroutines(BuildCtx *ctx)
     | wait_load RC, 1
     | wait_pred_ct pred0, 0
     | --
-    | cmpbsbsm  3, RC, TMP1, pred1
-    | cmplsbsm  4, RC, TMP1, pred2
-    | adds      5, TMP1, 0x1, T1
+    | cmpbsbsm  3, RC, S1, pred1
+    | cmplsbsm  4, RC, S1, pred2
+    | adds      5, S1, 0x1, T1
     | ct        ctpr3, ~pred0               // fff_fallback(RD), prepared in ffgccheck
     | --
     | cmplesb   3, RA, 0x0, pred3
@@ -3675,8 +3676,8 @@ static void build_subroutines(BuildCtx *ctx)
     | pass      p4, pred2
     | wait_pred_ct pred2, 0
     | --
-    | adds      3, T1, RC, TMP1, pred1   // end = end+(len+1)
-    | adds      4, RC, 0x0, TMP1, pred0     // end = len
+    | adds      3, T1, RC, S1, pred1        // end = end+(len+1)
+    | adds      4, RC, 0x0, S1, pred0       // end = len
     | adds      5, 0x0, 0x1, RA, pred4      // start = 1
     | ct        ctpr1, ~pred2               // >2 start > 0?
     | --
@@ -3690,16 +3691,16 @@ static void build_subroutines(BuildCtx *ctx)
     | adds      3, 0x0, 0x1, RA, pred0      // start = 1
     | --
     |2:
-    | subs      3, TMP1, RA, TMP1
+    | subs      3, S1, RA, S1
     | addd      4, RB, RA, T1
     | --
-    | cmplsb    3, TMP1, 0x0, pred0
+    | cmplsb    3, S1, 0x0, pred0
     | nop 1
     | --
-    | xors      3, TMP1, TMP1, TMP1, pred0  // Zero length. Any ptr in RD is ok.
-    | adds      4, TMP1, 0x1, TMP1, ~pred0
+    | xors      3, S1, S1, S1, pred0        // Zero length. Any ptr in RD is ok.
+    | adds      4, S1, 0x1, S1, ~pred0
     | addd      5, T1, #STR-1, RD, ~pred0
-    | ct        ctpr2                       // fff_newstr(RD, TMP1)
+    | ct        ctpr2                       // fff_newstr(RD, S1)
     | --
     |
     |.macro ffstring_op, name
@@ -3707,7 +3708,7 @@ static void build_subroutines(BuildCtx *ctx)
     | // RD_E
     | setwd_call
     | lddsm     0, DISPATCH, DISPATCH_GL(gc.total), RB
-    | lddsm     2, DISPATCH, DISPATCH_GL(gc.threshold), TMP0
+    | lddsm     2, DISPATCH, DISPATCH_GL(gc.threshold), S0
     | cmpbdb    3, RD_E, (1+1)*8, pred0
     | addd      4, RD_E, 0, RD
     | disp      ctpr1, ->fff_fallback
@@ -3718,7 +3719,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ct        ctpr1, pred0                // fff_fallback(BASE, RD)
     | --
-    | cmpbdbsm  0, RB, TMP0, pred1
+    | cmpbdbsm  0, RB, S0, pred1
     | --
     | disp      ctpr1, extern lj_gc_step
     | wait_pred_ct pred1, 1
@@ -3798,13 +3799,13 @@ static void build_subroutines(BuildCtx *ctx)
     |->ff_bit_..name:
     | // RD_E
     | addd      0, RD_E, 0, RD
-    | lddsm     3, BASE, 0x0, TMP0
+    | lddsm     3, BASE, 0x0, S0
     | cmpbdb    4, RD_E, (1+1)*8, pred0
     | disp      ctpr1, ->fff_fallback
-    | wait_load TMP0, 0
+    | wait_load S0, 0
     | --
-    | sardsm    3, TMP0, 0x2f, ITYPE
-    | fadddsm   4, TMP0, U64x(0x43380000,0x00000000), TMP0
+    | sardsm    3, S0, 0x2f, ITYPE
+    | fadddsm   4, S0, U64x(0x43380000,0x00000000), S0
     | disp      ctpr2, ->fff_resb
     | --
     | cmpbsbsm  3, ITYPE, LJ_TISNUM, pred1
@@ -3813,14 +3814,14 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | wait_pred_ct pred1, 2
     | --
-    | adds      3, TMP0, 0x0, RB, pred1
+    | adds      3, S0, 0x0, RB, pred1
     | ct        ctpr1, ~pred1               // fff_fallback(RD)
     | --
     |.endmacro
     |
     |.macro .ffunc_bit_op, name, ins
     | .ffunc_bit name
-    | addd      3, RD, 0x0, TMP1            // Save for fallback.
+    | addd      3, RD, 0x0, S1              // Save for fallback.
     | addd      4, BASE, RD, RD
     | disp      ctpr1, ->fff_fallback
     | --
@@ -3828,7 +3829,7 @@ static void build_subroutines(BuildCtx *ctx)
     | disp      ctpr3, >1
     | --
     |1:
-    | istofd    3, RB, TMP0
+    | istofd    3, RB, S0
     | cmpbedb   4, RD, BASE, pred0
     | lddsm     5, RD, 0x0, T1
     | wait_pred_ct pred0, 0
@@ -3836,11 +3837,11 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | sardsm    3, T1, 0x2f, ITYPE
     | fadddsm   4, T1, U64x(0x43380000,0x00000000), T1
-    | ct        ctpr2, pred0                // fff_resb(RD, TMP0)
+    | ct        ctpr2, pred0                // fff_resb(RD, S0)
     | --
     | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
     | --
-    | addd      3, TMP1, 0x0, RD, ~pred0    // Restore for fallback
+    | addd      3, S1, 0x0, RD, ~pred0      // Restore for fallback
     | wait_pred_ct pred0, 1
     | --
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
@@ -3858,25 +3859,25 @@ static void build_subroutines(BuildCtx *ctx)
     |.ffunc_bit_op bxor, xors
     |
     |.ffunc_bit tobit
-    | istofd    3, RB, TMP0
-    | ct        ctpr2                       // fff_resb(RD, TMP0)
+    | istofd    3, RB, S0
+    | ct        ctpr2                       // fff_resb(RD, S0)
     | --
     |
     |.ffunc_bit bswap
     | sxt       3, 0x6, RB, RB
-    | addd      4, 0x0, U64x(0x80808080,0x00010203), TMP0
+    | addd      4, 0x0, U64x(0x80808080,0x00010203), S0
     | --
-    | pshufb    3, RB, RB, TMP0, RB
+    | pshufb    3, RB, RB, S0, RB
     | --
-    | istofd    3, RB, TMP0
-    | ct        ctpr2                       // fff_resb(RD, TMP0)
+    | istofd    3, RB, S0
+    | ct        ctpr2                       // fff_resb(RD, S0)
     | --
     |
     |.ffunc_bit bnot
     | xors      3, RB, -1, RB
     | --
-    | istofd    3, RB, TMP0
-    | ct        ctpr2                       // fff_resb(RD, TMP0)
+    | istofd    3, RB, S0
+    | ct        ctpr2                       // fff_resb(RD, S0)
     | --
     |
     |.macro .ffunc_bit_sh, name, ins
@@ -3888,17 +3889,17 @@ static void build_subroutines(BuildCtx *ctx)
     | lddsm     5, BASE, 0x8, T2
     | disp      ctpr1, ->fff_fallback
     | --
-    | addd      3, 0x0, U64x(0x43380000,0x00000000), TMP1
+    | addd      3, 0x0, U64x(0x43380000,0x00000000), S1
     | disp      ctpr2, ->fff_resb
     | wait_load T1, 1
     | --
-    | sardsm    3, T1, 0x2f, TMP0
+    | sardsm    3, T1, 0x2f, S0
     | sardsm    4, T2, 0x2f, ITYPE
     | --
-    | fadddsm   3, T1, TMP1, T1
-    | fadddsm   4, T2, TMP1, T2
+    | fadddsm   3, T1, S1, T1
+    | fadddsm   4, T2, S1, T2
     | --
-    | cmpbsbsm  3, TMP0, LJ_TISNUM, pred1
+    | cmpbsbsm  3, S0, LJ_TISNUM, pred1
     | cmpbsbsm  4, ITYPE, LJ_TISNUM, pred2
     | ct        ctpr1, pred0                // fff_fallback(RD)
     | --
@@ -3913,8 +3914,8 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ins       3, RB, RA, RB
     | --
-    | istofd    3, RB, TMP0
-    | ct        ctpr2                       // fff_resb(RD, TMP0)
+    | istofd    3, RB, S0
+    | ct        ctpr2                       // fff_resb(RD, S0)
     | --
     |.endmacro
     |
@@ -3932,21 +3933,21 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd 0, STACK, SAVE_L, RB
     | ldd 3, BASE, -8, PC                   // Fallback may overwrite PC.
     | addd 4, BASE, RD, RD
-    | ldd 5, BASE, -16, TMP1
+    | ldd 5, BASE, -16, S1
     | disp ctpr2, >5
     | nop 2
     | --
-    | getfd 2, TMP1, (47 << 6), TMP1
-    | ldd 3, RB, L->maxstack, TMP0
+    | getfd 2, S1, (47 << 6), S1
+    | ldd 3, RB, L->maxstack, S0
     | --
-    | lddsm 0, TMP1, CFUNC->f, ITYPE
+    | lddsm 0, S1, CFUNC->f, ITYPE
     | subd 3, RD, 0x8, RD
     | --
     | addd 3, RD, 8*LUA_MINSTACK, RA        // Ensure enough space for handler.
     | std 5, RB, L->top, RD
     | --
     | std 2, STACK, SAVE_PC, PC             // Redundant (but a defined value).
-    | cmpbedb 3, RA, TMP0, pred0
+    | cmpbedb 3, RA, S0, pred0
     | addd 4, RB, 0x0, CARG1
     | std 5, RB, L->base, BASE
     | nop 1
@@ -3989,23 +3990,23 @@ static void build_subroutines(BuildCtx *ctx)
     | disp ctpr1, >3
     | nop 2
     | --
-    | lddsm 3, RA, -16, TMP1
+    | lddsm 3, RA, -16, S1
     | subdsm 4, 0x0, RB, RB
     | disp ctpr2, ->vmeta_call
     | nop 1
     | --
-    | shldsm 3, RB, 0x3, TMP0
+    | shldsm 3, RB, 0x3, S0
     | ct ctpr1, ~pred0
     | --
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
-    | addd 3, BASE, TMP0, BASE
-    | sard 4, TMP1, 0x2f, ITYPE
+    | addd 3, BASE, S0, BASE
+    | sard 4, S1, 0x2f, ITYPE
     | --
     | cmpesb 3, ITYPE, LJ_TFUNC, pred0
     | nop 1
     | --
     | subd 3, BASE, 0x10, BASE              // base = base - (RB+2)*8
-    | getfd 4, TMP1, (47 << 6), RB
+    | getfd 4, S1, (47 << 6), RB
     | --
     | addd 3, RA, 0x0, BASE, pred0
     | ct ctpr2, ~pred0
@@ -4014,16 +4015,16 @@ static void build_subroutines(BuildCtx *ctx)
     | // BASE = new base, RB = func, RD = (nargs+1)*8, PC = caller PC
     |3:
     | // BASE = old base, RA = new base, RD = (nargs+1)*8, PC = caller PC
-    | ldd 3, RA, -16, TMP1
+    | ldd 3, RA, -16, S1
     | addd 4, PC, 0x0, RB
     | nop 2
     | --
     | andd 3, RB, -8, RB
-    | sard 4, TMP1, 0x2f, ITYPE
+    | sard 4, S1, 0x2f, ITYPE
     | --
     | cmpesb 3, ITYPE, LJ_TFUNC, pred0
     | subd 4, BASE, RB, BASE
-    | getfd 5, TMP1, (47 << 6), RB
+    | getfd 5, S1, (47 << 6), RB
     | nop 2
     | --
     | addd 3, RA, 0x0, BASE, pred0
@@ -4074,7 +4075,7 @@ static void build_subroutines(BuildCtx *ctx)
     |->vm_inshook:                          // Dispatch target for instr/line hooks.
     | // RA_E
     | ldb       0, DISPATCH, DISPATCH_GL(hookmask), RD
-    | ldwsm     3, DISPATCH, DISPATCH_GL(hookcount), TMP0
+    | ldwsm     3, DISPATCH, DISPATCH_GL(hookcount), S0
     | addd      1, RA_E, 0, RA
     | disp      ctpr1, >5
     | --
@@ -4083,17 +4084,17 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | cmpandedb 0, RD, HOOK_ACTIVE, pred0
     | cmpandedb 1, RD, LUA_MASKLINE|LUA_MASKCOUNT, pred1
-    | subdsm    3, TMP0, 0x1, TMP0
+    | subdsm    3, S0, 0x1, S0
     | --
     | cmpandedb 0, RD, LUA_MASKLINE, pred3
-    | cmpedbsm  3, TMP0, 0x0, pred2
+    | cmpedbsm  3, S0, 0x0, pred2
     | wait_pred_ct pred0, 1
     | --
     | ct        ctpr1, ~pred0               // >5, Hook already active?
     | --
     | ct        ctpr1, pred1                // >5, Hook already active?
     | --
-    | stw       5, DISPATCH, DISPATCH_GL(hookcount), TMP0
+    | stw       5, DISPATCH, DISPATCH_GL(hookcount), S0
     | ct        ctpr2, pred2                // >1
     | --
     | ct        ctpr1, pred3                // >5, Hook already active?
@@ -4147,7 +4148,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | addd      0, RB, 0, CARG1
     | addd      1, PC, 0, CARG2
-    | addd      3, 0, 0, TMP0
+    | addd      3, 0, 0, S0
     | --
     | std       2, RB, L->base, BASE
     | std       5, RB, L->top, RD
@@ -4159,7 +4160,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      1, CRET1, 0x0, T0
     | ldd       2, RB, L->base, BASE
     | ldd       3, RB, L->top, RD
-    | std       5, STACK, SAVE_PC, TMP0     // Invalidate for subsequent line hook.
+    | std       5, STACK, SAVE_PC, S0       // Invalidate for subsequent line hook.
     | --
     | ldw       0, PC,-4, INSN_E            // Load insns.
     | ldwsm     2, PC, 0, INSN_B
@@ -4593,7 +4594,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | wait_pred_ct pred1, 1
         | --
-        | ldbsm     3, RB, TAB->nomm, TMP0
+        | ldbsm     3, RB, TAB->nomm, S0
         | cmpedbsm  4, RB, 0x0, pred0
         | ct        ctpr2, ~pred1           // <2, Not the same type? or Different objects and not table/ud?
         | --
@@ -4603,7 +4604,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // Field metatable must be at same offset for GCtab and GCudata!
         | ct        ctpr2, pred0            // <2, No metatable?
         | --
-        | cmpandedb 3, TMP0, 1<<MM_eq, pred0
+        | cmpandedb 3, S0, 1<<MM_eq, pred0
         | wait_pred_ct pred0, 0
         | --
         | ct        ctpr2, ~pred0           // <2, Or 'no __eq' flag set?
@@ -5695,10 +5696,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | setwd_call
         | ldd       0, STACK, SAVE_L, RB
-        | subd      3, KBASE, RD_E, TMP0
+        | subd      3, KBASE, RD_E, S0
         | --
         | ldd       0, BASE, -16, CARG3
-        | ldd       5, TMP0, -8, CARG2       // Fetch GCproto *.
+        | ldd       5, S0, -8, CARG2        // Fetch GCproto *.
         | wait_load RB, 1
         | --
         | addd      0, RB, 0x0, CARG1
@@ -5836,13 +5837,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_fetch 2
         | pipe_dispatch_load 3
         | addd      1, 0x0, LJ_TSTR, T1
-        | subd      4, KBASE, RD_E, TMP0
+        | subd      4, KBASE, RD_E, S0
         | ldd       5, BASE, -16, RB
         | disp      ctpr1, >1
         | --
         | pipe_scale 0, 1, 2, 3
         | shld      4, T1, 0x2f, T1
-        | ldd       5, TMP0, -8, RC
+        | ldd       5, S0, -8, RC
         | disp      ctpr2, >2
         | --
         | pipe_extract 0, 1, 2, 3, 4
@@ -5853,29 +5854,29 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd       3, RB, LFUNC->env, RB
         | wait_load RB, 0
         | --
-        | ldw       3, RB, TAB->hmask, TMP0 // RB = GCtab *, RC = GCstr *
-        | ldw       5, RC, STR->sid, TMP1
+        | ldw       3, RB, TAB->hmask, S0   // RB = GCtab *, RC = GCstr *
+        | ldw       5, RC, STR->sid, S1
         | --
         | ldd       3, RB, TAB->node, T2
-        | wait_load TMP0, 1
+        | wait_load S0, 1
         | --
-        | andd      4, TMP0, TMP1, TMP1     // idx = str->sid & tab->hmask
+        | andd      4, S0, S1, S1           // idx = str->sid & tab->hmask
         | --
-        | shld      3, TMP1, 0x5, TMP0
-        | shld      4, TMP1, 0x3, TMP1
+        | shld      3, S1, 0x5, S0
+        | shld      4, S1, 0x3, S1
         | --
-        | subd      3, TMP0, TMP1, TMP1
+        | subd      3, S0, S1, S1
         | --
-        | addd      3, T2, TMP1, TMP0       // node = tab->node + (idx*32-idx*8)
+        | addd      3, T2, S1, S0           // node = tab->node + (idx*32-idx*8)
         | ord       4, RC, T1, ITYPE
         | --
-        | ldd       3, TMP0, NODE->key, TMP1
-        | lddsm     5, TMP0, NODE->next, T5
-        | wait_load TMP1, 0
+        | ldd       3, S0, NODE->key, S1
+        | lddsm     5, S0, NODE->next, T5
+        | wait_load S1, 0
         |1:
         | cmpedbsm  3, T5, 0x0, pred2
-        | cmpedb 4, TMP1, ITYPE, pred3
-        | lddsm     5, TMP0, NODE->val, T4  // Get node value.
+        | cmpedb 4, S1, ITYPE, pred3
+        | lddsm     5, S0, NODE->val, T4    // Get node value.
         | --
         | pass pred3, p0
         | pass pred2, p1
@@ -5885,12 +5886,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass p5, pred2
         | wait_load T4, 1
         | --
-        | addd      3, T5, 0x0, TMP0, ~pred3 // Follow hash chain.
+        | addd      3, T5, 0x0, S0, ~pred3  // Follow hash chain.
         | addd      4, T4, 0x0, ITYPE, pred3
         | --
-        | ldd 3, TMP0, NODE->key, TMP1, pred4
+        | ldd 3, S0, NODE->key, S1, pred4
         | cmpedbsm 4, ITYPE, LJ_TNIL, pred1
-        | lddsm     5, TMP0, NODE->next, T5, pred4
+        | lddsm     5, S0, NODE->next, T5, pred4
         | wait_pred_ct pred4, 0
         | --
         | ct        ctpr1, pred4            // <1
@@ -5903,14 +5904,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         |2:
         | disp      ctpr1, ->vmeta_tgets
-        | ldd 3, RB, TAB->metatable, TMP0   //  Check for __index if table value is nil
-        | wait_load TMP0, 0
+        | ldd 3, RB, TAB->metatable, S0     //  Check for __index if table value is nil
+        | wait_load S0, 0
         | --
-        | ldbsm 3, TMP0, TAB->nomm, TMP1
-        | cmpedb 4, TMP0, 0x0, pred0
-        | wait_load TMP1, 0
+        | ldbsm 3, S0, TAB->nomm, S1
+        | cmpedb 4, S0, 0x0, pred0
+        | wait_load S1, 0
         | --
-        | cmpandedbsm 4, TMP1, 1<<MM_index, pred1
+        | cmpandedbsm 4, S1, 1<<MM_index, pred1
         | --
         | pass pred0, p0                    // No metatable: done
         | pass pred1, p1                    // 'no __index' flag set: done.
@@ -5962,20 +5963,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load RC, 1
         | --
         | pipe_extract 0, 1, 2, 4, 5
-        | fdtoistr  3, RC, TMP0
+        | fdtoistr  3, RC, S0
         | --
         | sard      3, RB, 0x2f, T1
         | sard      4, RC, 0x2f, ITYPE
         | getfd     5, RB, (47 << 6), RB
-        | wait      TMP0, 1, 4              // fp domain
+        | wait      S0, 1, 4                // fp domain
         | --
-        | istofd    3, TMP0, TMP1
+        | istofd    3, S0, S1
         | cmpesb    4, T1, LJ_TTAB, pred0
-        | wait      TMP1, 0, 4              // fp domain
+        | wait      S1, 0, 4                // fp domain
         | --
         | cmpbsb    1, ITYPE, LJ_TISNUM, pred1
         | ldwsm     3, RB, TAB->asize, T2
-        | fcmpeqdb  4, RC, TMP1, pred2      // Convert number to int and back and compare.
+        | fcmpeqdb  4, RC, S1, pred2        // Convert number to int and back and compare.
         | ldd       5, RB, TAB->array, T5
         | --
         | ct        ctpr1, ~pred0           // vmeta_tgetv(TODO)
@@ -5983,14 +5984,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ct        ctpr2, ~pred1           // >2, Integer key?
         | --
-        | sxt       3, 0x2, TMP0, RC, pred2
+        | sxt       3, 0x2, S0, RC, pred2
         | ct        ctpr1, ~pred2           // vmeta_tgetv(TODO), Generic numeric key? Use fallback.
         | --
         | cmpbsb    3, RC, T2, pred0
-        | shld      4, RC, 0x3, TMP1
+        | shld      4, RC, 0x3, S1
         | wait_pred_ct pred0, 0
         | --
-        | addd      3, TMP1, T5, RC, pred0
+        | addd      3, S1, T5, RC, pred0
         | ct        ctpr1, ~pred0           // vmeta_tgetv(TODO)
         | --
         | ldd       3, RC, 0x0, ITYPE
@@ -5999,18 +6000,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | cmpedb    3, ITYPE, LJ_TNIL, pred0
         | wait_pred_ct pred0, 0
         | --
-        | ldd       3, RB, TAB->metatable, TMP0, pred0
+        | ldd       3, RB, TAB->metatable, S0, pred0
         | std       5, BASE, RA_E, ITYPE, ~pred0
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
-        | wait_load TMP0, 1
+        | wait_load S0, 1
         | --
         | // Check for __index if table value is nil.
-        | cmpedb    3, TMP0, 0x0, pred0
-        | ldbsm     5, TMP0, TAB->nomm, TMP0
-        | wait_load TMP0, 0
+        | cmpedb    3, S0, 0x0, pred0
+        | ldbsm     5, S0, TAB->nomm, S0
+        | wait_load S0, 0
         | --
-        | cmpandedbsm 0, TMP0, 1<<MM_index, pred1
+        | cmpandedbsm 0, S0, 1<<MM_index, pred1
         | --
         | pass      pred0, p0
         | pass      pred1, p1
@@ -6032,16 +6033,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd       3, RB, TAB->node, T2
         | getfd     4, RC, (47 << 6), RC, pred0
         | --
-        | ldw       3, RB, TAB->hmask, TMP0, pred0 // RB = GCtab *, RC = GCstr *
+        | ldw       3, RB, TAB->hmask, S0, pred0    // RB = GCtab *, RC = GCstr *
         | shld      4, T1, 0x2f, T1
-        | ldw       5, RC, STR->sid, TMP1, pred0
+        | ldw       5, RC, STR->sid, S1, pred0
         | ct        ctpr1, ~pred0           // vmeta_tgetv(TODO)
         | --
-        | wait_load TMP0, 1
-        | wait_load TMP1, 1
+        | wait_load S0, 1
+        | wait_load S1, 1
         | --
-        | andd      4, TMP0, TMP1, TMP1     // idx = str->sid & tab->hmask
-        | ct        ctpr2                   // BC_TGETS_Z(TMP1, RA_E, RC, T1, T2)
+        | andd      4, S0, S1, S1           // idx = str->sid & tab->hmask
+        | ct        ctpr2                   // BC_TGETS_Z(S1, RA_E, RC, T1, T2)
         | --
         break;
 
@@ -6050,13 +6051,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
         | pipe_dispatch_load 3
-        | subd      4, KBASE, RC_E, TMP0
+        | subd      4, KBASE, RC_E, S0
         | ldd       5, BASE, RB_E, RB
         | disp      ctpr1, ->vmeta_tgets
         | --
         | pipe_scale 0, 1, 2, 3
         | addd      4, 0x0, LJ_TSTR, T1
-        | ldd       5, TMP0, -8, RC
+        | ldd       5, S0, -8, RC
         | wait_load RB, 1
         | --
         | sard      4, RB, 0x2f, ITYPE
@@ -6068,34 +6069,34 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load RC, 2
         | --
         | ldd       2, RB, TAB->node, T2, pred0
-        | ldw       3, RB, TAB->hmask, TMP0, pred0 // RB = GCtab *, RC = GCstr *
-        | ldw       5, RC, STR->sid, TMP1, pred0
+        | ldw       3, RB, TAB->hmask, S0, pred0    // RB = GCtab *, RC = GCstr *
+        | ldw       5, RC, STR->sid, S1, pred0
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | wait_load TMP0, 1
+        | wait_load S0, 1
         | --
-        | andd      4, TMP0, TMP1, TMP1, pred0 // idx = str->sid & tab->hmask
+        | andd      4, S0, S1, S1, pred0    // idx = str->sid & tab->hmask
         | ct        ctpr1, ~pred0
         | --
         |->BC_TGETS_Z:
-        | // (TMP1, RA_E, RC, T2, T1)
+        | // (S1, RA_E, RC, T2, T1)
         | // TODO: convert to standard calling convention
-        | shld      3, TMP1, 0x5, TMP0
-        | shld      4, TMP1, 0x3, TMP1
+        | shld      3, S1, 0x5, S0
+        | shld      4, S1, 0x3, S1
         | --
-        | subd      3, TMP0, TMP1, TMP1
+        | subd      3, S0, S1, S1
         | --
-        | addd      3, T2, TMP1, TMP0       // node = tab->node + (idx*32-idx*8)
+        | addd      3, T2, S1, S0           // node = tab->node + (idx*32-idx*8)
         | ord       4, RC, T1, ITYPE
         | --
-        | ldd       3, TMP0, NODE->key, TMP1
-        | lddsm     5, TMP0, NODE->next, T5
+        | ldd       3, S0, NODE->key, S1
+        | lddsm     5, S0, NODE->next, T5
         | wait_load T5, 0
         |1:
         | disp      ctpr2, <1
         | cmpedbsm  3, T5, 0x0, pred2
-        | cmpedb    4, TMP1, ITYPE, pred3
-        | lddsm     5, TMP0, NODE->val, T4  // Get node value.
+        | cmpedb    4, S1, ITYPE, pred3
+        | lddsm     5, S0, NODE->val, T4    // Get node value.
         | --
         | disp ctpr1, >2
         | pass pred3, p0
@@ -6106,12 +6107,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass p5, pred2
         | wait_load T4, 0
         | --
-        | addd      3, T5, 0x0, TMP0, ~pred3 // Follow hash chain.
+        | addd      3, T5, 0x0, S0, ~pred3  // Follow hash chain.
         | addd      4, T4, 0x0, ITYPE, pred3
         | --
-        | ldd       3, TMP0, NODE->key, TMP1, pred4
+        | ldd       3, S0, NODE->key, S1, pred4
         | cmpedbsm  4, ITYPE, LJ_TNIL, pred1
-        | lddsm     5, TMP0, NODE->next, T5, pred4
+        | lddsm     5, S0, NODE->next, T5, pred4
         | --
         | ct ctpr2, pred4
         | --
@@ -6125,14 +6126,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         |2:
         | disp ctpr1, ->vmeta_tgets
-        | ldd 3, RB, TAB->metatable, TMP0   //  Check for __index if table value is nil
-        | wait_load TMP0, 0
+        | ldd 3, RB, TAB->metatable, S0     //  Check for __index if table value is nil
+        | wait_load S0, 0
         | --
-        | ldbsm 3, TMP0, TAB->nomm, TMP1
-        | cmpedb 4, TMP0, 0x0, pred0
-        | wait_load TMP1, 0
+        | ldbsm 3, S0, TAB->nomm, S1
+        | cmpedb 4, S0, 0x0, pred0
+        | wait_load S1, 0
         | --
-        | cmpandedbsm 4, TMP1, 1<<MM_index, pred1
+        | cmpandedbsm 4, S1, 1<<MM_index, pred1
         | --
         | pass pred0, p0                    // No metatable: done
         | pass pred1, p1                    // 'no __index' flag set: done.
@@ -6262,22 +6263,22 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load RB, 2
         | --
         | sard      3, RB, 0x2f, T1
-        | fdtoistr  4, RC, TMP0
+        | fdtoistr  4, RC, S0
         | getfd     5, RB, (47 << 6), RB
-        | wait      TMP0, 0, 4
+        | wait      S0, 0, 4
         | --
         | cmpesb    3, T1, LJ_TTAB, pred0
-        | istofd    4, TMP0, TMP1
+        | istofd    4, S0, S1
         | sard      5, RC, 0x2f, ITYPE
-        | wait      TMP1, 0, 4
+        | wait      S1, 0, 4
         | --
-        | fcmpeqdb  3, RC, TMP1, pred2      // Integer key?  Convert number to int and back and compare.
+        | fcmpeqdb  3, RC, S1, pred2        // Integer key?  Convert number to int and back and compare.
         | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
         | ldwsm     5, RB, TAB->asize, T2
         | --
         | lddsm     3, RB, TAB->array, T3
         | cmpesb    4, ITYPE, LJ_TSTR, pred3
-        | lddsm     5, RB, TAB->metatable, TMP1
+        | lddsm     5, RB, TAB->metatable, S1
         | --
         | pass      pred0, p0
         | pass      pred2, p1
@@ -6290,25 +6291,25 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct        ctpr1, ~pred0           // vmeta_tsetv
         | --
         | getfd     3, RC, (47 << 6), RC, ~pred1
-        | sxt       4, 0x2, TMP0, RC, pred2
+        | sxt       4, 0x2, S0, RC, pred2
         | ldbsm     5, RB, TAB->marked, T1
         | ct        ctpr2, ~pred1           // BC_TSETS_Z(RA, RB, RC), String key?
         | --
         | cmpbsb    3, RC, T2, pred0
         | shld      4, RC, 0x3, RC
-        | ldbsm     5, TMP1, TAB->nomm, T4
+        | ldbsm     5, S1, TAB->nomm, T4
         | wait_pred_ct pred0, 0
         | --
-        | cmpedbsm  3, TMP1, 0x0, pred1
+        | cmpedbsm  3, S1, 0x0, pred1
         | cmpandedbsm 4, T4, 1<<MM_newindex, pred2 // 'no __newindex' flag NOT set: check.
         | addd      5, RC, T3, RC, pred0
         | ct        ctpr1, ~pred0           // vmeta_tsetv
         | --
-        | ldw       3, RC, 0x0, TMP0
+        | ldw       3, RC, 0x0, S0
         | lddsm     5, BASE, RA, T0
-        | wait_load TMP0, 0
+        | wait_load S0, 0
         | --
-        | cmpesb    4, TMP0, LJ_TNIL, pred0 // Previous value is nil?
+        | cmpesb    4, S0, LJ_TNIL, pred0   // Previous value is nil?
         | --
         | pass      pred0, p0
         | pass      pred1, p1
@@ -6327,16 +6328,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_if 0, ctpr3, pred1
         | --
         | // Possible table write barrier for the value. Skip valiswhite check.
-        | ldd       0, DISPATCH, DISPATCH_GL(gc.grayagain), TMP1
-        | ldb       3, RB, TAB->marked, TMP0
-        | wait_load TMP0, 0
+        | ldd       0, DISPATCH, DISPATCH_GL(gc.grayagain), S1
+        | ldb       3, RB, TAB->marked, S0
+        | wait_load S0, 0
         | --
         | std       2, DISPATCH, DISPATCH_GL(gc.grayagain), RB
-        | andd      3, TMP0, ~LJ_GC_BLACK, TMP0  // black2gray(tab)
-        | std       5, RB, TAB->gclist, TMP1
+        | andd      3, S0, ~LJ_GC_BLACK, S0 // black2gray(tab)
+        | std       5, RB, TAB->gclist, S1
         | --
         | std       2, RC, 0x0, T0, pred1   // Set array slot
-        | stb       5, RB, TAB->marked, TMP0
+        | stb       5, RB, TAB->marked, S0
         | --
         | pipe_dispatch 0, ctpr3
         | --
@@ -6347,12 +6348,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
         | pipe_dispatch_load 3
-        | subd      4, KBASE, RC_E, TMP0
+        | subd      4, KBASE, RC_E, S0
         | ldd       5, BASE, RB_E, RB
         | disp      ctpr2, ->vmeta_tsets
         | --
         | pipe_scale 0, 1, 2, 4
-        | ldd       3, TMP0, -8, RC
+        | ldd       3, S0, -8, RC
         | addd      5, RA_E, 0, RA
         | wait_load RB, 1
         | --
@@ -6367,37 +6368,37 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         |->BC_TSETS_Z:
         | // RA = src*8, RB = GCtab *, RC = GCstr *
-        | ldw       3, RB, TAB->hmask, TMP0
+        | ldw       3, RB, TAB->hmask, S0
         | addd      4, 0x0, LJ_TSTR, ITYPE
-        | ldw       5, RC, STR->sid, TMP1
+        | ldw       5, RC, STR->sid, S1
         | disp      ctpr2, >1
         | --
         | shld      4, ITYPE, 0x2f, ITYPE
         | ldd       5, RB, TAB->node, T2
         | disp      ctpr1, >2
-        | wait_load TMP0, 1
+        | wait_load S0, 1
         | --
-        | andd      3, TMP0, TMP1, TMP1     // idx = str->sid & tab->hmask
+        | andd      3, S0, S1, S1           // idx = str->sid & tab->hmask
         | ord       4, ITYPE, RC, ITYPE
         | addd      2, 0x0, 0x0, T1
         | --
         | lddsm     0, DISPATCH, DISPATCH_GL(gc.grayagain), T7
         | stb       2, RB, TAB->nomm, T1    // Clear metamethod cache.
-        | smulx     4, TMP1, #NODE, TMP0
+        | smulx     4, S1, #NODE, S0
         | lddsm     5, RB, TAB->metatable, T3
         | wait_load T3, 0
         | --
         | ldbsm     5, T3, TAB->nomm, T4
-        | wait      TMP0, LATENCY_LOAD, 4 + 2 // fp->int cross domain transfer
+        | wait      S0, LATENCY_LOAD, 4 + 2 // fp->int cross domain transfer
         | --
-        | addd      3, T2, TMP0, TMP0
+        | addd      3, T2, S0, S0
         | --
-        | ldd       3, TMP0, NODE->key, TMP1
-        | lddsm     5, TMP0, NODE->next, T1
+        | ldd       3, S0, NODE->key, S1
+        | lddsm     5, S0, NODE->next, T1
         | wait_load T1, 0
         | --
         |1:
-        | cmpedb 3, TMP1, ITYPE, pred0
+        | cmpedb 3, S1, ITYPE, pred0
         | cmpedbsm  4, T1, 0x0, pred1
         | --
         | ldbsm     3, RB, TAB->marked, T2
@@ -6409,22 +6410,22 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p5, pred3
         | wait_pred pred2, 0
         | --
-        | ldd       3, T1, NODE->key, TMP1, pred2
-        | addd      4, T1, 0x0, TMP0, pred2
-        | ldd       5, TMP0, 0x0, TMP1, ~pred2
+        | ldd       3, T1, NODE->key, S1, pred2
+        | addd      4, T1, 0x0, S0, pred2
+        | ldd       5, S0, 0x0, S1, ~pred2
         | --
-        | lddsm     5, TMP0, NODE->next, T1, pred2
+        | lddsm     5, S0, NODE->next, T1, pred2
         | ct        ctpr2, pred2            // <1
         | wait_load T1, 0
         | --
-        | cmpedb    3, TMP1, LJ_TNIL, pred0
+        | cmpedb    3, S1, LJ_TNIL, pred0
         | cmpedb    4, T3, 0x0, pred1
         | anddsm    5, T2, ~LJ_GC_BLACK, T2 // black2gray(tab)
         | disp      ctpr2, ->vmeta_tsets
         | ct        ctpr1, pred3            // >2
         | --
         | cmpandedbsm 3, T4, 1<<MM_newindex, pred2
-        | ldbsm     5, RB, TAB->marked, TMP1
+        | ldbsm     5, RB, TAB->marked, S1
         | --
         | pass      pred0, p0
         | pass      pred1, p1
@@ -6433,21 +6434,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | landp     p4, p2, p5
         | pass      p5, pred0
         | wait_pred_ct pred0, 0
-        | wait_load TMP1, 1
+        | wait_load S1, 1
         | --
         |// Possible table write barrier for the value. Skip valiswhite check.
-        | cmpandedb 3, TMP1, LJ_GC_BLACK, pred1
+        | cmpandedb 3, S1, LJ_GC_BLACK, pred1
         | ct        ctpr1, pred0            // vmeta_tsets(TODO), 'no __newindex' flag NOT set: check.
         | --
         | ldd       0, BASE, RA, ITYPE
-        | addd      5, RB, 0x0, TMP1
+        | addd      5, RB, 0x0, S1
         | --
-        | std       2, DISPATCH, DISPATCH_GL(gc.grayagain), TMP1, ~pred1
-        | stb       5, TMP1, TAB->marked, T2, ~pred1
+        | std       2, DISPATCH, DISPATCH_GL(gc.grayagain), S1, ~pred1
+        | stb       5, S1, TAB->marked, T2, ~pred1
         | --
-        | std       5, TMP1, TAB->gclist, T7, ~pred1
+        | std       5, S1, TAB->gclist, T7, ~pred1
         | --
-        | std       5, TMP0, 0x0, ITYPE     // Set node value.
+        | std       5, S0, 0x0, ITYPE       // Set node value.
         | pipe_dispatch 0, ctpr3
         | --
         |2:
@@ -6458,18 +6459,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // But check for __newindex first.
         | ldd       0, STACK, SAVE_L, CARG1
         | addd      1, DISPATCH, DISPATCH_GL(tmptv), CARG3
-        | ldd       3, RB, TAB->metatable, TMP0
+        | ldd       3, RB, TAB->metatable, S0
         | --
         | disp      ctpr1, extern lj_tab_newkey     // FIXME: do not touch it!!!
         | --
-        | wait_load TMP0, 2
+        | wait_load S0, 2
         | --
         | addd      0, RB, 0x0, CARG2
-        | ldbsm     3, TMP0, TAB->nomm, TMP1
-        | cmpedb    4, TMP0, 0x0, pred0
-        | wait_load TMP1, 0
+        | ldbsm     3, S0, TAB->nomm, S1
+        | cmpedb    4, S0, 0x0, pred0
+        | wait_load S1, 0
         | --
-        | cmpandedbsm 0, TMP1, 1<<MM_newindex, pred1
+        | cmpandedbsm 0, S1, 1<<MM_newindex, pred1
         | --
         | pass      pred0, p0
         | pass      pred1, p1
@@ -6485,13 +6486,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | call      ctpr1, wbs = 0x8        // lj_tab_newkey(lua_State *L, GCtab *t, TValue *k)
         | --
         | // Handles write barrier for the new key. TValue * returned.
-        | ldd       0, STACK, SAVE_L, TMP1
-        | addd      1, CRET1, 0x0, TMP0
+        | ldd       0, STACK, SAVE_L, S1
+        | addd      1, CRET1, 0x0, S0
         | ldb       5, PC, PREV_PC_RA, RA
-        | wait_load TMP1, 0
+        | wait_load S1, 0
         | --
         | ldbsm     0, RB, TAB->marked, T2
-        | ldd       3, TMP1, L->base, BASE
+        | ldd       3, S1, L->base, BASE
         | ldb       5, RB, TAB->marked, T1  // Must check write barrier for value.
         | wait_load RA, 1
         | --
@@ -6509,7 +6510,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std       2, RB, TAB->gclist, T3, ~pred0
         | stb       5, RB, TAB->marked, T2, ~pred0
         | --
-        | std       5, TMP0, 0x0, ITYPE
+        | std       5, S0, 0x0, ITYPE
         | ct        ctpr1                   // vm_restart_pipeline
         | --
         break;
@@ -6530,29 +6531,29 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | sard      4, RB, 0x2f, ITYPE
         | getfd     5, RB, (47 << 6), RB
         | --
-        | ldwsm     3, RB, TAB->asize, TMP1
+        | ldwsm     3, RB, TAB->asize, S1
         | cmpesb    4, ITYPE, LJ_TTAB, pred0
-        | lddsm     5, RB, TAB->array, TMP0
+        | lddsm     5, RB, TAB->array, S0
         | --
         | lddsm     3, RB, TAB->metatable, T2
         | ldbsm     5, RB, TAB->marked, T4
         | wait_pred_ct pred0, 1
         | --
-        | shld      3, TMP1, 0x3, TMP1, pred0
+        | shld      3, S1, 0x3, S1, pred0
         | ct        ctpr1, ~pred0           // vmeta_tsetb(TODO)
         | --
-        | cmpbdb    3, RC, TMP1, pred0
+        | cmpbdb    3, RC, S1, pred0
         | wait_pred_ct pred0, 0
         | --
         | cmpedbsm  3, T2, 0x0, pred1
-        | addd      4, RC, TMP0, RC, pred0
+        | addd      4, RC, S0, RC, pred0
         | ldbsm     5, T2, TAB->nomm, T3
         | ct        ctpr1, ~pred0           // vmeta_tsetb(TODO)
         | --
-        | ldd       3, RC, 0x0, TMP0
+        | ldd       3, RC, 0x0, S0
         | cmpandedbsm 4, T4, LJ_GC_BLACK, pred3
         | --
-        | cmpedb    3, TMP0, LJ_TNIL, pred0 // Previous value is nil?
+        | cmpedb    3, S0, LJ_TNIL, pred0   // Previous value is nil?
         | cmpandedbsm 4, T3, 1<<MM_newindex, pred2 // 'no __newindex' flag NOT set: check.
         | lddsm     5, BASE, RA_E, ITYPE
         | --
@@ -6727,7 +6728,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_A_C  RA_E = base*8, (RB_E = (nresults+1)*8,) RD_E = (nargs+1)*8 | extra_nargs*8
         | ldd       0, BASE, RA_E, RB
         | addd      1, RA_E, 0x10, RA
-        | ldw       2, STACK, MULTRES, TMP0
+        | ldw       2, STACK, MULTRES, S0
         | andd      3, RD_E, 0x7f8, RD
         | disp      ctpr1, ->vmeta_call
         | wait_load RB, 0
@@ -6736,7 +6737,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         if (op == BC_CALLM) {
           | sard    0, RB, 0x2f, ITYPE
           | getfd   1, RB, (47 << 6), RB
-          | addd    2, RD, TMP0, RD
+          | addd    2, RD, S0, RD
           | disp    ctpr2, ->vm_enter_pipeline // TODO: inline
           | --
         } else {
@@ -6762,10 +6763,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_CALLMT:
         | // ins_AD RA_E = base*8, RD_E = extra_nargs*8
-        | ldw       0, STACK, MULTRES, TMP0
-        | wait_load TMP0, 0
+        | ldw       0, STACK, MULTRES, S0
+        | wait_load S0, 0
         | --
-        | addd      3, RD_E, TMP0, RD_E
+        | addd      3, RD_E, S0, RD_E
         | --
         | // Fall through. Assumes BC_CALLT follows and ins AD is a no-op.
         break;
@@ -6842,11 +6843,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp      ctpr1, >4
         | --
         | ldw       0, STACK, MULTRES, RD
-        | ldb       3, RB, LFUNC->ffid, TMP0
+        | ldb       3, RB, LFUNC->ffid, S0
         | ldd       5, RB, LFUNC->pc, RARG1
-        | wait_load TMP0, 0
+        | wait_load S0, 0
         | --
-        | cmpbedb   3, TMP0, 0x1, pred0     // (> FF_C) Calling a fast function?
+        | cmpbedb   3, S0, 0x1, pred0       // (> FF_C) Calling a fast function?
         | shldsm    4, T1, 0x3, T1
         | --
         | subdsm    3, BASE, T1, T2
@@ -6919,18 +6920,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |->vm_IITERN:
         | addd      0, RA_E, 0, RA
         | addd      2, PC, 0x4, PC
-        | addd      3, BASE, RA_E, TMP0
+        | addd      3, BASE, RA_E, S0
         | disp      ctpr1, >3
         | --
-        | ldd       3, TMP0, -16, RB
-        | ldw       5, TMP0, -8, RC         // Get index from control var.
+        | ldd       3, S0, -16, RB
+        | ldw       5, S0, -8, RC           // Get index from control var.
         | disp      ctpr2, >1
         | wait_load RB, 0
         | --
         | getfd     3, RB, (47 << 6), RB
         | disp      ctpr3, >2
         | --
-        | ldw       3, RB, TAB->asize, TMP1
+        | ldw       3, RB, TAB->asize, S1
         | sxt       4, 6, RC, T4
         | ldd       5, RB, TAB->array, ITYPE
         | --
@@ -6938,12 +6939,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load ITYPE, 1
         | --
         |1: // Traverse array part.
-        | lddsm     3, ITYPE, T4, TMP0
-        | cmpbsb    4, RC, TMP1, pred0
-        | wait_load TMP0, 0
+        | lddsm     3, ITYPE, T4, S0
+        | cmpbsb    4, RC, S1, pred0
+        | wait_load S0, 0
         | --
-        | subs      3, RC, TMP1, RC, ~pred0
-        | cmpedbsm  4, TMP0, LJ_TNIL, pred1
+        | subs      3, RC, S1, RC, ~pred0
+        | cmpedbsm  4, S0, LJ_TNIL, pred1
         | ct        ctpr1, ~pred0           // >3, Index points after array part?
         | --
         | wait_pred_ct pred1, 1
@@ -6956,31 +6957,31 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // Return array index as a numeric key
         | subd      1, PC, BCBIAS_J*4, PC
         | ldh       2, PC, PREV_PC_RD, RD   // Get target from ITERL.
-        | addd      3, TMP0, 0x0, RB
-        | istofd    4, RC, TMP1
-        | addd      5, BASE, RA, TMP0       // FIXME: duplicated
+        | addd      3, S0, 0x0, RB
+        | istofd    4, RC, S1
+        | addd      5, BASE, RA, S0         // FIXME: duplicated
         | --
         | adds      4, RC, 0x1, RC
-        | std       5, TMP0, 0x8, RB
+        | std       5, S0, 0x8, RB
         | wait_load RD, 1
         | --
         | shld      0, RD, 0x2, RD
-        | std       5, TMP0, 0x0, TMP1
+        | std       5, S0, 0x0, S1
         | --
         | addd      0, PC, RD, PC
-        | stw       2, TMP0, -8, RC         // Update control var.
+        | stw       2, S0, -8, RC           // Update control var.
         |2:
         | disp      ctpr1, ->vm_restart_pipeline
         | --
         | ct        ctpr1                   // vm_restart_pipeline(PC)
         | --
         |3: // Traverse hash part.
-        | ldw       3, RB, TAB->hmask, TMP0
+        | ldw       3, RB, TAB->hmask, S0
         | smulx     4, RC, #NODE, ITYPE
         | lddsm     5, RB, TAB->node, T1
-        | wait_load TMP0, 0
+        | wait_load S0, 0
         | --
-        | cmpbesb   3, RC, TMP0, pred0
+        | cmpbesb   3, RC, S0, pred0
         | wait_pred_ct pred0, 0
         | --
         | adddsm    3, ITYPE, T1, ITYPE
@@ -7000,18 +7001,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // Copy key and value from hash slot.
         | ldh       0, PC, PREV_PC_RD, RD   // Get target from ITERL.
         | subd      1, PC, BCBIAS_J*4, PC
-        | addd      3, BASE, RA, TMP0       // FIXME: duplicated
+        | addd      3, BASE, RA, S0         // FIXME: duplicated
         | wait_load RD, 1
         | --
-        | adds      4, RC, TMP1, TMP1
-        | std       5, TMP0, 0x0, T2
+        | adds      4, RC, S1, S1
+        | std       5, S0, 0x0, T2
         | --
         | shld      0, RD, 0x2, RD
-        | adds      4, TMP1, 0x1, TMP1
-        | std       5, TMP0, 0x8, T3
+        | adds      4, S1, 0x1, S1
+        | std       5, S0, 0x8, T3
         | --
         | addd      0, PC, RD, PC
-        | stw       5, TMP0, -8, TMP1
+        | stw       5, S0, -8, S1
         | ct        ctpr3                   // <2
         | --
         break;
@@ -7021,22 +7022,22 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd      1, PC, 0x0, T3
         | subd      2, PC, BCBIAS_J*4, PC
         | shrd      3, RD_E, 0x1, RD
-        | addd      4, BASE, RA_E, TMP0
+        | addd      4, BASE, RA_E, S0
         | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
         | --
         | addd      1, PC, RD, PC
-        | ldd       2, TMP0, -8, T2
-        | ldd       3, TMP0, -24, T1
-        | ldd       5, TMP0, -16, TMP1
+        | ldd       2, S0, -8, T2
+        | ldd       3, S0, -24, T1
+        | ldd       5, S0, -16, S1
         | wait_load T1, 0
         | --
         | getfd     3, T1, (47 << 6), RB
         | sard      4, T1, 0x2f, ITYPE
-        | sard      5, TMP1, 0x2f, TMP1
+        | sard      5, S1, 0x2f, S1
         | --
         | cmpedb    0, T2, LJ_TNIL, pred2
         | cmpesb    3, ITYPE, LJ_TFUNC, pred0
-        | cmpesb    4, TMP1, LJ_TTAB, pred1
+        | cmpesb    4, S1, LJ_TTAB, pred1
         | ldbsm     5, RB, CFUNC->ffid, T6
         | wait_load T6, 0
         | --
@@ -7049,7 +7050,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p5, pred0
         | --
         | addd      0, 0x0, BC_ITERC, T5
-        | addd      3, 0x0, U64x(0xfffe7fff,0x00000000), TMP1
+        | addd      3, 0x0, U64x(0xfffe7fff,0x00000000), S1
         | pass      pred0, p0
         | pass      pred3, p1
         | landp     p0, p1, p4
@@ -7059,7 +7060,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // Despecialize bytecode if any of the checks fail.
         | addd      0, 0x0, BC_JMP, T4
         | stb       2, PC, 0x0, T5, ~pred0
-        | std       5, TMP0, -8, TMP1, pred0    // Initialize control var.
+        | std       5, S0, -8, S1, pred0    // Initialize control var.
         | --
         | stb       2, T3, PREV_PC_OP, T4, ~pred0
         | ct        ctpr1                   // vm_restart_pipeline(PC)
@@ -7077,33 +7078,33 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_extract 0, 1, 2, 3, 4
         | --
         | addd      0, RB_E, 0, RB          // TODO: remove me
-        | addd      3, BASE, RC_E, TMP1
+        | addd      3, BASE, RC_E, S1
         | cmpedb    4, RB_E, 0x0, pred0
-        | ldd       5, BASE, -8, TMP0
+        | ldd       5, BASE, -8, S0
         | disp      ctpr1, >5
         | --
-        | addd      3, TMP1, FRAME_VARG+0x10, TMP1
+        | addd      3, S1, FRAME_VARG+0x10, S1
         | addd      4, BASE, RA_E, RA
         | addd      5, 0x0, LJ_TNIL, T4
         | disp      ctpr2, >2
-        | wait_load TMP0, 1
+        | wait_load S0, 1
         | --
-        | subd      3, TMP1, TMP0, TMP1     // TMP1 may now be even _above_ BASE if nargs was < numparams.
+        | subd      3, S1, S0, S1   // S1 may now be even _above_ BASE if nargs was < numparams.
         | addd      4, RA, RB, T3
         | --
         | subd      3, T3, 0x8, RB, ~pred0
-        | cmpbdb    4, TMP1, BASE, pred1
+        | cmpbdb    4, S1, BASE, pred1
         | ct        ctpr1, pred0            // >5, Copy all varargs?
         | --
         | ct        ctpr2, ~pred1           // >2, No vrarg slots?
         |1: // Copy vararg slots to destination slots.
-        | ldd       3, TMP1, -16, RC
-        | addd      4, TMP1, 0x8, TMP1
+        | ldd       3, S1, -16, RC
+        | addd      4, S1, 0x8, S1
         | addd      5, RA, 0x8, T3
         | disp      ctpr1, <1
         | --
         | cmpbdb    3, T3, RB, pred0
-        | cmpbdb    4, TMP1, BASE, pred1
+        | cmpbdb    4, S1, BASE, pred1
         | wait_pred_ct pred0, 0
         | --
         | addd      4, T3, 0x0, RA
@@ -7122,24 +7123,24 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct        ctpr2, pred0
         | --
         |5: // Copy all varargs.
-        | addd      0, 0x0, (0+1)*8, TMP0
+        | addd      0, 0x0, (0+1)*8, S0
         | ldd       2, STACK, SAVE_L, RB
         | addd      3, BASE, 0x0, RC
         | disp      ctpr2, >6
         | --
-        | stw       2, STACK, MULTRES, TMP0
-        | cmpbedb   3, RC, TMP1, pred0
+        | stw       2, STACK, MULTRES, S0
+        | cmpbedb   3, RC, S1, pred0
         | wait_load RB, 1
         | --
-        | lddsm     3, RB, L->maxstack, TMP0
+        | lddsm     3, RB, L->maxstack, S0
         | --
-        | subd      4, RC, TMP1, RC
+        | subd      4, RC, S1, RC
         | pipe_dispatch_if 0, ctpr3, pred0  // No vararg slots?
         | --
         | addd      3, RC, 0x8, T3
         | addd      4, RC, RA, RC
         | --
-        | cmpbedb   3, RC, TMP0, pred0
+        | cmpbedb   3, RC, S0, pred0
         | stw       2, STACK, MULTRES, T3 // (#varargs+1)*8
         | wait_pred_ct pred0, 0
         | --
@@ -7151,7 +7152,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldw       0, STACK, MULTRES, T2
         | --
         | std       2, STACK, SAVE_PC, PC
-        | subd      3, TMP1, BASE, TMP1     // Need delta, because BASE may change.
+        | subd      3, S1, BASE, S1         // Need delta, because BASE may change.
         | std       5, RB, L->base, BASE
         | wait_load T2, 1
         | --
@@ -7166,13 +7167,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd       5, RB, L->top, RA
         | disp      ctpr2, >6
         | --
-        | addd      3, TMP1, BASE, TMP1
+        | addd      3, S1, BASE, S1
         | --
         |6: // Copy all vararg slots.
-        | ldd       3, TMP1, -16, RC
-        | addd      4, TMP1, 0x8, TMP1
+        | ldd       3, S1, -16, RC
+        | addd      4, S1, 0x8, S1
         | --
-        | cmpbdb    3, TMP1, BASE, pred0
+        | cmpbdb    3, S1, BASE, pred0
         | wait_pred_ct pred0, 0
         | --
         | addd      4, RA, 0x8, RA
@@ -7325,16 +7326,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
           | --
         }
         |2:
-        | ldb 0, PC, PREV_PC_RB, TMP0
+        | ldb 0, PC, PREV_PC_RB, S0
         | ldb 3, PC, PREV_PC_RA, RA
         | disp ctpr1, <2
         | --
-        | andd 4, RD, 0x7f8, TMP1
-        | wait_load TMP0, 1
+        | andd 4, RD, 0x7f8, S1
+        | wait_load S0, 1
         | --
-        | shld 0, TMP0, 0x3, TMP0
+        | shld 0, S0, 0x3, S0
         | --
-        | cmpbedb 0, TMP0, TMP1, pred0
+        | cmpbedb 0, S0, S1, pred0
         | wait_pred_ct pred0, 0
         | --
         | shld 3, RA, 0x3, RA, pred0
@@ -7355,11 +7356,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd 3, KBASE, PC2PROTO(k), KBASE
         | ct        ctpr1                   // vm_restart_pipeline
         |3:                                 // Fill up results with nil.
-        | subd 3, BASE, 0x18, TMP0
-        | addd 4, 0x0, LJ_TNIL, TMP1
+        | subd 3, BASE, 0x18, S0
+        | addd 4, 0x0, LJ_TNIL, S1
         | --
         | addd 3, RD, 0x8, RD
-        | std 5, TMP0, RD, TMP1
+        | std 5, S0, RD, S1
         | ct        ctpr1                   // <2
         | --
         break;
@@ -7383,26 +7384,26 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline
         | --
         | ldd       3, RA, 0x10, RB
-        | ldd       5, RA, 0x0, TMP0
+        | ldd       5, RA, 0x0, S0
         | --
         | pipe_scale 0, 1, 2, 3
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | wait_load TMP0, 2
+        | wait_load S0, 2
         | --
-        | faddd     3, TMP0, RB, TMP0
+        | faddd     3, S0, RB, S0
         | fcmpltdb  4, RB, 0x0, pred2
-        | ldd       5, RA, 0x8, TMP1
-        | wait_load TMP1, 0
-        | wait      TMP0, 0, 4
+        | ldd       5, RA, 0x8, S1
+        | wait_load S1, 0
+        | wait      S0, 0, 4
         | --
-        | fcmpltdb  3, TMP1, TMP0, pred0
-        | fcmpltdb  4, TMP0, TMP1, pred1    // Invert comparison if step is negative.
+        | fcmpltdb  3, S1, S0, pred0
+        | fcmpltdb  4, S0, S1, pred1        // Invert comparison if step is negative.
         | wait      pred0, 0, 3
         | --
         | shrd      0, RD_E, 0x1, T2
         | subd      1, PC, BCBIAS_J*4, T3
-        | std       5, RA, 0x0, TMP0
+        | std       5, RA, 0x0, S0
         | pass      pred0, p0
         | pass      pred1, p1
         | pass      pred2, p2
@@ -7413,7 +7414,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_pred_ct pred0, 0
         | --
         | addd      0, T3, T2, PC, ~pred0   // Branch target PC.
-        | std       5, RA, 0x18, TMP0
+        | std       5, RA, 0x18, S0
         | ct        ctpr1, ~pred0           // vm_restart_pipeline
         | --
         | pipe_dispatch 0, ctpr3
@@ -7431,20 +7432,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | shrd      1, RD_E, 0x1, T4
         | ldd       2, RA, 0x10, RB
-        | ldd       3, RA, 0x0, TMP0
+        | ldd       3, RA, 0x0, S0
         | addd      4, 0x0, 0x2f, T1
-        | ldd       5, RA, 0x8, TMP1
+        | ldd       5, RA, 0x8, S1
         | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
         | --
         | pipe_scale 0, 1, 2, 3
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | wait_load TMP0, 2
+        | wait_load S0, 2
         | --
         | addd      1, T3, T4, T3
         | sard      2, RB, T1, ITYPE
-        | sard      3, TMP0, T1, T1
-        | sard      4, TMP1, T1, T2
+        | sard      3, S0, T1, T1
+        | sard      4, S1, T1, T2
         | --
         | cmplsb    0, ITYPE, LJ_TISNUM, pred3
         | cmpbsb    1, ITYPE, LJ_TISNUM, pred0
@@ -7459,11 +7460,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p4, pred0               // FIXME: unused?
         | pass      p5, pred2
         | --
-        | fcmpltdb  3, TMP1, TMP0, pred0
-        | fcmpltdb  4, TMP0, TMP1, pred1    // Invert comparison if step is negative.
+        | fcmpltdb  3, S1, S0, pred0
+        | fcmpltdb  4, S0, S1, pred1        // Invert comparison if step is negative.
         | wait_pred_ct pred2, 1
         | --
-        | std       5, RA, 0x18, TMP0, pred2
+        | std       5, RA, 0x18, S0, pred2
         | ct        ctpr2, ~pred2           // vmeta_for(RA)
         | --
         | pass      pred0, p0
@@ -7580,10 +7581,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load RB, 2
         | --
         | addd      0, RD_E, 0, RD
-        | ldd       3, RB, L->maxstack, TMP0
-        | wait_load TMP0, 0
+        | ldd       3, RB, L->maxstack, S0
+        | wait_load S0, 0
         | --
-        | cmpbedb   3, RA, TMP0, pred0
+        | cmpbedb   3, RA, S0, pred0
         | wait_pred_ct pred0, 0
         | --
         | shld      3, T6, 0x3, RA, pred0
@@ -7592,17 +7593,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | cmpbedb   3, RD, RA, pred1        // Check for missing parameters.
         | wait_pred_ct pred1, 0
         | --
-        | addd      1, 0x0, LJ_TNIL, TMP1, pred1
+        | addd      1, 0x0, LJ_TNIL, S1, pred1
         | pipe_dispatch_if 0, ctpr3, ~pred1
         | --
         |1: // Clear missing parameters.
-        | subd      3, RD, 0x8, TMP0
+        | subd      3, RD, 0x8, S0
         | addd      4, RD, 0x8, RD
         | --
         | cmpbedb   3, RD, RA, pred0
         | wait_pred_ct pred0, 0
         | --
-        | std       5, BASE, TMP0, TMP1
+        | std       5, BASE, S0, S1
         | ct        ctpr2, pred0            // <1
         | --
         | pipe_dispatch 0, ctpr3
@@ -7626,7 +7627,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp      ctpr1, ->vm_growstack_v
         | --
         | pipe_scale 0, 1, 2, 3
-        | addd      4, RD_E, FRAME_VARG+0x8, TMP0
+        | addd      4, RD_E, FRAME_VARG+0x8, S0
         | addd      5, RD_E, BASE, RD
         | --
         | pipe_extract 1, 2, 3, 4, 5
@@ -7636,15 +7637,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd      4, RD, 0x8, RD
         | --
         | addd      3, RA_E, RD, RA
-        | std       5, RD, -8, TMP0         // Store delta + FRAME_VARG
+        | std       5, RD, -8, S0           // Store delta + FRAME_VARG
         | --
         | std       5, RD, -16, KBASE       // Store copy of LFUNC
         | --
-        | ldd       3, RB, L->maxstack, TMP0
-        | wait_load TMP0, 0
+        | ldd       3, RB, L->maxstack, S0
+        | wait_load S0, 0
         | --
         | cmpedbsm  1, T1, 0x0, pred1
-        | cmpbedb   3, RA, TMP0, pred0
+        | cmpbedb   3, RA, S0, pred0
         | wait_pred_ct pred0, 0
         | --
         | addd      3, BASE, 0x0, RA, pred0
@@ -7657,7 +7658,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_if 0, ctpr3, pred1
         |1:                                 // Copy fixarg slots up to new frame.
         | addd      3, RA, 0x8, RA
-        | addd      4, 0x0, LJ_TNIL, TMP1
+        | addd      4, 0x0, LJ_TNIL, S1
         | disp      ctpr1, >3
         | --
         | cmpbdb    3, RA, BASE, pred0
@@ -7674,7 +7675,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std       5, RD, 0x0, T4
         | wait_pred_ct pred0, 0
         | --
-        | std       5, RA, -16, TMP1        // Clear old fixarg slot (help the GC).
+        | std       5, RA, -16, S1          // Clear old fixarg slot (help the GC).
         | ct        ctpr2, ~pred0           // <1
         | --
         | pipe_dispatch 0, ctpr3
@@ -7682,7 +7683,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |3:                                 // Clear missing parameters.
         | subd      0, T1, 0x1, T1
         | addd      3, RD, 0x8, RD
-        | std       5, RD, 0x0, TMP1
+        | std       5, RD, 0x0, S1
         | --
         | cmpedb    0, T1, 0x0, pred0
         | wait_pred_ct pred0, 0
@@ -7708,18 +7709,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std       5, RB, L->base, BASE
         | --
         | ldd       0, KBASE, CFUNC->f, KBASE
-        | ldd       3, RB, L->maxstack, TMP1
-        | addd      4, RD, 8*LUA_MINSTACK, TMP0
+        | ldd       3, RB, L->maxstack, S1
+        | addd      4, RD, 8*LUA_MINSTACK, S0
         | wait_load KBASE, 0
         | --
         | movtd     0, KBASE, ctpr2
-        | addd      1, 0x0, ~LJ_VMST_C, TMP0
-        | cmpbedb   3, TMP0, TMP1, pred0
+        | addd      1, 0x0, ~LJ_VMST_C, S0
+        | cmpbedb   3, S0, S1, pred0
         | addd      4, RB, 0x0, CARG1
         | std       5, RB, L->top, RD
         | wait_pred_ct pred0, 0
         | --
-        | stw       2, DISPATCH, DISPATCH_GL(vmstate), TMP0, pred0
+        | stw       2, DISPATCH, DISPATCH_GL(vmstate), S0, pred0
         | ct        ctpr1, ~pred0           // vm_growstack_c(RB)
         |                                   // Need to grow stack?
         | --
@@ -7727,18 +7728,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldd       3, RB, L->base, BASE
         | shld      4, CRET1, 0x3, RD       // return nresults
-        | addd      5, 0x0, ~LJ_VMST_INTERP, TMP0
+        | addd      5, 0x0, ~LJ_VMST_INTERP, S0
         | disp      ctpr1, ->vm_returnc
         | --
         | std       2, DISPATCH, DISPATCH_GL(cur_L), RB
         | addd      3, BASE, RD, RA
-        | stw       5, DISPATCH, DISPATCH_GL(vmstate), TMP0
+        | stw       5, DISPATCH, DISPATCH_GL(vmstate), S0
         | --
         | ldd       0, BASE, -8, PC         // Fetch PC of caller
-        | ldd       3, RB, L->top, TMP0
-        | wait_load TMP0, 0
+        | ldd       3, RB, L->top, S0
+        | wait_load S0, 0
         | --
-        | subd      3, TMP0, RA, RA         // RA = (L->top - (L->base+nresults))*8
+        | subd      3, S0, RA, RA           // RA = (L->top - (L->base+nresults))*8
         | ct        ctpr1                   // vm_returnc(RA, RD, PC)
         | --
         break;
@@ -7759,11 +7760,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldd       0, T2, CFUNC->f, CARG2
         | ldd       2, DISPATCH, DISPATCH_GL(wrapf), T3
-        | ldd       3, RB, L->maxstack, TMP1
-        | addd      4, RD, 8*LUA_MINSTACK, TMP0
+        | ldd       3, RB, L->maxstack, S1
+        | addd      4, RD, 8*LUA_MINSTACK, S0
         | --
-        | addd      1, 0x0, ~LJ_VMST_C, TMP0
-        | cmpbedb   3, TMP0, TMP1, pred0
+        | addd      1, 0x0, ~LJ_VMST_C, S0
+        | cmpbedb   3, S0, S1, pred0
         | wait_load CARG2, 1
         | --
         | addd      0, CARG2, 0x0, KBASE
@@ -7771,7 +7772,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std       5, RB, L->top, RD
         | wait_pred_ct pred0, LATENCY_LOAD
         | --
-        | stw       2, DISPATCH, DISPATCH_GL(vmstate), TMP0, pred0
+        | stw       2, DISPATCH, DISPATCH_GL(vmstate), S0, pred0
         | ct        ctpr1, ~pred0           // vm_growstack_c(RB), Need to grow stack?
         | --
         | movtd     0, T3, ctpr1
@@ -7780,18 +7781,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldd       3, RB, L->base, BASE
         | shld      4, CRET1, 0x3, RD       // return nsresult
-        | addd      5, 0x0, ~LJ_VMST_INTERP, TMP0
+        | addd      5, 0x0, ~LJ_VMST_INTERP, S0
         | disp      ctpr1, ->vm_returnc
         | --
         | std       2, DISPATCH, DISPATCH_GL(cur_L), RB
         | addd      3, BASE, RD, RA
-        | stw       5, DISPATCH, DISPATCH_GL(vmstate), TMP0
+        | stw       5, DISPATCH, DISPATCH_GL(vmstate), S0
         | --
         | ldd       0, BASE, -8, PC         // Fetch PC of caller
-        | ldd       3, RB, L->top, TMP0
-        | wait_load TMP0, 0
+        | ldd       3, RB, L->top, S0
+        | wait_load S0, 0
         | --
-        | subd      3, TMP0, RA, RA         // RA = (L->top - (L->base+nresults))*8
+        | subd      3, S0, RA, RA           // RA = (L->top - (L->base+nresults))*8
         | ct        ctpr1                   // vm_returnc(BASE, RA, RD, PC)
         | --
         break;
