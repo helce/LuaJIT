@@ -7566,25 +7566,31 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_IITERL:
         | // ins_AJ RA_E = base*8, RD_E = target*8
         | pipe_dispatch_prep 0, ctpr3
-        | pipe_fetch 2
         | pipe_dispatch_load 3
-        | shrd      1, RD_E, 0x1, RD
+        | subd      1, PC, BCBIAS_J*4, T1
+        | shrd      2, RD_E, 1, RD          // RD*4
         | addd      4, BASE, RA_E, RA
         | ldd       5, BASE, RA_E, RB
-        | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
+        | disp      ctpr1, ->vm_restart_pipeline_fast
         | --
-        | pipe_scale 0, 1, 2, 3
-        | subd      4, PC, BCBIAS_J*4, T1
+        | pipe_scale 1, 2, 3, 4
+        | pipe_fetch 5
+        | ldb       0, T1, RD, RARG1        // Branch target insn opcode for fast restart.
         | --
         | pipe_extract 0, 1, 2, 3, 4
         | wait_load RB, 2
         | --
         | cmpedb    3, RB, LJ_TNIL, pred0
-        | wait_pred pred0, 0
         | --
-        | addd      0, T1, RD, PC, ~pred0   // Otherwise save control var + branch.
-        | std       5, RA, -8, RB, ~pred0
-        | ct        ctpr1, ~pred0           // vm_restart_pipeline(PC)
+        | shld      0, RARG1, 3, RARG1
+        | wait_pred pred0, 1
+        | --
+        | ldd       0, RARG1, DISPATCH, RARG1   // Dispatch for branch target.
+        | addd      1, T1, RD, PC, ~pred0   // Otherwise save control var + branch.
+        | std       2, RA, -8, RB, ~pred0
+        | wait_load RARG1, 1                // Must be ready for vm_restart_pipeline_fast.
+        | --
+        | ct        ctpr1, ~pred0           // vm_restart_pipeline_fast(RARG1)
         | --
         | pipe_dispatch 0, ctpr3
         | --
