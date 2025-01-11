@@ -84,8 +84,11 @@
 |.define OP_S,        b12
 |.define OP_D,        b14       // scaled opcode
 |.define OP_L,        b16       // extracted opcode
-|.define OP_B,        b18       // dispatch pointer
+|.define OP_B,        b18
 |.define OP_E,        b20
+|.define DISPATCH_L,  b22
+|.define DISPATCH_B,  b24       // dispatch pointer
+|.define DISPATCH_E,  b26
 |.define RA_L,        b1
 |.define RA_B,        b3        // scaled RA
 |.define RA_E,        b5        // extracted RA
@@ -245,13 +248,13 @@
 |//   | anddsm    0, OP_D, 0x7f8, OP_D
 |
 |// Load:
-|//   | lddsm     0, OP_L, DISPATCH, OP_L
+|//   | lddsm     0, OP_L, DISPATCH, DISPATCH_L
 |//   | shrdsm    1, INSN_L, 0x5, RA_L
 |//   | shrdsm    2, INSN_L, 0x15, RB_L
 |//   | shrdsm    3, INSN_L, 0xd, RCD_L
 |
 |// Branch:
-|//   | movtdsm   0, OP_B, ctpr3
+|//   | movtdsm   0, DISPATCH_B, ctpr3
 |//   | anddsm    1, RA_B, 0x7f8, RA_B
 |//   | anddsm    2, RB_B, 0x7f8, RB_B
 |//   | anddsm    3, RCD_B, 0x7f8, RC_B
@@ -263,8 +266,8 @@
 |
 |// Prologue expected state:
 |//   PC  Stage   Expect
-|//    0  E       INSN_E, OP_E, RA_E, RB_E, RC_E, RD_E
-|//    4  B       INSN_B, OP_B, RA_B, RB_B, RCD_B
+|//    0  E       INSN_E, OP_E, RA_E, RB_E, RC_E, RD_E, DISPATCH_E
+|//    4  B       INSN_B, OP_B, RA_B, RB_B, RCD_B, DISPATCH_B
 |//    8  L       INSN_L, OP_L, RA_L, RB_L, RCD_L
 |//   12  D       INSN_D, OP_D
 |//   16  S       INSN_S
@@ -289,8 +292,8 @@
 |//   | anddsm    2, OP_B, 0x7f8, OP_B
 |//   | anddsm    3, OP_L, 0x7f8, OP_L
 |//   | --
-|//   | lddsm     0, OP_E, DISPATCH, OP_E
-|//   | lddsm     2, OP_B, DISPATCH, OP_B
+|//   | lddsm     0, OP_E, DISPATCH, DISPATCH_E
+|//   | lddsm     2, OP_B, DISPATCH, DISPATCH_B
 |//   | shrdsm    1, INSN_E, 0x5, RA_E
 |//   | shrdsm    3, INSN_E, 0x15, RB_E
 |//   | shrdsm    4, INSN_E, 0xd, T0
@@ -303,13 +306,13 @@
 |//   | shrdsm    0, INSN_B, 0x5, RA_B
 |//   | shrdsm    1, INSN_B, 0x15, RB_B
 |//   | shrdsm    2, INSN_B, 0xd, RCD_B
-|//   | wait_load OP_E, 2
+|//   | wait_load DISPATCH_E, 2
 |//   | --
 |//   |.if isa > 6
-|//   | ibranchd  0, OP_E, empty
+|//   | ibranchd  0, DISPATCH_E, empty
 |//   | --
 |//   |.else
-|//   | movtdsm   0, OP_E, ctpr3
+|//   | movtdsm   0, DISPATCH_E, ctpr3
 |//   | --
 |//   | ct        ctpr3
 |//   | --
@@ -333,10 +336,10 @@
 |
 |// Setup register window for the software pipeline.
 |//   r0..r15 - window registers
-|//   b0..b23 - pipeline (based/rotating) registers
+|//   b0..b27 - pipeline (based/rotating) registers
 |.macro setwd_pipe
-| setwd     wsz = 0x14, nfx = 0x1, dbl = 0x0
-| setbn     rsz = 0xb, rbs = 0x8, rcur = 0x0
+| setwd     wsz = 0x16, nfx = 0x1, dbl = 0x0
+| setbn     rsz = 0xd, rbs = 0x8, rcur = 0x0
 |.endmacro
 |
 |// Stage F
@@ -409,12 +412,12 @@
 |
 |// Stage L
 |.macro pipe_dispatch_load, ch
-| lddsm     ch, OP_L, DISPATCH, OP_L
+| lddsm     ch, OP_L, DISPATCH, DISPATCH_L
 |.endmacro
 |
 |// Stage B
 |.macro pipe_dispatch_prep, ch, ctpr
-| movtdsm   ch, OP_B, ctpr
+| movtdsm   ch, DISPATCH_B, ctpr
 |.endmacro
 |
 |// Stage B
@@ -1018,17 +1021,17 @@ static void build_subroutines(BuildCtx *ctx)
     | anddsm    2, OP_B, 0x7f8, OP_B
     | anddsm    3, OP_L, 0x7f8, OP_L
     | --
-    | ldd       0, OP_E, DISPATCH, OP_E     // Load pointers to insn handlers.
-    | lddsm     2, OP_B, DISPATCH, OP_B
+    | ldd       0, OP_E, DISPATCH, DISPATCH_E   // Load pointers to insn handlers.
+    | lddsm     2, OP_B, DISPATCH, DISPATCH_B
     | shrd      1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
     | --
     | andd      1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
     | ldbsm     0, 0, 0, RC_E
     | addd      3, RD, 0, RD_E
     | addd      4, RB, 0, RB_E
-    | wait_load OP_E, 1
+    | wait_load DISPATCH_E, 1
     | --
-    | movtd     0, OP_E, ctpr3              // Prepare an insn handler for stage E.
+    | movtd     0, DISPATCH_E, ctpr3        // Prepare an insn handler for stage E.
     | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
     | shrdsm    4, INSN_B, 0x15, RB_B
     | shrdsm    5, INSN_B, 0xd, RCD_B
@@ -1062,19 +1065,22 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      3, PC, 4, PC                // FIXME: insn hanlders expect it to be NPC but not current PC
     | wait_load T0, 1
     | --
+    | shldsm    2, T0, 3, OP_E
     | shldsm    3, T1, 3, OP_B
     | shldsm    4, T2, 3, OP_L
     | --
     | addd      0, T0, 0, INSN_E
     | addd      1, T1, 0, INSN_B
-    | addd      2, T2, 0, INSN_L
+    | anddsm    2, OP_E, 0x7f8, OP_E
     | anddsm    3, OP_B, 0x7f8, OP_B
     | anddsm    4, OP_L, 0x7f8, OP_L
+    | addd      5, T2, 0, INSN_L
     | --
     | shrd      0, T0, 0x5, RA_E            // Scale other fields for stage E.
     | shrd      1, T0, 0x15, RB_E
     | shrd      2, T0, 0xd, T8
-    | lddsm     3, OP_B, DISPATCH, OP_B
+    | addd      3, RARG1, 0, DISPATCH_E
+    | lddsm     5, OP_B, DISPATCH, DISPATCH_B
     | --
     | andd      1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
     | andd      2, RB_E, 0x7f8, RB_E
@@ -1102,19 +1108,19 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      1, PC, 4, PC                // FIXME: insn hanlders expect it to be NPC but not current PC
     | wait_load INSN_E, 1
     | --
-    | shld      0, INSN_E, 0x3, OP_E        // Scale opcode fields.
-    | shldsm    2, INSN_B, 0x3, OP_B
-    | shldsm    3, INSN_L, 0x3, OP_L
-    | shldsm    5, INSN_D, 0x3, OP_D
+    | shld      0, INSN_E, 3, OP_E          // Scale opcode fields.
+    | shldsm    2, INSN_B, 3, OP_B
+    | shldsm    3, INSN_L, 3, OP_L
+    | shldsm    5, INSN_D, 3, OP_D
     | --
     | andd      0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
     | anddsm    2, OP_B, 0x7f8, OP_B
     | anddsm    3, OP_L, 0x7f8, OP_L
     | --
-    | addd      0, OP_E, DISPATCH, OP_E
+    | addd      0, OP_E, DISPATCH, DISPATCH_E
     | --
-    | ldd       0, OP_E, GG_DISP2STATIC, OP_E   // Load pointers to insn handlers.
-    | lddsm     2, OP_B, DISPATCH, OP_B
+    | ldd       0, DISPATCH_E, GG_DISP2STATIC, DISPATCH_E   // Load pointers to insn handlers.
+    | lddsm     2, OP_B, DISPATCH, DISPATCH_B
     | shrd      1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
     | shrd      3, INSN_E, 0x15, RB_E
     | shrd      4, INSN_E, 0xd, T0
@@ -1123,9 +1129,9 @@ static void build_subroutines(BuildCtx *ctx)
     | andd      3, RB_E, 0x7f8, RB_E
     | andd      4, T0, 0x7f8, RC_E
     | andd      5, T0, 0x7fff8, RD_E
-    | wait_load OP_E, 1
+    | wait_load DISPATCH_E, 1
     | --
-    | movtd     0, OP_E, ctpr3              // Prepare an insn handler for stage E.
+    | movtd     0, DISPATCH_E, ctpr3        // Prepare an insn handler for stage E.
     | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
     | shrdsm    4, INSN_B, 0x15, RB_B
     | shrdsm    5, INSN_B, 0xd, RCD_B
@@ -1147,19 +1153,19 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      1, PC, 4, PC                // FIXME: insn hanlders expect it to be NPC but not current PC
     | wait_load INSN_E, 1
     | --
-    | shld      0, INSN_E, 0x3, OP_E        // Scale opcode fields.
-    | shldsm    2, INSN_B, 0x3, OP_B
-    | shldsm    3, INSN_L, 0x3, OP_L
-    | shldsm    5, INSN_D, 0x3, OP_D
+    | shld      0, INSN_E, 3, OP_E          // Scale opcode fields.
+    | shldsm    2, INSN_B, 3, OP_B
+    | shldsm    3, INSN_L, 3, OP_L
+    | shldsm    5, INSN_D, 3, OP_D
     | --
     | andd      0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
     | anddsm    2, OP_B, 0x7f8, OP_B
     | anddsm    3, OP_L, 0x7f8, OP_L
     | --
-    | addd      0, OP_E, DISPATCH, OP_E
+    | addd      0, OP_E, DISPATCH, DISPATCH_E
     | --
-    | ldd       0, OP_E, GG_DISP2STATIC, OP_E   // Load pointers to insn handlers.
-    | lddsm     2, OP_B, DISPATCH, OP_B
+    | ldd       0, DISPATCH_E, GG_DISP2STATIC, DISPATCH_E   // Load pointers to insn handlers.
+    | lddsm     2, OP_B, DISPATCH, DISPATCH_B
     | shrd      3, INSN_E, 0x15, RB_E       // Scale other fields for stage E.
     | shrd      4, INSN_E, 0xd, T0
     | --
@@ -1167,9 +1173,9 @@ static void build_subroutines(BuildCtx *ctx)
     | andd      3, RB_E, 0x7f8, RB_E
     | andd      4, T0, 0x7f8, RC_E
     | andd      5, T0, 0x7fff8, RD_E
-    | wait_load OP_E, 1
+    | wait_load DISPATCH_E, 1
     | --
-    | movtd     0, OP_E, ctpr3              // Prepare an insn handler for stage E.
+    | movtd     0, DISPATCH_E, ctpr3        // Prepare an insn handler for stage E.
     | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
     | shrdsm    4, INSN_B, 0x15, RB_B
     | shrdsm    5, INSN_B, 0xd, RCD_B
@@ -4181,16 +4187,18 @@ static void build_subroutines(BuildCtx *ctx)
     | ldwsm     0, PC,12, INSN_S
     | wait_load INSN_B, 1
     | --
-    | addd      0, T0, 0, OP_E
-    | shldsm    2, INSN_B, 0x3, OP_B        // Scale opcode fields.
-    | shldsm    3, INSN_L, 0x3, OP_L
-    | shldsm    5, INSN_D, 0x3, OP_D
+    | shld      0, INSN_E, 3, OP_E
+    | shldsm    2, INSN_B, 3, OP_B          // Scale opcode fields.
+    | shldsm    3, INSN_L, 3, OP_L
+    | shldsm    5, INSN_D, 3, OP_D
     | --
-    | anddsm    2, OP_B, 0x7f8, OP_B        // Extract opcode fields.
+    | anddsm    1, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | anddsm    2, OP_B, 0x7f8, OP_B
     | anddsm    3, OP_L, 0x7f8, OP_L
     | subd      4, RD, BASE, RD
     | --
-    | lddsm     2, OP_B, DISPATCH, OP_B
+    | addd      0, T0, 0, DISPATCH_E
+    | lddsm     2, OP_B, DISPATCH, DISPATCH_B
     | shrd      1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
     | shrd      3, INSN_E, 0x15, RB_E
     | addd      4, RD, 0x8, RD
