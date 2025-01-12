@@ -5285,6 +5285,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp      ctpr2, ->vmeta_arith_vv
         | --
         | disp      ctpr1, extern pow
+        | wait_load T1, 1
         | --
         | sard      3, T1, 0x2f, T3
         | sard      4, T2, 0x2f, ITYPE
@@ -5292,6 +5293,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | cmpbsb    3, T3, LJ_TISNUM, pred0
         | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
         | --
+        | addd      0, T1, 0, PARG1
+        | addd      1, T2, 0, PARG2
         | pass      pred0, p0
         | pass      pred1, p1
         | landp     p0, p1, p4
@@ -5300,17 +5303,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ct        ctpr2, ~pred0           // vmeta_arith_vv
         | --
-        | setwd_call                        // TODO: good place to keep pipeline state
+        | pipe_call ctpr1
         | --
-        | addd      0, T1, 0, CARG1
-        | addd      1, T2, 0, CARG2
-        | call      ctpr1, wbs = 0x8
-        | --
-        | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
-        | --
-        | std       5, BASE, RA, CRET1
-        | ct        ctpr1                   // vm_restart_pipeline
-        | --
+        | std       5, BASE, RA, PARG1
+        | pipe_restart_fast DISPATCH_B, PC
         break;
 
     case BC_CAT:
