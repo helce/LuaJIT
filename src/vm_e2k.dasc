@@ -1096,7 +1096,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | // fallthrough
     |
-    |->vm_restart_pipeline_fast:
+    |->vm_restart_pipeline_fast_win:
     | // (BCOp *)
     | // PC
     | setwd_pipe
