@@ -40,6 +40,16 @@
 |.define CARG7,     b6
 |.define CARG8,     b7
 |
+|// Used to pass arguments without dropping pipeline state.
+|.define PARG1,     r44
+|.define PARG2,     r45
+|.define PARG3,     r46
+|.define PARG4,     r47
+|.define PARG5,     r48
+|.define PARG6,     r49
+|.define PARG7,     r50
+|.define PARG8,     r51
+|
 |.define BASE,      r4
 |.define KBASE,     r5
 |.define STACK,     r6
@@ -335,11 +345,20 @@
 |//-----------------------------------------------------------------------
 |
 |// Setup register window for the software pipeline.
-|//   r0..r15 - window registers
-|//   b0..b27 - pipeline (based/rotating) registers
+|//   r0 ..r15 - window registers
+|//   b0 ..b27 - pipeline (based/rotating) registers
+|//   r44..r52 - callee argument registers
 |.macro setwd_pipe
-| setwd     wsz = 0x16, nfx = 0x1, dbl = 0x0
+| setwd     wsz = 0x18, nfx = 0x1, dbl = 0x0
 | setbn     rsz = 0xd, rbs = 0x8, rcur = 0x0
+|.endmacro
+|
+|.macro pipe_call, ctpr
+| call ctpr, wbs=0x16
+|.endmacro
+|
+|.macro pipe_call_if, ctpr, pred
+| call ctpr, wbs=0x16, pred
 |.endmacro
 |
 |// Stage F
