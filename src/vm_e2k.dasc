@@ -1102,6 +1102,12 @@ static void build_subroutines(BuildCtx *ctx)
     | setwd_pipe
     | pipe_restart_fast RARG1, PC
     |
+    |// Restart without reconfiguring the register window.
+    |->vm_restart_pipeline_fast:
+    | // (BCOp *)
+    | // PC
+    | pipe_restart_fast RARG1, PC
+    |
     |->vm_restart_pipeline_static:
     | // PC
     | setwd_pipe
