@@ -4950,8 +4950,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_extract 0, 1, 2, 3, 4
         | wait_load T0, 2
         | --
-        | pipe_dispatch 0, ctpr3
         | std 5, BASE, RA_E, T0
+        | --
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
@@ -4978,6 +4979,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | std       2, BASE, RA_E, T1, pred0
         | std       5, BASE, RA_E, T2, ~pred0
+        | --
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5000,9 +5002,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | xord      4, T1, T0, T1
         | --
         | cmpbsb 3, ITYPE, LJ_TISNUM, pred0
-        | wait_pred_ct pred0, 0
+        | wait_pred pred0, 0
         | --
         | std       5, BASE, RA_E, T1, pred0
+        | --
         | pipe_dispatch_if 0, ctpr3, pred0
         | --
         | ct        ctpr1                   // vmeta_unm(TODO)
@@ -5046,6 +5049,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait      T3, 1, 4
         | --
         | std       5, BASE, RA_E, T3
+        | --
         | pipe_dispatch 0, ctpr3
         | --
         |2:
@@ -5119,7 +5123,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     | ins       ch, T0, T1, T2
     | --
     | cmpbsb    3, T3, LJ_TISNUM, pred0
-    | wait_pred_ct pred0, 0
+    | wait_pred pred0, 0
     | wait      T2, 1, latency
     | --
     ||   break;
@@ -5140,7 +5144,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     | ins       ch, T1, T0, T2
     | --
     | cmpbsb    3, T3, LJ_TISNUM, pred0
-    | wait_pred_ct pred0, 0
+    | wait_pred pred0, 0
     | wait      T2, 1, latency
     | --
     ||   break;
@@ -5169,13 +5173,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     | pass      pred1, p1
     | landp     p0, p1, p4
     | pass      p4, pred0
-    | wait_pred_ct pred0, 0
+    | wait_pred pred0, 0
     | wait      T2, 3, latency
     | --
     ||  break;
     || }
-    | pipe_dispatch_if 0, ctpr3, pred0          // next insn
     | std       5, BASE, RA_E, T2, pred0
+    | --
+    | pipe_dispatch_if 0, ctpr3, pred0          // next insn
     | --
     | ct        ctpr1                           // vmeta_arith_*
     | --
@@ -5217,8 +5222,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
         | wait_pred_ct pred0, 0
         | --
-        | ct        ctpr1, ~pred0           // vmeta_arith_vn
-        | --
           break;
         case BC_MODNV:
         | ldd       3, KBASE, RC_E, T1
@@ -5232,8 +5235,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
         | wait_pred_ct pred0, 0
-        | --
-        | ct        ctpr1, ~pred0           // vmeta_arith_nv
         | --
           break;
         case BC_MODVV:
@@ -5256,12 +5257,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p4, pred0
         | wait_pred_ct pred0, 0
         | --
-        | ct        ctpr1, ~pred0           // vmeta_arith_vv
-        | --
           break;
         default:
           break;
         }
+        | ct        ctpr1, ~pred0           // vmeta_arith_*
+        | --
         | setwd_call
         | addd      0, RA_E, 0, RA
         | --
@@ -5381,8 +5382,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ord       5, T0, T1, T0
         | --
-        | pipe_dispatch 0, ctpr3
         | std       5, BASE, RA_E, T0
+        | --
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
@@ -5404,6 +5406,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ord       5, T1, ITYPE, T1
         | --
         | std       5, BASE, RA_E, T1
+        | --
         | pipe_dispatch 0, ctpr3
         | --
         |.endif
@@ -5424,6 +5427,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait T0, 0, 3
         | --
         | std 5, BASE, RA_E, T0
+        | --
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5441,6 +5445,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load T0, 2
         | --
         | std       5, BASE, RA_E, T0
+        | --
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5457,6 +5462,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | pipe_scale 1, 2, 3, 4
         | std       5, BASE, RA_E, T1
+        | --
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5517,6 +5523,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load T2, 0
         | --
         | std       5, BASE, T4, T2
+        | --
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5566,7 +5573,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldbsm     3, T5, GCOBJ->gch.marked, T3
         | subs      4, T4, LJ_TISGCV, T4
-        | --
         | disp      ctpr1, extern lj_gc_barrieruv
         | --
         | wait_load T3, 2
@@ -5685,7 +5691,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd       3, T2, UPVAL->v, T3
         | wait_load T3, 0
         | --
-        | std       5, T3, 0x0, T1
+        | std       5, T3, 0x0, T1          // Safe here because UGETS do not read at first bundle.
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5714,7 +5720,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | xord      4, T3, -1, T3
         | wait_load T2, 0
         | --
-        | std       5, T2, 0x0, T3
+        | std       5, T2, 0x0, T3          // Safe here because UGETS do not read at first bundle.
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5725,13 +5731,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | subd      0, PC, BCBIAS_J*4, PC
         | addd      1, RA_E, 0, T0
         | ldd       2, STACK, SAVE_L, RB
-        | shrd      3, RD_E, 0x1, RD
+        | shrd      3, RD_E, 1, RD          // RD*4
         | disp      ctpr2, ->vm_restart_pipeline    // TODO: inline
         | --
-        | disp      ctpr1, extern lj_func_closeuv // (lua_State *L, TValue *level)
-        | --
         | addd      0, BASE, T0, CARG2
-        | wait_load RB, 2
+        | disp      ctpr1, extern lj_func_closeuv // (lua_State *L, TValue *level)
+        | wait_load RB, 1
         | --
         | ldd       0, RB, L->openupval, CARG3
         | addd      1, RB, 0x0, CARG1
@@ -5755,11 +5760,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_FNEW:
         | // ins_AND RA_E = dst*8, RD_E = proto_const*8 (~) (holding function prototype)
-        | disp      ctpr1, extern lj_func_newL_gc
-        | --
         | setwd_call
         | ldd       0, STACK, SAVE_L, RB
+        | addd      1, RA_E, 0, RA
         | subd      3, KBASE, RD_E, S0
+        | disp      ctpr1, extern lj_func_newL_gc
         | --
         | ldd       0, BASE, -16, CARG3
         | ldd       5, S0, -8, CARG2        // Fetch GCproto *.
@@ -5769,20 +5774,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std       2, RB, L->base, BASE
         | std       5, STACK, SAVE_PC, PC
         | --
-        | getfd     0, CARG3, (47 << 6), CARG3
+        | getfd     1, CARG3, (47 << 6), CARG3
         | call      ctpr1, wbs = 0x8        // lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
         | --
         | // GCfuncL * returned.
-        | addd      0, 0x0, LJ_TFUNC, ITYPE
-        | ldb       2, PC, PREV_PC_RA, RA   // TODO: use RA_E/S0
+        | addd      0, 0, LJ_TFUNC, ITYPE
         | ldd       5, RB, L->base, BASE
-        | disp      ctpr1, ->vm_restart_pipeline
+        | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline
         | --
         | shld      0, ITYPE, 0x2f, ITYPE
-        | wait_load RA, 1
         | --
         | ord       0, CRET1, ITYPE, CRET1
-        | shld      1, RA, 0x3, RA
         | --
         | std       2, BASE, RA, CRET1
         | ct        ctpr1                   // vm_restart_pipeline
@@ -5793,8 +5795,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_TNEW:
         | // ins_AD RA_E = dst*8, RD_E = (hbits|asize)*8
-        | setwd     wsz = 0xc, nfx = 0x1, dbl = 0x0
-        | setbn     rsz = 0x3, rbs = 0x8, rcur = 0x0
+        | setwd_call
         | addd      1, RA_E, 0, RA
         | addd      4, RD_E, 0, RD
         | ldd       3, STACK, SAVE_L, RB
@@ -5819,11 +5820,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldh       3, PC, PREV_PC_RD, RD
         | wait_load RD, 0
         |1:
-        | disp      ctpr1, extern lj_tab_new // FIXME: invalid bundle if joined with next bundle
-        | --
         | shrd      3, RD, 0xb, CARG3
         | andd      4, RD, 0x7ff, CARG2
         | addd      5, RB, 0x0, CARG1
+        | disp      ctpr1, extern lj_tab_new
         | --
         | cmpedb    3, CARG2, 0x7ff, pred0
         | wait_pred pred0, 0
@@ -5833,18 +5833,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | call      ctpr1, wbs = 0x8        // lj_tab_new(lua_State *L, int32_t asize, uint32_t hbits)
         | --
         | // Table * returned.
-        | addd      0, 0x0, LJ_TTAB, ITYPE
-        | ldb       2, PC, PREV_PC_RA, T2
+        | addd      0, 0, LJ_TTAB, ITYPE
         | ldd       3, RB, L->base, BASE
-        | disp      ctpr3, ->vm_restart_pipeline
+        | disp      ctpr3, ->vm_restart_pipeline    // TODO: inline
         | --
         | shld      0, ITYPE, 0x2f, ITYPE
-        | wait_load T2, 1
         | --
-        | shld      0, T2, 0x3, T2
         | ord       1, CRET1, ITYPE, CRET1
+        | wait_load BASE, 2
         | --
-        | std       5, BASE, T2, CRET1
+        | std       5, BASE, RA, CRET1
         | ct        ctpr3                   // vm_restart_pipeline
         | --
         break;
@@ -5859,8 +5857,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd      4, RD_E, 0, RD
         | --
         | disp      ctpr1, extern lj_gc_step_fixtop
-        | --
-        | wait_load T3, 2
+        | wait_load T3, 1
         | --
         | cmpbdb    0, T3, T4, pred0
         | std       2, STACK, SAVE_PC, PC
@@ -5870,10 +5867,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | call      ctpr1, wbs = 0x8, ~pred0 // lj_gc_step_fixtop(lua_State *L)
         | --
-        | disp      ctpr1, extern lj_tab_dup
-        | --
         | subd      3, KBASE, RD, T3
         | addd      4, RB, 0x0, CARG1
+        | disp      ctpr1, extern lj_tab_dup
         | --
         | ldd       3, T3, -8, CARG2
         | wait_load CARG2, 0
@@ -5881,7 +5877,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | call      ctpr1, wbs = 0x8        // lj_tab_dup(lua_State *L, Table *kt)
         | --
         | ldd       3, RB, L->base, BASE
-        | addd      4, 0x0, LJ_TTAB, ITYPE
+        | addd      4, 0, LJ_TTAB, ITYPE
         | disp      ctpr3, ->vm_restart_pipeline // TODO: inline
         | --
         | shld      4, ITYPE, 0x2f, ITYPE
@@ -5980,10 +5976,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass pred1, p1                    // 'no __index' flag set: done.
         | landp ~p0, p1, p4
         | pass p4, pred0
-        | wait_pred_ct pred0, 0
+        | wait_pred pred0, 0
+        | --
+        | std       5, BASE, RA_E, ITYPE, ~pred0
         | --
         | pipe_dispatch_if 0, ctpr3, ~pred0
-        | std       5, BASE, RA_E, ITYPE, ~pred0
         | --
         | ct        ctpr1                   // vmeta_tgets(TODO)
         | --
@@ -6185,9 +6182,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | addd      3, 0x0, LJ_TNIL, ITYPE, pred2 // End of hash chain: key not found, nil result.
         | ct        ctpr2, pred2            // >2
-        | wait_pred_ct pred1, 1
+        | wait_pred pred1, 1
         | --
         | std       5, BASE, RA_E, ITYPE, ~pred1
+        | --
         | pipe_dispatch_if 0, ctpr3, ~pred1
         | --
         |2:
@@ -6205,9 +6203,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      pred1, p1               // 'no __index' flag set: done.
         | landp     ~p0, p1, p4
         | pass      p4, pred0
-        | wait_pred_ct pred0, 0
+        | wait_pred pred0, 0
         | --
         | std       5, BASE, RA_E, ITYPE, ~pred0
+        | --
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
         | ct        ctpr1                   // vmeta_tgets(RB, RC)
@@ -6263,9 +6262,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | landp     p0, ~p1, p4
         | landp     p4, p2, p5
         | pass      p5, pred0
-        | wait_pred_ct pred0, 0
+        | wait_pred pred0, 0
         | --
         | std       5, BASE, RA_E, ITYPE, ~pred0
+        | --
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
         | ct        ctpr1                   // vmeta_tgetb, 'no __index' flag NOT set: check.
@@ -6308,6 +6308,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load ITYPE, 1
         | --
         | std       5, BASE, RA, ITYPE
+        | --
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -6510,17 +6511,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd       0, BASE, RA, ITYPE
         | addd      5, RB, 0x0, S1
         | --
-        | std       2, DISPATCH, DISPATCH_GL(gc.grayagain), S1, ~pred1
-        | stb       5, S1, TAB->marked, T2, ~pred1
+        | std       5, DISPATCH, DISPATCH_GL(gc.grayagain), S1, ~pred1
         | --
+        | stb       2, S1, TAB->marked, T2, ~pred1
         | std       5, S1, TAB->gclist, T7, ~pred1
         | --
         | std       5, S0, 0x0, ITYPE       // Set node value.
         | pipe_dispatch 0, ctpr3
         | --
         |2:
-        | setwd     wsz = 0xc, nfx = 0x1, dbl = 0x0
-        | setbn     rsz = 0x3, rbs = 0x8, rcur = 0x0
+        | setwd_call
         | --
         | // End of hash chain: key not found, add a new one.
         | // But check for __newindex first.
@@ -6528,9 +6528,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd      1, DISPATCH, DISPATCH_GL(tmptv), CARG3
         | ldd       3, RB, TAB->metatable, S0
         | --
-        | disp      ctpr1, extern lj_tab_newkey     // FIXME: do not touch it!!!
-        | --
-        | wait_load S0, 2
+        | disp      ctpr1, extern lj_tab_newkey
+        | wait_load S0, 1
         | --
         | addd      0, RB, 0x0, CARG2
         | ldbsm     3, S0, TAB->nomm, S1
@@ -6765,10 +6764,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch 0, ctpr3
         | --
         |4: // Need to resize array part.
-        | disp      ctpr1, extern lj_tab_reasize
         | --
         | setwd_call
         | ldd       3, STACK, SAVE_L, T1
+        | disp      ctpr1, extern lj_tab_reasize
         | wait_load T1, 0
         | --
         | shrd      0, RD, 3, CARG3
@@ -6782,7 +6781,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldd       3, RB, L->base, BASE
         | disp      ctpr2, ->vm_restart_pipeline    // TODO: inline
-        | wait_load BASE, 0
         | --
         | subd      0, PC, 4, PC            // Retry this instruction.
         | ct        ctpr2                   // vm_restart_pipeline
