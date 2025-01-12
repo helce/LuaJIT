@@ -24,7 +24,7 @@ local type, tonumber, pairs, ipairs = type, tonumber, pairs, ipairs
 local assert, setmetatable = assert, setmetatable
 local _s = string
 local sub, format, byte, char = _s.sub, _s.format, _s.byte, _s.char
-local match, gmatch = _s.match, _s.gmatch
+local find, match, gmatch = _s.find, _s.match, _s.gmatch
 local concat, sort = table.concat, table.sort
 local bit = bit or require("bit")
 local band, bor, shl, sar, tohex, bswap = bit.band, bit.bor, bit.lshift, bit.arshift, bit.tohex, bit.bswap
@@ -737,15 +737,31 @@ local function check_operand(opnd)
   return operand
 end
 
+local function named_operand_extract(opnd)
+    local s, e = find(opnd, "%s*=%s*")
+    if s ~= nil then
+        return sub(opnd, 1, s-1), sub(opnd, e+1)
+    end
+    return nil
+end
+
 local function named_operand_raw(opnd, name)
-  assert(sub(opnd, 0, #name + 1) == name.."=", "Incorrect operand \""..opnd.."\" for "..name)
-  return assert(sub(opnd, #name + 2), "Incorrect "..name.." set")
+  local n, v = named_operand_extract(opnd)
+  if n ~= name then
+    werror("Incorrect operand \""..opnd.."\" for "..name)
+  end
+  return v
 end
 
 local function named_operand(opnd, name, min, max)
   local raw = named_operand_raw(opnd, name)
-  local value = assert(tonumber(raw), "Incorrect "..name.." set")
-  assert(value >= min and value <= max, "Value for "..name.." must be in range "..min.."..="..max)
+  local value = tonumber(raw)
+  if value == nil then
+    werror("Incorrect "..name.." set")
+  end
+  if value < min or value > max then
+    werror("Value for "..name.." must be in range "..min.."..="..max)
+  end
   return value
 end
 
@@ -932,11 +948,9 @@ end
 local function generate_setbn_oper(opc, rsz_seq, rbs_seq, rcur_seq)
   local code = 0
   local param_code = 0
-  local rbs = assert(tonumber(sub(rbs_seq, 7)), "Incorrect rbs set")
-  local rsz = assert(tonumber(sub(rsz_seq, 7)), "Incorrect rsz set")
-  local rcur = assert(tonumber(sub(rcur_seq, 8)), "Incorrect rcur set")
-  if (rbs == nil) or (rsz == nil) or (rcur == nil) then werror("Incorrect frame info") end
-  if (rbs > 63) or (rsz > 63) or (rcur > 63) then werror("Incorrect frame info") end
+  local rbs  = named_operand(rbs_seq , "rbs", 0, 63)
+  local rsz  = named_operand(rsz_seq , "rsz", 0, 63)
+  local rcur = named_operand(rcur_seq, "rcur", 0, 63)
   -- 32bit opc(4), setbp(1), setbn(1), unused(3), psz(5), rcur(6), rsz(6), rbs(6)
   if wide_instr["CS1"] ~= nil then
     opc = band(sar(wide_instr["CS1"].value,28), 0xf)
@@ -958,11 +972,9 @@ end
 local function generate_setwd_oper(opc, wsz_seq, nfx_seq, dbl_seq)
   local code = 0
   local cs_code = 0
-  local wsz = assert(tonumber(sub(wsz_seq, 7)), "Incorrect wsz set")
-  local nfx = assert(tonumber(sub(nfx_seq, 7)), "Incorrect nfx set")
-  local dbl = assert(tonumber(sub(dbl_seq, 7)), "Incorrect dbl set")
-  if (wsz == nil) or (nfx == nil) or (dbl == nil) then werror("Incorrect frame info") end
-  if (wsz > 127) or (nfx > 1) or (dbl > 1) then werror("Incorrect frame info") end
+  local wsz = named_operand(wsz_seq, "wsz", 0, 127)
+  local nfx = named_operand(nfx_seq, "nfx", 0, 1)
+  local dbl = named_operand(dbl_seq, "dbl", 0, 1)
   -- 32bit unused_hi(15), rpsz(5), wsz(7), nfx(1), dbl(1), unused_lo(3)
   code = shl(code,7) + wsz
   code = shl(code,1) + nfx
@@ -1038,8 +1050,7 @@ local function generate_call_oper(opc, opnd1, opnd2, opnd3)
   local code = 0
   if wide_instr["CS1"] ~= nil then werror("CS1 already busy") end
   generate_ct_oper(opnd1, opnd3)
-  local wbs = tonumber(sub(opnd2, 7))
-  if wbs == nil then werror("incorrect wbs value") end
+  local wbs = named_operand(opnd2, "wbs", 0, 127)
   -- 32bit opc(4), unused(21), wbs(7)
   code = opc
   code = shl(code,21) + 0x0
