@@ -4263,32 +4263,47 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |// modulo x%y. Called by BC_MOD* and vm_arith.
     |->vm_mod:
-    | .wide off
-    | setwd wsz = 0x4, nfx = 0x1, dbl = 0x0
-    | fdivd 5, RARG1, RARG2, RARG3
-    | andd 0, RARG3, U64x(0x7fffffff,0xffffffff), RARG4 // |x/y|
-    | fcmpnltdb 0, RARG4, U64x(0x43300000,0x00000000), pred0 // |x/y| >= 2^52
-    | disp ctpr1, >2
-    | ct ctpr1, pred0
-    | andd 0, RARG3, U64x(0x80000000,0x00000000), RARG5 // Isolate sign bit.
-    | faddd 0, RARG4, U64x(0x43300000,0x00000000), RARG4 // (|x/y| + 2^52) - 2^52
-    | fsubd 0, RARG4, U64x(0x43300000,0x00000000), RARG4
-    | ord 0, RARG4, RARG5, RARG4               // Merge sign bit back in.
-    | fcmpltdb 0, RARG3, RARG4, pred0
-    | disp ctpr1, >1                        // x/y < result?
-    | ct ctpr1, ~pred0
-    | fsubd 0, RARG4, U64x(0x3ff00000,0x00000000), RARG4 // If yes, subtract 1.0.
-    |1:
-    | fmuld 0, RARG2, RARG4, RARG2
-    | fsubd 0, RARG1, RARG2, RRET1
-    | return ctpr3
-    | ct ctpr3
-    |2:
-    | fmuld 0, RARG2, RARG3, RARG2
-    | fsubd 0, RARG1, RARG2, RRET1
-    | return ctpr3
-    | ct ctpr3
-    | .wide on
+    | addd      0, RARG1, 0, T9
+    | addd      1, 0, U64x(0x43300000,0x00000000), T0
+    | shld      2, 1, 63, T1                // 0x80000000_00000000
+    | fdivd     5, RARG1, RARG2, T3
+    | return    ctpr3
+    | wait      T3, 0, 16
+    | --
+    | fmuldsm   3, RARG2, T3, T8
+    | wait      T3, 16, 16 + 2              // fp->int extra delay
+    | --
+    | andnd     3, T3, T1, T4               // |x/y|
+    | andd      4, T3, T1, T5               // Isolate sign bit.
+    | --
+    | fcmpnltdb 3, T4, T0, pred0            // |x/y| >= 2^52
+    | faddd     4, T4, T0, T4               // (|x/y| + 2^52) - 2^52
+    | --
+    | fsubdsm   4, T9, T8, RARG1
+    | wait      T4, 1, 4
+    | --
+    | fsubd     3, T4, T0, T4
+    | ct        ctpr3, pred0                // return
+    | --
+    | wait      T4, 1, 4 + 2                // fp->int extra delay
+    | --
+    | ord       3, T4, T5, T4               // Merge sign bit back in.
+    | --
+    | fsubdsm   3, T4, U64x(0x3ff00000,0x00000000), T6 // If yes, subtract 1.0.
+    | fmuldsm   4, RARG2, T4, T7
+    | --
+    | fcmpltdb  3, T3, T4, pred1
+    | wait      T6, 1, 4
+    | --
+    | fmuldsm   3, RARG2, T6, T6
+    | fsubd     4, T9, T7, RARG1
+    | wait      RARG1, 0, 4
+    | ct        ctpr3, ~pred1               // return
+    | --
+    | fsubd     3, T9, T6, RARG1
+    | wait      RARG1, 0, 4
+    | ct        ctpr3                       // return
+    | --
     |
     |->vm_next:
     | // Unsupported
