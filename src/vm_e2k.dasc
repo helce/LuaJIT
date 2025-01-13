@@ -4261,7 +4261,7 @@ static void build_subroutines(BuildCtx *ctx)
     | vm_round vm_ceil,  1
     | vm_round vm_trunc, 2
     |
-    |// modulo x%y. Called by BC_MOD* and vm_arith.
+    |// modulo x%y. Called by vm_arith.
     |->vm_mod:
     | addd      0, RARG1, 0, T9
     | addd      1, 0, U64x(0x43300000,0x00000000), T0
@@ -4303,6 +4303,46 @@ static void build_subroutines(BuildCtx *ctx)
     | fsubd     3, T9, T6, RARG1
     | wait      RARG1, 0, 4
     | ct        ctpr3                       // return
+    | --
+    |
+    |// modulo x%y. Called by BC_MOD*.
+    |->vm_mod_fast:                         // (x: f64, y: f64, z: x/y)
+    | addd      0, PARG1, 0, T9
+    | addd      1, 0, U64x(0x43300000,0x00000000), T0
+    | fmuldsm   3, PARG2, PARG3, T8
+    | shld      4, 1, 63, T1                // 0x80000000_00000000
+    | wait      PARG3, 16, 16 + 2           // fp->int extra delay
+    | --
+    | andnd     3, PARG3, T1, T4            // |x/y|
+    | andd      4, PARG3, T1, T5            // Isolate sign bit.
+    | --
+    | fcmpnltdb 3, T4, T0, pred0            // |x/y| >= 2^52
+    | faddd     4, T4, T0, T4               // (|x/y| + 2^52) - 2^52
+    | --
+    | fsubdsm   4, T9, T8, PARG1
+    | wait      T4, 1, 4
+    | --
+    | fsubd     3, T4, T0, T4
+    | ct        ctpr1, pred0                // return
+    | --
+    | wait      T4, 1, 4 + 2                // fp->int extra delay
+    | --
+    | ord       3, T4, T5, T4               // Merge sign bit back in.
+    | --
+    | fsubdsm   3, T4, U64x(0x3ff00000,0x00000000), T6 // If yes, subtract 1.0.
+    | fmuldsm   4, PARG2, T4, T7
+    | --
+    | fcmpltdb  3, PARG3, T4, pred1
+    | wait      T6, 1, 4
+    | --
+    | fmuldsm   3, PARG2, T6, T6
+    | fsubd     4, T9, T7, PARG1
+    | wait      PARG1, 0, 4
+    | ct        ctpr1, ~pred1               // return
+    | --
+    | fsubd     3, T9, T6, PARG1
+    | wait      PARG1, 0, 4
+    | ct        ctpr1                       // return
     | --
     |
     |->vm_next:
@@ -5225,46 +5265,61 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_ABC RA_E = dst*8, RB_E = src1*8, RC_E = src2*8 or num_const*8
         switch (op) {
         case BC_MODVN:
-        | ldd       3, BASE, RB_E, T1
-        | ldd       5, KBASE, RC_E, T2
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | ldd       3, BASE, RB_E, PARG1
+        | ldd       5, KBASE, RC_E, PARG2
         | disp      ctpr1, ->vmeta_arith_vn
         | --
-        | disp      ctpr2, ->vm_mod
-        | wait_load T1, 1
+        | pipe_dispatch_load 0
+        | pipe_scale 1, 2, 3, 4
+        | disp      ctpr2, ->vm_mod_fast
+        | wait_load PARG1, 1
         | --
-        | sard      3, T1, 0x2f, ITYPE
+        | sard      3, PARG1, 0x2f, T0
+        | fdivdsm   5, PARG1, PARG2, PARG3  // Used in vm_mod_fast.
         | --
-        | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
+        | cmpbsb    3, T0, LJ_TISNUM, pred0
         | wait_pred_ct pred0, 0
         | --
           break;
         case BC_MODNV:
-        | ldd       3, KBASE, RC_E, T1
-        | ldd       5, BASE, RB_E, T2
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | ldd       3, KBASE, RC_E, PARG1
+        | ldd       5, BASE, RB_E, PARG2
         | disp      ctpr1, ->vmeta_arith_nv
         | --
-        | disp      ctpr2, ->vm_mod
-        | wait_load T2, 0
+        | pipe_dispatch_load 0
+        | pipe_scale 1, 2, 3, 4
+        | disp      ctpr2, ->vm_mod_fast
+        | wait_load PARG2, 1
         | --
-        | sard      3, T2, 0x2f, ITYPE
+        | sard      3, PARG2, 0x2f, T0
+        | fdivdsm   5, PARG1, PARG2, PARG3  // Used in vm_mod_fast.
         | --
-        | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
+        | cmpbsb    3, T0, LJ_TISNUM, pred0
         | wait_pred_ct pred0, 0
         | --
           break;
         case BC_MODVV:
-        | ldd       3, BASE, RB_E, T1
-        | ldd       5, BASE, RC_E, T2
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | ldd       3, BASE, RB_E, PARG1
+        | ldd       5, BASE, RC_E, PARG2
         | disp      ctpr1, ->vmeta_arith_vv
         | --
-        | disp      ctpr2, ->vm_mod
-        | wait_load T1, 1
+        | pipe_dispatch_load 0
+        | pipe_scale 1, 2, 3, 4
+        | disp      ctpr2, ->vm_mod_fast
+        | wait_load PARG1, 1
         | --
-        | sard      3, T1, 0x2f, ITYPE
-        | sard      4, T2, 0x2f, T3
+        | sard      3, PARG1, 0x2f, T0
+        | sard      4, PARG2, 0x2f, T1
+        | fdivdsm   5, PARG1, PARG2, PARG3  // Used in vm_mod_fast.
         | --
-        | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
-        | cmpbsb    4, T3, LJ_TISNUM, pred1
+        | cmpbsb    3, T0, LJ_TISNUM, pred0
+        | cmpbsb    4, T1, LJ_TISNUM, pred1
         | --
         | pass      pred0, p0
         | pass      pred1, p1
@@ -5276,19 +5331,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         default:
           break;
         }
+        | pipe_extract 0, 1, 2, 3, 4
         | ct        ctpr1, ~pred0           // vmeta_arith_*
         | --
-        | setwd_call
-        | addd      0, RA_E, 0, RA
+        | disp      ctpr1, >1               // return for vm_mod_fast
+        | wait      PARG3, 3 + LATENCY_PRED_CT, 16
+        | ct        ctpr2                   // vm_mod_fast(f64, f64, f64, ctpr1)
         | --
-        | addd      0, T1, 0, CARG1
-        | addd      1, T2, 0, CARG2
-        | call      ctpr2, wbs = 0x8        // vm_mod
+        |1:
+        | std       5, BASE, RA_E, PARG1
         | --
-        | std       5, BASE, RA, CRET1
-        | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline/optimize
-        | --
-        | ct        ctpr1                   // vm_restart_pipeline
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
@@ -5321,6 +5374,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_call ctpr1
         | --
         | std       5, BASE, RA, PARG1
+        | --
         | pipe_restart_fast DISPATCH_B, PC
         break;
 
