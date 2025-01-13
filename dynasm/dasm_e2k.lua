@@ -580,6 +580,7 @@ local map_op = {
   movaq_6 = "MOVA_0x5",
   movaqp_6 = "MOVA_0x7",
   -- C.22.4 Push nop
+  nop_0 = "NOP",
   nop_1 = "NOP",
   -- Loop mode flag
   loop_0 = "LOOP",
@@ -1427,6 +1428,7 @@ local function generate_loop_oper()
 end
 
 local function generate_nop_oper(opnd)
+  if opnd == nil then return end
   local val = tonumber(opnd)
   if val == nil then werror("Incorrect nop value") end
   if val == 0 then wwarn("Ignoring nop 0") end
