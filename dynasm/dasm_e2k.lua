@@ -467,6 +467,7 @@ local map_op = {
   fscaled_4 = "ALU2_ALOPF11_0_0x12_0x25_N_0x01_0xc0",
   -- C.3.2.4 Division and reciprocal operations 
   fdivd_4 = "ALU2_ALOPF11_0_0x20_0x49_N_0x01_0xc0",
+  fdivdsm_4 = "ALU2_ALOPF11_1_0x20_0x49_N_0x01_0xc0",
   -- C.3.2.5 The square root and its reciprocal operations
   fsqrtid_3 = "ALU1_ALOPF12_0_0x20_0x4d_0xc0_0x01_0xc0",
   fsqrttd_4 = "ALU2_ALOPF11_0_0x20_0x51_N_0x01_0xc0",
