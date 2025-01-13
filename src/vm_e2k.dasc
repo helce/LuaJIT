@@ -5225,62 +5225,70 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     ||  case 0:
     | pipe_dispatch_prep 0, ctpr3
     | pipe_dispatch_load 2
+    | pipe_bypass_check 1, RB_E, pred3
     | ldd       3, KBASE, RC_E, T1
     | ldd       5, BASE, RB_E, T0
     | disp      ctpr1, ->vmeta_arith_vn
     | --
-    | pipe_fetch 0
-    | pipe_scale 1, 2, 3, 4
-    | pipe_bypass_none 5
-    | --
     | pipe_extract 0, 1, 2, 3, 4
+    | pipe_bypass_some 5, RA_E
+    | --
+    | pipe_scale 0, 1, 2, 4
+    | pipe_bypass_use 5, T0, pred3
     | wait_load T0, 2
     | --
+    | pipe_fetch 0
     | sard      3, T0, 0x2f, T3
-    | ins       ch, T0, T1, T2
+    | ins       ch, T0, T1, RESULT_E
     | --
     | cmpbsb    3, T3, LJ_TISNUM, pred0
-    | wait_pred pred0, 0
-    | wait      T2, 1, latency
+    | wait_pred_ct pred0, 0
+    | wait      RESULT_E, 1, latency
     | --
     ||   break;
     ||  case 1:
     | pipe_dispatch_prep 0, ctpr3
     | pipe_dispatch_load 2
+    | pipe_bypass_check 1, RB_E, pred3
     | ldd       3, KBASE, RC_E, T1
     | ldd       5, BASE, RB_E, T0
     | disp      ctpr1, ->vmeta_arith_nv
     | --
-    | pipe_fetch 0
-    | pipe_scale 1, 2, 3, 4
-    | pipe_bypass_none 5
-    | --
     | pipe_extract 0, 1, 2, 3, 4
+    | pipe_bypass_some 5, RA_E
+    | --
+    | pipe_scale 0, 1, 2, 4
+    | pipe_bypass_use 5, T0, pred3
     | wait_load T0, 2
     | --
+    | pipe_fetch 0
     | sard      3, T0, 0x2f, T3
-    | ins       ch, T1, T0, T2
+    | ins       ch, T1, T0, RESULT_E
     | --
     | cmpbsb    3, T3, LJ_TISNUM, pred0
-    | wait_pred pred0, 0
-    | wait      T2, 1, latency
+    | wait_pred_ct pred0, 0
+    | wait      RESULT_E, 1, latency
     | --
     ||   break;
     ||  default:
     | pipe_dispatch_prep 0, ctpr3
     | pipe_dispatch_load 2
+    | pipe_bypass_check 1, RC_E, pred3
+    | pipe_bypass_check 4, RB_E, pred4
     | ldd       3, BASE, RC_E, T1
     | ldd       5, BASE, RB_E, T0
     | disp      ctpr1, ->vmeta_arith_vv
     | --
-    | pipe_fetch 0
-    | pipe_scale 1, 2, 3, 4
-    | pipe_bypass_none 5
-    | --
     | pipe_extract 0, 1, 2, 3, 4
+    | pipe_bypass_some 5, RA_E
+    | --
+    | pipe_scale 0, 1, 2, 4
+    | pipe_bypass_use 3, T1, pred3
+    | pipe_bypass_use 5, T0, pred4
     | wait_load T0, 2
     | --
-    | ins       ch, T0, T1, T2
+    | pipe_fetch 0
+    | ins       ch, T0, T1, RESULT_E
     | --
     | sard      3, T0, 0x2f, T3
     | sard      4, T1, 0x2f, T4
@@ -5292,13 +5300,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     | pass      pred1, p1
     | landp     p0, p1, p4
     | pass      p4, pred0
-    | wait_pred pred0, 0
-    | wait      T2, 3, latency
+    | wait_pred_ct pred0, 0
+    | wait      RESULT_E, 3, latency
     | --
     ||  break;
     || }
-    | std       5, BASE, RA_E, T2, pred0
-    | --
+    | std       5, BASE, RA_E, RESULT_E, pred0
     | pipe_dispatch_if 0, ctpr3, pred0          // next insn
     | --
     | ct        ctpr1                           // vmeta_arith_*
