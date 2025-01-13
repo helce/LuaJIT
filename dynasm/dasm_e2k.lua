@@ -404,6 +404,12 @@ local map_op = {
   andd_4 = "ALU2_ALOPF1_0_0x3f_0x1",
   anddsm_4 = "ALU2_ALOPF1_1_0x3f_0x1",
   andd_5 = "ALU2PR_ALOPF1_0_0x3f_0x1",
+  andns_4 = "ALU2_ALOPF1_0_0x3f_0x2",
+  andnssm_4 = "ALU2_ALOPF1_1_0x3f_0x2",
+  andns_5 = "ALU2PR_ALOPF1_0_0x3f_0x2",
+  andnd_4 = "ALU2_ALOPF1_0_0x3f_0x3",
+  andndsm_4 = "ALU2_ALOPF1_1_0x3f_0x3",
+  andnd_5 = "ALU2PR_ALOPF1_0_0x3f_0x3",
   ors_4 = "ALU2_ALOPF1_0_0x3f_0x4",
   ord_4 = "ALU2_ALOPF1_0_0x3f_0x5",
   ord_5 = "ALU2PR_ALOPF1_0_0x3f_0x5",
@@ -442,13 +448,20 @@ local map_op = {
   -- C.3.2.1 FP addition and substruction operations
   faddd_4 = "ALU2_ALOPF1_0_0x1b_0x31",
   fadddsm_4 = "ALU2_ALOPF1_1_0x1b_0x31",
+  faddd_5 = "ALU2PR_ALOPF1_0_0x1b_0x31",
+  fadddsm_5 = "ALU2PR_ALOPF1_1_0x1b_0x31",
   fsubd_4 = "ALU2_ALOPF1_0_0x1b_0x33",
+  fsubdsm_4 = "ALU2_ALOPF1_1_0x1b_0x33",
   fsubd_5 = "ALU2PR_ALOPF1_0_0x1b_0x33",
+  fsubdsm_5 = "ALU2PR_ALOPF1_1_0x1b_0x33",
   -- C.3.2.2 Min/Max operations
   fmind_4 = "ALU2_ALOPF1_0_0x1b_0x35",
   fmaxd_4 = "ALU2_ALOPF1_0_0x1b_0x37",
   -- C.3.2.3.1 FP multiplication operations
   fmuld_4 = "ALU2_ALOPF1_0_0x1b_0x39",
+  fmuldsm_4 = "ALU2_ALOPF1_1_0x1b_0x39",
+  fmuld_5 = "ALU2PR_ALOPF1_0_0x1b_0x39",
+  fmuldsm_5 = "ALU2PR_ALOPF1_1_0x1b_0x39",
   -- C.3.2.3.2 Multiplication by power of two operations
   fscales_4 = "ALU2_ALOPF11_0_0x12_0x24_N_0x01_0xc0",
   fscaled_4 = "ALU2_ALOPF11_0_0x12_0x25_N_0x01_0xc0",
