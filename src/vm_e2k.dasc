@@ -4514,14 +4514,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_AD RA_E = src1*8, RD_E = src2*8, JMP with RD = target
         | // To preserve NaN semantics GE/GT branch on unordered, but LT/LE don't.
         | pipe_dispatch_load 0
-        | pipe_fetch 2
         | pipe_extract_d 1                  // JMP.RD*8
-        | subd      4, PC, BCBIAS_J*4 - 4, S1
+        | subd      2, PC, BCBIAS_J*4 - 4, S1
         | ldd       3, BASE, RA_E, RA
         | ldd       5, BASE, RD_E, RD
         | disp      ctpr1, ->vm_restart_pipeline_fast
         | --
         | pipe_extract_op 0
+        | pipe_fetch 5
         | shrd      1, RD_B, 1, S0          // JMP.RD*4.
         | addd      2, BASE, RA_E, T2       // Used in lj_meta_comp.
         | addd      3, BASE, RD_E, T3       // Used in lj_meta_comp.
@@ -5671,11 +5671,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_AND RA_E = upvalue*8, RD_E = str_const*8 (~)
         | pipe_dispatch_prep 0, ctpr3
         | pipe_dispatch_load 2
-        | pipe_fetch 3
         | subd      4, KBASE, RD_E, T2
         | ldd       5, BASE, -16, T4
         | --
         | pipe_scale 0, 1, 2, 4
+        | pipe_fetch 3
         | ldd       5, T2, -8, T3
         | --
         | pipe_extract 0, 1, 2, 3, 4
