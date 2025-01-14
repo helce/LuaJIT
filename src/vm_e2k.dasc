@@ -41,14 +41,14 @@
 |.define CARG8,     b7
 |
 |// Used to pass arguments without dropping pipeline state.
-|.define PARG1,     r48
-|.define PARG2,     r49
-|.define PARG3,     r50
-|.define PARG4,     r51
-|.define PARG5,     r52
-|.define PARG6,     r53
-|.define PARG7,     r54
-|.define PARG8,     r55
+|.define PARG1,     r52
+|.define PARG2,     r53
+|.define PARG3,     r54
+|.define PARG4,     r55
+|.define PARG5,     r56
+|.define PARG6,     r57
+|.define PARG7,     r58
+|.define PARG8,     r59
 |
 |.define BASE,      r4
 |.define KBASE,     r5
@@ -96,25 +96,30 @@
 |.define OP_L,        b16       // extracted opcode
 |.define OP_B,        b18
 |.define OP_E,        b20
-|.define DISPATCH_L,  b22
-|.define DISPATCH_B,  b24       // dispatch pointer
-|.define DISPATCH_E,  b26
-|.define BYPASS_E,    b28
-|.define BYPASS_W,    b30       // RA_E of previous insn or -1
+|.define OP_W,        b22
+|.define DISPATCH_L,  b24
+|.define DISPATCH_B,  b26       // dispatch pointer
+|.define DISPATCH_E,  b28
+|.define BYPASS_E,    b30
+|.define BYPASS_W,    b32       // RA_E of previous insn or -1
 |.define RA_L,        b1
 |.define RA_B,        b3        // scaled RA
 |.define RA_E,        b5        // extracted RA
-|.define RB_L,        b7
-|.define RB_B,        b9        // scaled RB
-|.define RB_E,        b11       // extracted RB
-|.define RCD_L,       b13
-|.define RCD_B,       b15       // scaled RC/RD
-|.define RC_B,        b17
-|.define RC_E,        b19       // extracted RC
-|.define RD_B,        b21
-|.define RD_E,        b23       // extracted RD
-|.define RESULT_E,    b25
-|.define RESULT_W,    b27       // result of last insn if BYPASS_W is not -1
+|.define RA_W,        b7
+|.define RB_L,        b9
+|.define RB_B,        b11       // scaled RB
+|.define RB_E,        b13       // extracted RB
+|.define RB_W,        b15
+|.define RCD_L,       b17
+|.define RCD_B,       b19       // scaled RC/RD
+|.define RC_B,        b21
+|.define RC_E,        b23       // extracted RC
+|.define RC_W,        b25
+|.define RD_B,        b27
+|.define RD_E,        b29       // extracted RD
+|.define RD_W,        b31
+|.define RESULT_E,    b33
+|.define RESULT_W,    b35       // result of last insn if BYPASS_W is not -1
 |
 |.macro do_fault
 | addd 0, 0x0, 0x0, RARG1
@@ -377,16 +382,16 @@
 |//   b0 ..b27 - pipeline (based/rotating) registers
 |//   r44..r52 - callee argument registers
 |.macro setwd_pipe
-| setwd     wsz = 0x1c, nfx = 0x1, dbl = 0x0
-| setbn     rsz = 0xf, rbs = 0x8, rcur = 0x0
+| setwd     wsz = 0x1e, nfx = 0x1, dbl = 0x0
+| setbn     rsz = 0x11, rbs = 0x8, rcur = 0x0
 |.endmacro
 |
 |.macro pipe_call, ctpr
-| call ctpr, wbs=0x18
+| call ctpr, wbs=0x1a
 |.endmacro
 |
 |.macro pipe_call_if, ctpr, pred
-| call ctpr, wbs=0x18, pred
+| call ctpr, wbs=0x1a, pred
 |.endmacro
 |
 |// Stage F
@@ -4567,24 +4572,28 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_AD RA_E = src1*8, RD_E = src2*8, JMP with RD = target
         | // To preserve NaN semantics GE/GT branch on unordered, but LT/LE don't.
         | pipe_dispatch_load 0
-        | pipe_extract_d 1                  // JMP.RD*8
-        | subd      2, PC, BCBIAS_J*4 - 4, S1
+        | pipe_extract_d 2                  // JMP.RD*8
+        | pipe_bypass_check 1, RA_E, pred0
+        | pipe_bypass_check 4, RD_E, pred1
         | ldd       3, BASE, RA_E, RA
         | ldd       5, BASE, RD_E, RD
         | disp      ctpr1, ->vm_restart_pipeline_fast
         | --
-        | pipe_extract_op 0
-        | pipe_fetch 5
-        | shrd      1, RD_B, 1, S0          // JMP.RD*4.
-        | addd      2, BASE, RA_E, T2       // Used in lj_meta_comp.
-        | addd      3, BASE, RD_E, T3       // Used in lj_meta_comp.
-        | shrd      4, OP_E, 3, T4          // Used in lj_meta_comp.
+        | pipe_fetch 2
+        | pipe_scale_a 3
+        | pipe_scale_b 4
+        | pipe_scale_cd 5
+        | shrd      0, RD_B, 1, S0          // JMP.RD*4.
+        | subd      1, PC, BCBIAS_J*4 - 4, S1
         | disp      ctpr2, extern lj_meta_comp
         | --
         | abnf                              // Advance to next stage.
-        | pipe_scale 2, 3, 4, 5
-        | ldb       0, S1, S0, RARG1        // Load an opcode for taken branch.
+        | pipe_extract_op 0
+        | pipe_scale_op 5
+        | pipe_bypass_use 3, RA, pred0
+        | pipe_bypass_use 4, RD, pred1
         | addd      1, PC, 4, PC            // PC for next stage.
+        | ldb       2, S1, S0, RARG1        // Load an opcode for taken branch.
         | wait_load RA, 2
         | --
         switch (op) {
@@ -4627,7 +4636,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_scale 1, 2, 3, 4
         | shld      0, RARG1, 3, RARG1      // Scale an opcode for taken branch.
         | lddsm     5, STACK, SAVE_L, RB    // Used in lj_meta_comp.
-        | wait      pred2, 2, 3
         | --
         | pipe_extract 1, 2, 3, 4, 5
         | ldd       0, RARG1, DISPATCH, RARG1   // Load dispath for branch target.
@@ -4648,9 +4656,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | subd      1, PC, 4, PC, ~pred0    // Restore PC for vmeta_comp.
         | addd      2, RB, 0, PARG1
-        | addd      3, T2, 0, PARG2
-        | addd      4, T3, 0, PARG3
-        | addd      5, T4, 0, PARG4
+        | addd      3, BASE, RA_W, PARG2
+        | addd      4, BASE, RD_W, PARG3
+        | shrd      5, OP_W, 3, PARG4
         | pipe_dispatch_if 0, ctpr3, pred2  // Not taken, goto next insn.
         | --
         | // inlined vmeta_comp
