@@ -5238,8 +5238,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     | wait_load T0, 2
     | --
     | pipe_fetch 0
-    | sard      3, T0, 0x2f, T3
     | ins       ch, T0, T1, RESULT_E
+    |.if ch == 3
+    | sard      4, T0, 0x2f, T3
+    |.else
+    | sard      3, T0, 0x2f, T3
+    |.endif
     | --
     | cmpbsb    3, T3, LJ_TISNUM, pred0
     | wait_pred_ct pred0, 0
@@ -5262,8 +5266,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     | wait_load T0, 2
     | --
     | pipe_fetch 0
-    | sard      3, T0, 0x2f, T3
     | ins       ch, T1, T0, RESULT_E
+    |.if ch == 3
+    | sard      4, T0, 0x2f, T3
+    |.else
+    | sard      3, T0, 0x2f, T3
+    |.endif
     | --
     | cmpbsb    3, T3, LJ_TISNUM, pred0
     | wait_pred_ct pred0, 0
@@ -5289,9 +5297,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     | --
     | pipe_fetch 0
     | ins       ch, T0, T1, RESULT_E
-    | --
+    |.if ch == 3
+    | sard      4, T0, 0x2f, T3
+    |.else
     | sard      3, T0, 0x2f, T3
+    |.endif
+    |.if ch == 4
+    | sard      5, T1, 0x2f, T4
+    |.else
     | sard      4, T1, 0x2f, T4
+    |.endif
     | --
     | cmpbsb    3, T3, LJ_TISNUM, pred0
     | cmpbsb    4, T4, LJ_TISNUM, pred1
@@ -5301,7 +5316,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     | landp     p0, p1, p4
     | pass      p4, pred0
     | wait_pred_ct pred0, 0
-    | wait      RESULT_E, 3, latency
+    | wait      RESULT_E, 2, latency
     | --
     ||  break;
     || }
