@@ -5603,13 +5603,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_scale 0, 1, 2, 3
         | shld      4, ITYPE, 0x2f, ITYPE
         | ldd       5, T1, -8, T1
-        | wait_load T1, 0
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | ord       5, T1, ITYPE, T1
+        | pipe_bypass_some 5, RA_E
+        | wait_load T1, 1
         | --
-        | std       5, BASE, RA_E, T1
+        | ord       5, T1, ITYPE, RESULT_E
         | --
+        | std       5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         |.endif
