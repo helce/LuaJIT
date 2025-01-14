@@ -6456,12 +6456,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 4, RB_E, pred2
         | ldd       5, BASE, RB_E, RB
         | disp      ctpr1, ->vmeta_tgetb
         | --
         | pipe_scale 0, 1, 2, 3
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_use 5, RB, pred2
         | wait_load RB, 2
         | --
         | sard      3, RB, 0x2f, ITYPE
@@ -6502,8 +6504,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p5, pred0
         | wait_pred pred0, 0
         | --
-        | std       5, BASE, RA_E, ITYPE, ~pred0
+        | pipe_bypass_some_if 0, RA_E, ~pred0
+        | addd      5, ITYPE, 0, RESULT_E, ~pred0
         | --
+        | std       5, BASE, RA_E, ITYPE, ~pred0
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
         | ct        ctpr1                   // vmeta_tgetb, 'no __index' flag NOT set: check.
