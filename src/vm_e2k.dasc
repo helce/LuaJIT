@@ -5582,10 +5582,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | shld      5, T1, 0x2f, T1
         | wait_load T0, 1
         | --
-        | ord       5, T0, T1, T0
+        | pipe_bypass_some 0, RA_E
+        | ord       5, T0, T1, RESULT_E
         | --
-        | std       5, BASE, RA_E, T0
-        | --
+        | std       5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         break;
