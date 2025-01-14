@@ -41,14 +41,14 @@
 |.define CARG8,     b7
 |
 |// Used to pass arguments without dropping pipeline state.
-|.define PARG1,     r44
-|.define PARG2,     r45
-|.define PARG3,     r46
-|.define PARG4,     r47
-|.define PARG5,     r48
-|.define PARG6,     r49
-|.define PARG7,     r50
-|.define PARG8,     r51
+|.define PARG1,     r52
+|.define PARG2,     r53
+|.define PARG3,     r54
+|.define PARG4,     r55
+|.define PARG5,     r56
+|.define PARG6,     r57
+|.define PARG7,     r58
+|.define PARG8,     r59
 |
 |.define BASE,      r4
 |.define KBASE,     r5
@@ -96,21 +96,30 @@
 |.define OP_L,        b16       // extracted opcode
 |.define OP_B,        b18
 |.define OP_E,        b20
-|.define DISPATCH_L,  b22
-|.define DISPATCH_B,  b24       // dispatch pointer
-|.define DISPATCH_E,  b26
+|.define OP_W,        b22
+|.define DISPATCH_L,  b24
+|.define DISPATCH_B,  b26       // dispatch pointer
+|.define DISPATCH_E,  b28
+|.define BYPASS_E,    b30
+|.define BYPASS_W,    b32       // RA_E of previous insn or -1
 |.define RA_L,        b1
 |.define RA_B,        b3        // scaled RA
 |.define RA_E,        b5        // extracted RA
-|.define RB_L,        b7
-|.define RB_B,        b9        // scaled RB
-|.define RB_E,        b11       // extracted RB
-|.define RCD_L,       b13
-|.define RCD_B,       b15       // scaled RC/RD
-|.define RC_B,        b17
-|.define RC_E,        b19       // extracted RC
-|.define RD_B,        b21
-|.define RD_E,        b23       // extracted RD
+|.define RA_W,        b7
+|.define RB_L,        b9
+|.define RB_B,        b11       // scaled RB
+|.define RB_E,        b13       // extracted RB
+|.define RB_W,        b15
+|.define RCD_L,       b17
+|.define RCD_B,       b19       // scaled RC/RD
+|.define RC_B,        b21
+|.define RC_E,        b23       // extracted RC
+|.define RC_W,        b25
+|.define RD_B,        b27
+|.define RD_E,        b29       // extracted RD
+|.define RD_W,        b31
+|.define RESULT_E,    b33
+|.define RESULT_W,    b35       // result of last insn if BYPASS_W is not -1
 |
 |.macro do_fault
 | addd 0, 0x0, 0x0, RARG1
@@ -274,9 +283,31 @@
 |//   | addd      0, PC, 4, PC
 |//   | ct        ctpr3
 |
+|// Execute(bypass):
+|//   | cmpedb    1, BYPASS_W, RB_E, pred0  // check if prev insn write to BASE+RB_E
+|//   | ldd       3, BASE, RB_E, T0
+|//   | cmpedb    4, BYPASS_W, RC_E, pred1  // check if prev insn write to BASE+RC_E
+|//   | ldd       5, BASE, RC_E, T1
+|//   | --
+|//   | nop
+|//   | --
+|//   | addd      3, 0, RESULT_W, RB_E, pred0   // use result of prev insn for RB
+|//   | addd      5, 0, RESULT_W, RC_E, pred1   // use result of prev insn for RC
+|//   | --
+|//   | faddd     3, RB_E, RC_E, RESULT_E   // produce result of this insn
+|//   | addd      4, RA_E, 0, BYPASS_E      // notify next insn that this insn write to BASE+RA_E
+|//   | wait      RESULT_E, 0, 4
+|//   | --
+|//   | std       BASE, RA_E, RESULT_E
+|//   | --
+|
+|// Execute(nobypass):
+|//   | subd      0, 0, 1, BYPASS_E         // disable bypass for next insn
+|//   | --
+|
 |// Prologue expected state:
 |//   PC  Stage   Expect
-|//    0  E       INSN_E, OP_E, RA_E, RB_E, RC_E, RD_E, DISPATCH_E
+|//    0  E       INSN_E, OP_E, RA_E, RB_E, RC_E, RD_E, DISPATCH_E, BYPASS_W
 |//    4  B       INSN_B, OP_B, RA_B, RB_B, RCD_B, DISPATCH_B
 |//    8  L       INSN_L, OP_L, RA_L, RB_L, RCD_L
 |//   12  D       INSN_D, OP_D
@@ -316,6 +347,7 @@
 |//   | shrdsm    0, INSN_B, 0x5, RA_B
 |//   | shrdsm    1, INSN_B, 0x15, RB_B
 |//   | shrdsm    2, INSN_B, 0xd, RCD_B
+|//   | subd      3, 0, 1, BYPASS_E         // Disable bypass for current insn.
 |//   | wait_load DISPATCH_E, 2
 |//   | --
 |//   |.if isa > 6
@@ -334,6 +366,7 @@
 |//   | pipe_dispatch_load 3
 |//   | --
 |//   | pipe_scale 0, 1, 2, 3
+|//   | pipe_bypass_none 4
 |//   | --
 |//   | pipe_extract 0, 1, 2, 3, 4
 |//   | --
@@ -349,16 +382,16 @@
 |//   b0 ..b27 - pipeline (based/rotating) registers
 |//   r44..r52 - callee argument registers
 |.macro setwd_pipe
-| setwd     wsz = 0x18, nfx = 0x1, dbl = 0x0
-| setbn     rsz = 0xd, rbs = 0x8, rcur = 0x0
+| setwd     wsz = 0x1e, nfx = 0x1, dbl = 0x0
+| setbn     rsz = 0x11, rbs = 0x8, rcur = 0x0
 |.endmacro
 |
 |.macro pipe_call, ctpr
-| call ctpr, wbs=0x16
+| call ctpr, wbs=0x1a
 |.endmacro
 |
 |.macro pipe_call_if, ctpr, pred
-| call ctpr, wbs=0x16, pred
+| call ctpr, wbs=0x1a, pred
 |.endmacro
 |
 |// Stage F
@@ -453,12 +486,38 @@
 | ct        ctpr, pred
 |.endmacro
 |
+|// Stage E
+|.macro pipe_bypass_check, ch, reg, pred
+| cmpedb    ch, BYPASS_W, reg, pred
+|.endmacro
+|
+|// Stage E
+|.macro pipe_bypass_use, ch, reg, pred
+| addd      ch, RESULT_W, 0, reg, pred
+|.endmacro
+|
+|// Stage E
+|.macro pipe_bypass_some, ch, reg
+| addd      ch, reg, 0, BYPASS_E
+|.endmacro
+|
+|// Stage E
+|.macro pipe_bypass_some_if, ch, reg, pred
+| addd      ch, reg, 0, BYPASS_E, pred
+|.endmacro
+|
+|// Stage E
+|.macro pipe_bypass_none, ch
+| subd      ch, 0, 1, BYPASS_E
+|.endmacro
+|
 |.macro pipe_next
 | pipe_dispatch_prep 0, ctpr3
 | pipe_fetch 2
 | pipe_dispatch_load 3
 | --
 | pipe_scale 0, 1, 2, 3
+| pipe_bypass_none 4
 | --
 | pipe_extract 0, 1, 2, 3, 4
 | --
@@ -495,6 +554,7 @@
 | addd      4, dispatch, 0, DISPATCH_E
 | lddsm     5, OP_B, DISPATCH, DISPATCH_B
 | --
+| subd      0, 0, 1, BYPASS_W
 | andd      1, RA_E, 0x7f8, RA_E
 | andd      2, RB_E, 0x7f8, RB_E
 | andd      3, T8, 0x7f8, RC_E
@@ -1096,6 +1156,7 @@ static void build_subroutines(BuildCtx *ctx)
     | wait_load DISPATCH_E, 1
     | --
     | movtd     0, DISPATCH_E, ctpr3        // Prepare an insn handler for stage E.
+    | subd      1, 0, 1, BYPASS_W
     | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
     | shrdsm    4, INSN_B, 0x15, RB_B
     | shrdsm    5, INSN_B, 0xd, RCD_B
@@ -1157,6 +1218,7 @@ static void build_subroutines(BuildCtx *ctx)
     | shrd      3, INSN_E, 0x15, RB_E
     | shrd      4, INSN_E, 0xd, T0
     | --
+    | subd      0, 0, 1, BYPASS_W
     | andd      1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
     | andd      3, RB_E, 0x7f8, RB_E
     | andd      4, T0, 0x7f8, RC_E
@@ -1201,6 +1263,7 @@ static void build_subroutines(BuildCtx *ctx)
     | shrd      3, INSN_E, 0x15, RB_E       // Scale other fields for stage E.
     | shrd      4, INSN_E, 0xd, T0
     | --
+    | subd      0, 0, 1, BYPASS_W
     | addd      1, RA, 0, RA_E              // Extract other fields for stage E.
     | andd      3, RB_E, 0x7f8, RB_E
     | andd      4, T0, 0x7f8, RC_E
@@ -4514,24 +4577,28 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_AD RA_E = src1*8, RD_E = src2*8, JMP with RD = target
         | // To preserve NaN semantics GE/GT branch on unordered, but LT/LE don't.
         | pipe_dispatch_load 0
-        | pipe_extract_d 1                  // JMP.RD*8
-        | subd      2, PC, BCBIAS_J*4 - 4, S1
+        | pipe_extract_d 2                  // JMP.RD*8
+        | pipe_bypass_check 1, RA_E, pred0
+        | pipe_bypass_check 4, RD_E, pred1
         | ldd       3, BASE, RA_E, RA
         | ldd       5, BASE, RD_E, RD
         | disp      ctpr1, ->vm_restart_pipeline_fast
         | --
-        | pipe_extract_op 0
-        | pipe_fetch 5
-        | shrd      1, RD_B, 1, S0          // JMP.RD*4.
-        | addd      2, BASE, RA_E, T2       // Used in lj_meta_comp.
-        | addd      3, BASE, RD_E, T3       // Used in lj_meta_comp.
-        | shrd      4, OP_E, 3, T4          // Used in lj_meta_comp.
+        | pipe_fetch 2
+        | pipe_scale_a 3
+        | pipe_scale_b 4
+        | pipe_scale_cd 5
+        | shrd      0, RD_B, 1, S0          // JMP.RD*4.
+        | subd      1, PC, BCBIAS_J*4 - 4, S1
         | disp      ctpr2, extern lj_meta_comp
         | --
         | abnf                              // Advance to next stage.
-        | pipe_scale 2, 3, 4, 5
-        | ldb       0, S1, S0, RARG1        // Load an opcode for taken branch.
+        | pipe_extract_op 0
+        | pipe_scale_op 5
+        | pipe_bypass_use 3, RA, pred0
+        | pipe_bypass_use 4, RD, pred1
         | addd      1, PC, 4, PC            // PC for next stage.
+        | ldb       2, S1, S0, RARG1        // Load an opcode for taken branch.
         | wait_load RA, 2
         | --
         switch (op) {
@@ -4566,6 +4633,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         default: break;
         }
         | pipe_fetch 0
+        | pipe_bypass_none 1
         | pipe_dispatch_load 2
         | cmpbsb    3, T0, LJ_TISNUM, pred0
         | cmpbsb    4, T1, LJ_TISNUM, pred1
@@ -4573,7 +4641,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_scale 1, 2, 3, 4
         | shld      0, RARG1, 3, RARG1      // Scale an opcode for taken branch.
         | lddsm     5, STACK, SAVE_L, RB    // Used in lj_meta_comp.
-        | wait      pred2, 2, 3
         | --
         | pipe_extract 1, 2, 3, 4, 5
         | ldd       0, RARG1, DISPATCH, RARG1   // Load dispath for branch target.
@@ -4594,9 +4661,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | subd      1, PC, 4, PC, ~pred0    // Restore PC for vmeta_comp.
         | addd      2, RB, 0, PARG1
-        | addd      3, T2, 0, PARG2
-        | addd      4, T3, 0, PARG3
-        | addd      5, T4, 0, PARG4
+        | addd      3, BASE, RA_W, PARG2
+        | addd      4, BASE, RD_W, PARG3
+        | shrd      5, OP_W, 3, PARG4
         | pipe_dispatch_if 0, ctpr3, pred2  // Not taken, goto next insn.
         | --
         | // inlined vmeta_comp
@@ -4907,40 +4974,89 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_ISTC: case BC_ISFC: case BC_IST: case BC_ISF:
         | // ins_AD RA_E = dst*8 or unused, RD_E = src*8, JMP with RD = target
-        | addd      0, PC, 0x4, PC
+        | pipe_dispatch_load 0
         | subd      1, PC, BCBIAS_J*4 - 4, T2
-        | shrd      2, INSN_B, 0xe, T1      // JMP.RD*4
+        | pipe_extract_d 2                  // JMP.RD*8
         | ldd       3, BASE, RD_E, RD
-        | disp      ctpr1, ->vm_restart_pipeline // TODO: inline/optimize
+        | pipe_bypass_check 4, RD_E, pred2
+        | disp      ctpr1, ->vm_restart_pipeline_fast
         | --
-        | andd      0, T1, 0x3fffc, T1      // extract JMP.RD*4 (18 bits)
-        | wait_load RD, 1
+        | pipe_fetch 2
+        | pipe_scale 1, 3, 4, 5
+        | shrd      0, RD_B, 1, T1          // JMP.RD*4.
         | --
+        | ldb       2, T2, T1, RARG1        // Load an opcode for taken branch.
+        | pipe_bypass_use 3, RD, pred2
+        | wait_load RD, 2
+        | --
+        | pipe_extract_op 0
         | sard      3, RD, 0x2f, ITYPE
         | --
+        | abnf                              // Advance to next stage.
+        | addd      0, PC, 4, PC            // PC for next stage.
         | cmpbsb    3, ITYPE, LJ_TISTRUECOND, pred0
-        | wait_pred pred0, 0
         | --
-        if (op == BC_IST || op == BC_ISTC) {
-          | addd    0, T2, T1, PC, pred0
-          | --
-        } else {
-          | addd    0, T2, T1, PC, ~pred0
-          | --
+        | pipe_dispatch_prep 0, ctpr3
+        | shld      1, RARG1, 3, RARG1      // Scale an opcode for taken branch.
+        | --
+        switch (op) {
+        case BC_ISTC:
+        | ldd       2, RARG1, DISPATCH, RARG1   // Load dispath for branch target.
+        | addd      4, T2, T1, PC, pred0
+        | std       5, BASE, RA_W, RD
+        | --
+        | wait_load RARG1, 1
+        | ct        ctpr1, pred0            // vm_restart_pipeline_fast(RARG1)
+        | --
+          break;
+        case BC_ISFC:
+        | ldd       2, RARG1, DISPATCH, RARG1   // Load dispath for branch target.
+        | addd      3, T2, T1, PC, ~pred0
+        | std       5, BASE, RA_W, RD
+        | --
+        | wait_load RARG1, 1
+        | ct        ctpr1, ~pred0           // vm_restart_pipeline_fast(RARG1)
+        | --
+          break;
+        case BC_IST:
+        | addd      1, T2, T1, PC, pred0
+        | ldd       2, RARG1, DISPATCH, RARG1   // Load dispath for branch target.
+        | --
+        | wait_load RARG1, 1
+        | ct        ctpr1, pred0            // vm_restart_pipeline_fast(RARG1)
+        | --
+          break;
+        case BC_ISF:
+        | addd      1, T2, T1, PC, ~pred0
+        | ldd       2, RARG1, DISPATCH, RARG1   // Load dispath for branch target.
+        | --
+        | wait_load RARG1, 1
+        | ct        ctpr1, ~pred0           // vm_restart_pipeline_fast(RARG1)
+        | --
+          break;
+        default:
+          break;
         }
-        if (op == BC_ISTC || op == BC_ISFC) {
-          | std     5, BASE, RA_E, RD
-          | --
-        }
-        | ct        ctpr1                   // vm_restart_pipeline
+        // BC_JMP
+        | pipe_bypass_none 0
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | --
+        | pipe_dispatch 0, ctpr3
         | --
         break;
 
     case BC_ISTYPE:
         | // ins_AD RA_E = src*8, RD_E = -type*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 4, RA_E, pred1
         | ldd       5, BASE, RA_E, RB
         | disp      ctpr1, ->vmeta_istype
         | --
@@ -4949,6 +5065,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd      5, RD_E, 0, RD
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_use 5, RB, pred1
         | wait_load RB, 2
         | --
         | sard      3, RB, 0x2c, RB
@@ -4968,14 +5085,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_ISNUM:
         | // ins_AD RA_E = src*8, RD_E = -(TISNUM-1)*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 4, RA_E, pred1
         | ldd       5, BASE, RA_E, T1
         | disp      ctpr2, ->vmeta_istype
         | --
         | pipe_scale 0, 1, 2, 3
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_use 5, T1, pred1
         | wait_load T1, 2
         | --
         | addd      0, RA_E, 0, RA
@@ -4996,17 +5116,19 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_MOV:
         | // ins_AD RA_E = dst*8, RD_E = src*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_some 1, RA_E
         | pipe_fetch 2
         | pipe_dispatch_load 3
-        | ldd 5, BASE, RD_E, T0
+        | pipe_bypass_check 4, RD_E, pred0
+        | ldd 5, BASE, RD_E, RESULT_E
         | --
         | pipe_scale 0, 1, 2, 3
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | wait_load T0, 2
+        | pipe_bypass_use 5, RESULT_E, pred0
+        | wait_load RESULT_E, 2
         | --
-        | std 5, BASE, RA_E, T0
-        | --
+        | std 5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5014,8 +5136,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_NOT:
         | // ins_AD RA_E = dst*8, RD_E = src*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_some 1, RA_E
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 4, RD_E, pred1
         | ldd       5, BASE, RD_E, T0
         | --
         | pipe_scale 0, 1, 2, 3
@@ -5023,6 +5147,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | shld      5, 2, 0x2f, T2
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_use 5, T0, pred1
         | wait_load T0, 2
         | --
         | sard      3, T0, 0x2f, T0
@@ -5030,11 +5155,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | xord      5, T2, -1, T2
         | --
         | cmpbsb    3, T0, LJ_TISTRUECOND, pred0
-        | wait_pred pred0, 0
+        | wait_pred_ct pred0, 0
         | --
+        | addd      1, T1, 0, RESULT_E, pred0
+        | addd      3, T2, 0, RESULT_E, ~pred0
         | std       2, BASE, RA_E, T1, pred0
         | std       5, BASE, RA_E, T2, ~pred0
-        | --
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5042,25 +5168,29 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_UNM:
         | // ins_AD RA_E = dst*8, RD_E = src*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
-        | shld      4, 1, 63, T0
+        | pipe_bypass_check 4, RD_E, pred1
         | ldd       5, BASE, RD_E, T1
         | disp      ctpr1, ->vmeta_unm
         | --
         | pipe_scale 0, 1, 2, 3
+        | shld      4, 1, 63, T0
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_use 5, T1, pred1
         | wait_load T1, 2
         | --
         | sard      3, T1, 0x2f, ITYPE
-        | xord      4, T1, T0, T1
+        | xord      4, T1, T0, RESULT_E
         | --
         | cmpbsb 3, ITYPE, LJ_TISNUM, pred0
         | wait_pred pred0, 0
         | --
-        | std       5, BASE, RA_E, T1, pred0
+        | pipe_bypass_some_if 0, RA_E, pred0
         | --
+        | std       5, BASE, RA_E, RESULT_E, pred0
         | pipe_dispatch_if 0, ctpr3, pred0
         | --
         | ct        ctpr1                   // vmeta_unm(TODO)
@@ -5070,8 +5200,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_LEN:
         | // ins_AD RA_E = dst*8, RD_E = src*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 4, RD_E, pred2
         | ldd       5, BASE, RD_E, RD
         | disp      ctpr1, >2
         | --
@@ -5079,6 +5211,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp      ctpr2, ->vmeta_len
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_use 5, RD, pred2
         | wait_load RD, 2
         | --
         | sard      3, RD, 0x2f, ITYPE
@@ -5096,15 +5229,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ct        ctpr2, pred2            // vmeta_len(TODO)
         | --
+        | pipe_bypass_some 0, RA_E
         | wait_load T2, 1 + LATENCY_PRED_CT + 1
         | --
-        | istofd    3, T2, T3
+        | istofd    3, T2, RESULT_E
         | ct        ctpr1, ~pred0           // >2
         | --
-        | wait      T3, 1, 4
+        | wait      RESULT_E, 1, 4
         | --
-        | std       5, BASE, RA_E, T3
-        | --
+        | std       5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         |2:
@@ -5164,62 +5297,88 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     ||  case 0:
     | pipe_dispatch_prep 0, ctpr3
     | pipe_dispatch_load 2
+    | pipe_bypass_check 1, RB_E, pred3
     | ldd       3, KBASE, RC_E, T1
     | ldd       5, BASE, RB_E, T0
     | disp      ctpr1, ->vmeta_arith_vn
     | --
-    | pipe_fetch 0
-    | pipe_scale 1, 2, 3, 4
-    | --
     | pipe_extract 0, 1, 2, 3, 4
+    | pipe_bypass_some 5, RA_E
+    | --
+    | pipe_scale 0, 1, 2, 4
+    | pipe_bypass_use 5, T0, pred3
     | wait_load T0, 2
     | --
+    | pipe_fetch 0
+    | ins       ch, T0, T1, RESULT_E
+    |.if ch == 3
+    | sard      4, T0, 0x2f, T3
+    |.else
     | sard      3, T0, 0x2f, T3
-    | ins       ch, T0, T1, T2
+    |.endif
     | --
     | cmpbsb    3, T3, LJ_TISNUM, pred0
-    | wait_pred pred0, 0
-    | wait      T2, 1, latency
+    | wait_pred_ct pred0, 0
+    | wait      RESULT_E, 1, latency
     | --
     ||   break;
     ||  case 1:
     | pipe_dispatch_prep 0, ctpr3
     | pipe_dispatch_load 2
+    | pipe_bypass_check 1, RB_E, pred3
     | ldd       3, KBASE, RC_E, T1
     | ldd       5, BASE, RB_E, T0
     | disp      ctpr1, ->vmeta_arith_nv
     | --
-    | pipe_fetch 0
-    | pipe_scale 1, 2, 3, 4
-    | --
     | pipe_extract 0, 1, 2, 3, 4
+    | pipe_bypass_some 5, RA_E
+    | --
+    | pipe_scale 0, 1, 2, 4
+    | pipe_bypass_use 5, T0, pred3
     | wait_load T0, 2
     | --
+    | pipe_fetch 0
+    | ins       ch, T1, T0, RESULT_E
+    |.if ch == 3
+    | sard      4, T0, 0x2f, T3
+    |.else
     | sard      3, T0, 0x2f, T3
-    | ins       ch, T1, T0, T2
+    |.endif
     | --
     | cmpbsb    3, T3, LJ_TISNUM, pred0
-    | wait_pred pred0, 0
-    | wait      T2, 1, latency
+    | wait_pred_ct pred0, 0
+    | wait      RESULT_E, 1, latency
     | --
     ||   break;
     ||  default:
     | pipe_dispatch_prep 0, ctpr3
     | pipe_dispatch_load 2
+    | pipe_bypass_check 1, RC_E, pred3
+    | pipe_bypass_check 4, RB_E, pred4
     | ldd       3, BASE, RC_E, T1
     | ldd       5, BASE, RB_E, T0
     | disp      ctpr1, ->vmeta_arith_vv
     | --
-    | pipe_fetch 0
-    | pipe_scale 1, 2, 3, 4
-    | --
     | pipe_extract 0, 1, 2, 3, 4
+    | pipe_bypass_some 5, RA_E
+    | --
+    | pipe_scale 0, 1, 2, 4
+    | pipe_bypass_use 3, T1, pred3
+    | pipe_bypass_use 5, T0, pred4
     | wait_load T0, 2
     | --
-    | ins       ch, T0, T1, T2
-    | --
+    | pipe_fetch 0
+    | ins       ch, T0, T1, RESULT_E
+    |.if ch == 3
+    | sard      4, T0, 0x2f, T3
+    |.else
     | sard      3, T0, 0x2f, T3
+    |.endif
+    |.if ch == 4
+    | sard      5, T1, 0x2f, T4
+    |.else
     | sard      4, T1, 0x2f, T4
+    |.endif
     | --
     | cmpbsb    3, T3, LJ_TISNUM, pred0
     | cmpbsb    4, T4, LJ_TISNUM, pred1
@@ -5228,13 +5387,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     | pass      pred1, p1
     | landp     p0, p1, p4
     | pass      p4, pred0
-    | wait_pred pred0, 0
-    | wait      T2, 3, latency
+    | wait_pred_ct pred0, 0
+    | wait      RESULT_E, 2, latency
     | --
     ||  break;
     || }
-    | std       5, BASE, RA_E, T2, pred0
-    | --
+    | std       5, BASE, RA_E, RESULT_E, pred0
     | pipe_dispatch_if 0, ctpr3, pred0          // next insn
     | --
     | ct        ctpr1                           // vmeta_arith_*
@@ -5267,6 +5425,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         case BC_MODVN:
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
+        | pipe_bypass_check 1, RB_E, pred2
         | ldd       3, BASE, RB_E, PARG1
         | ldd       5, KBASE, RC_E, PARG2
         | disp      ctpr1, ->vmeta_arith_vn
@@ -5274,7 +5433,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_load 0
         | pipe_scale 1, 2, 3, 4
         | disp      ctpr2, ->vm_mod_fast
-        | wait_load PARG1, 1
+        | --
+        | pipe_bypass_use 3, PARG1, pred2
+        | wait_load PARG1, 2
         | --
         | sard      3, PARG1, 0x2f, T0
         | fdivdsm   5, PARG1, PARG2, PARG3  // Used in vm_mod_fast.
@@ -5286,6 +5447,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         case BC_MODNV:
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
+        | pipe_bypass_check 1, RB_E, pred2
         | ldd       3, KBASE, RC_E, PARG1
         | ldd       5, BASE, RB_E, PARG2
         | disp      ctpr1, ->vmeta_arith_nv
@@ -5293,7 +5455,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_load 0
         | pipe_scale 1, 2, 3, 4
         | disp      ctpr2, ->vm_mod_fast
-        | wait_load PARG2, 1
+        | --
+        | pipe_bypass_use 5, PARG2, pred2
+        | wait_load PARG1, 2
         | --
         | sard      3, PARG2, 0x2f, T0
         | fdivdsm   5, PARG1, PARG2, PARG3  // Used in vm_mod_fast.
@@ -5305,6 +5469,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         case BC_MODVV:
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
+        | pipe_bypass_check 1, RB_E, pred2
+        | pipe_bypass_check 4, RC_E, pred3
         | ldd       3, BASE, RB_E, PARG1
         | ldd       5, BASE, RC_E, PARG2
         | disp      ctpr1, ->vmeta_arith_vv
@@ -5312,7 +5478,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_load 0
         | pipe_scale 1, 2, 3, 4
         | disp      ctpr2, ->vm_mod_fast
-        | wait_load PARG1, 1
+        | --
+        | pipe_bypass_use 3, PARG1, pred2
+        | pipe_bypass_use 5, PARG2, pred3
+        | wait_load PARG1, 2
         | --
         | sard      3, PARG1, 0x2f, T0
         | sard      4, PARG2, 0x2f, T1
@@ -5332,50 +5501,64 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
           break;
         }
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_none 5
         | ct        ctpr1, ~pred0           // vmeta_arith_*
         | --
+        | pipe_bypass_some 5, RA_E
         | disp      ctpr1, >1               // return for vm_mod_fast
         | wait      PARG3, 3 + LATENCY_PRED_CT, 16
         | ct        ctpr2                   // vm_mod_fast(f64, f64, f64, ctpr1)
         | --
         |1:
+        | addd      3, PARG1, 0, RESULT_E
         | std       5, BASE, RA_E, PARG1
-        | --
         | pipe_dispatch 0, ctpr3
         | --
         break;
 
     case BC_POW:
         | // ins_ABC RA_E = dst*8, RB_E = src1*8, RC_E = src2*8 or num_const*8
-        | addd      0, RA_E, 0, RA
-        | ldd       3, BASE, RB_E, T1
-        | ldd       5, BASE, RC_E, T2
+        | pipe_bypass_check 0, RB_E, pred2
+        | pipe_bypass_check 1, RC_E, pred3
+        | ldd       3, BASE, RB_E, PARG1
+        | ldd       5, BASE, RC_E, PARG2
         | disp      ctpr2, ->vmeta_arith_vv
         | --
+        | pipe_fetch 0
+        | pipe_dispatch_load 2
+        | pipe_scale 1, 3, 4, 5
         | disp      ctpr1, extern pow
-        | wait_load T1, 1
         | --
-        | sard      3, T1, 0x2f, T3
-        | sard      4, T2, 0x2f, ITYPE
+        | pipe_bypass_use 3, PARG1, pred2
+        | pipe_bypass_use 4, PARG2, pred3
+        | wait_load PARG1, 2
+        | --
+        | sard      3, PARG1, 0x2f, T3
+        | sard      4, PARG2, 0x2f, T4
         | --
         | cmpbsb    3, T3, LJ_TISNUM, pred0
-        | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
+        | cmpbsb    4, T4, LJ_TISNUM, pred1
         | --
-        | addd      0, T1, 0, PARG1
-        | addd      1, T2, 0, PARG2
         | pass      pred0, p0
         | pass      pred1, p1
         | landp     p0, p1, p4
         | pass      p4, pred0
         | wait_pred_ct pred0, 0
         | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_none 5
         | ct        ctpr2, ~pred0           // vmeta_arith_vv
         | --
         | pipe_call ctpr1
         | --
-        | std       5, BASE, RA, PARG1
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_some 1, RA_E
+        | wait      ctpr3, 0, 9
         | --
-        | pipe_restart_fast DISPATCH_B, PC
+        | addd      3, PARG1, 0, RESULT_E
+        | std       5, BASE, RA_E, PARG1
+        | pipe_dispatch 0, ctpr3
+        | --
         break;
 
     case BC_CAT:
@@ -5433,6 +5616,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_KSTR:
         | // ins_AND RA_E = dst*8, RD_E = str_const*8 (~)
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
         | subd      4, KBASE, RD_E, T0
@@ -5445,10 +5629,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | shld      5, T1, 0x2f, T1
         | wait_load T0, 1
         | --
-        | ord       5, T0, T1, T0
+        | pipe_bypass_some 0, RA_E
+        | ord       5, T0, T1, RESULT_E
         | --
-        | std       5, BASE, RA_E, T0
-        | --
+        | std       5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5457,6 +5641,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         |.if FFI
         | // ins_AND RA_E = dst*8, RD_E = cdata_const*8 (~)
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
         | addd      4, 0x0, LJ_TCDATA, ITYPE
@@ -5465,13 +5650,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_scale 0, 1, 2, 3
         | shld      4, ITYPE, 0x2f, ITYPE
         | ldd       5, T1, -8, T1
-        | wait_load T1, 0
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | ord       5, T1, ITYPE, T1
+        | pipe_bypass_some 5, RA_E
+        | wait_load T1, 1
         | --
-        | std       5, BASE, RA_E, T1
+        | ord       5, T1, ITYPE, RESULT_E
         | --
+        | std       5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         |.endif
@@ -5482,17 +5668,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
         | pipe_dispatch_load 3
-        | shrd 4, RD_E, 0x3, T0
+        | pipe_bypass_some 4, RA_E
+        | shrd 5, RD_E, 0x3, RESULT_E
         | --
         | pipe_scale 0, 1, 2, 3
-        | sxt 4, 0x1, T0, T0        // Sign-extend literal.
+        | sxt 4, 1, RESULT_E, RESULT_E      // Sign-extend literal.
         | --
         | pipe_extract 0, 1, 2, 4, 5
-        | idtofd 3, T0, T0
-        | wait T0, 0, 3
+        | idtofd 3, RESULT_E, RESULT_E
+        | wait RESULT_E, 0, 3
         | --
-        | std 5, BASE, RA_E, T0
-        | --
+        | std 5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5500,17 +5686,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_KNUM:
         | // ins_AD RA_E = dst*8, RD_E = num_const*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_some 1, RA_E
         | pipe_fetch 2
         | pipe_dispatch_load 3
-        | ldd       5, KBASE, RD_E, T0
+        | ldd       5, KBASE, RD_E, RESULT_E
         | --
         | pipe_scale 0, 1, 2, 3
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | wait_load T0, 2
+        | wait_load RESULT_E, 2
         | --
-        | std       5, BASE, RA_E, T0
-        | --
+        | std       5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5518,16 +5704,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_KPRI:
         | // ins_AD RA_E = dst*8, RD_E = primitive_type*8 (~)
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_some 1, RA_E
         | pipe_fetch 2
         | pipe_dispatch_load 3
-        | shld      5, RD_E, 0x2c, T1
+        | shld      5, RD_E, 0x2c, RESULT_E
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | xord      5, T1, -1, T1
+        | xord      5, RESULT_E, -1, RESULT_E
         | --
         | pipe_scale 1, 2, 3, 4
-        | std       5, BASE, RA_E, T1
-        | --
+        | std       5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5535,6 +5721,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_KNIL:
         | // ins_AD RA_E = dst_start*8, RD_E = dst_end*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
         | addd      4, BASE, RA_E, RA
@@ -5566,6 +5753,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_UGET:
         | // ins_AD RA_E = dst*8, RD_E = upvalue*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_some 1, RA_E
         | pipe_fetch 2
         | pipe_dispatch_load 3
         | addd      4, RA_E, 0x0, T4
@@ -5578,17 +5766,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_extract 0, 1, 2, 3, 4
         | addd      5, RB, RD_E, T1
         | --
-        | ldd       3, T1, offsetof(GCfuncL, uvptr), T2
-        | wait_load T2, 0
+        | ldd       3, T1, offsetof(GCfuncL, uvptr), RESULT_E
+        | wait_load RESULT_E, 0
         | --
-        | ldd       3, T2, UPVAL->v, T1
+        | ldd       3, RESULT_E, UPVAL->v, T1
         | wait_load T1, 0
         | --
-        | ldd       3, T1, 0x0, T2
-        | wait_load T2, 0
+        | ldd       3, T1, 0x0, RESULT_E
+        | wait_load RESULT_E, 0
         | --
-        | std       5, BASE, T4, T2
-        | --
+        | std       5, BASE, T4, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -5598,6 +5785,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
  ((int32_t)offsetof(GCupval, marked)-(int32_t)offsetof(GCupval, tv))
         | // ins_AD RA_E = upvalue*8, RD_E = src*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
         | ldd       5, BASE, -16, RB
@@ -5670,6 +5858,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_USETS:
         | // ins_AND RA_E = upvalue*8, RD_E = str_const*8 (~)
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_dispatch_load 2
         | subd      4, KBASE, RD_E, T2
         | ldd       5, BASE, -16, T4
@@ -5736,6 +5925,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_USETN:
         | // ins_AD RA_E = upvalue*8, RD_E = num_const*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_dispatch_load 2
         | ldd       3, BASE, -16, T2
         | ldd       5, KBASE, RD_E, T1
@@ -5764,6 +5954,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_USETP:
         | // ins_AD RA_E = upvalue*8, RD_E = primitive_type*8 (~)
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
         | ldd       5, BASE, -16, T1
@@ -5973,6 +6164,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_extract 0, 1, 2, 3, 4
         | wait_load RB, 0
         | --
+        | pipe_bypass_none 0
         | getfd     4, RB, (47 << 6), RB
         | --
         | ldd       3, RB, LFUNC->env, RB
@@ -6023,6 +6215,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd 3, 0x0, LJ_TNIL, ITYPE, pred2 // End of hash chain: key not found, nil result.
         | ct        ctpr2, pred2            // >2
         | --
+        | pipe_bypass_some_if 0, RA_E, ~pred1
+        | addd      3, ITYPE, 0, RESULT_E, ~pred1
+        | --
         | std       5, BASE, RA_E, ITYPE, ~pred1
         | pipe_dispatch_if 0, ctpr3, ~pred1
         | --
@@ -6043,8 +6238,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass p4, pred0
         | wait_pred pred0, 0
         | --
-        | std       5, BASE, RA_E, ITYPE, ~pred0
+        | pipe_bypass_some_if 0, RA_E, ~pred0
+        | addd      3, ITYPE, 0, RESULT_E, ~pred0
         | --
+        | std       5, BASE, RA_E, ITYPE, ~pred0
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
         | ct        ctpr1                   // vmeta_tgets(TODO)
@@ -6060,12 +6257,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | subd      4, KBASE, RD_E, T0
         | ldd       5, BASE, -16, RB
         | disp      ctpr1, ->BC_TSETS_Z
-        | wait_load RB, 0
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | getfd     5, RB, (47 << 6), RB
+        | wait_load RB, 1
         | --
         | pipe_scale 0, 1, 2, 4
+        | getfd     5, RB, (47 << 6), RB
+        | --
+        | pipe_bypass_none 0
         | ldd       3, RB, LFUNC->env, RB
         | ldd       5, T0, -8, RC
         | wait_load RB, 0
@@ -6078,6 +6277,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_ABC RA_E = dst*8, RB_E = table*8, RC_E = key*8
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
+        | pipe_bypass_check 1, RB_E, pred2
+        | pipe_bypass_check 4, RC_E, pred3
         | ldd       3, BASE, RB_E, RB
         | ldd       5, BASE, RC_E, RC
         | disp      ctpr1, ->vmeta_tgetv
@@ -6085,7 +6286,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_scale 0, 1, 2, 3
         | pipe_dispatch_load 5
         | disp      ctpr2, >2
-        | wait_load RC, 1
+        | --
+        | pipe_bypass_none 0
+        | pipe_bypass_use 3, RB, pred2
+        | pipe_bypass_use 5, RC, pred3
+        | wait_load RC, 2
         | --
         | pipe_extract 0, 1, 2, 4, 5
         | fdtoistr  3, RC, S0
@@ -6123,9 +6328,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load ITYPE, 0
         | --
         | cmpedb    3, ITYPE, LJ_TNIL, pred0
-        | wait_pred_ct pred0, 0
+        | wait_pred pred0, 0
         | --
-        | ldd       3, RB, TAB->metatable, S0, pred0
+        | pipe_bypass_some_if 0, RA_E, ~pred0
+        | addd      3, ITYPE, 0, RESULT_E, ~pred0
+        | ldd       5, RB, TAB->metatable, S0, pred0
+        | --
         | std       5, BASE, RA_E, ITYPE, ~pred0
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
@@ -6142,7 +6350,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      pred1, p1
         | landp     ~p0, p1, p4
         | pass      p4, pred0
-        | wait_pred_ct pred0, 0
+        | wait_pred pred0, 0
+        | --
+        | pipe_bypass_some_if 0, RA_E, ~pred0
+        | addd      3, ITYPE, 0, RESULT_E, ~pred0
         | --
         | std       5, BASE, RA_E, ITYPE, ~pred0
         | pipe_dispatch_if 0, ctpr3, ~pred0
@@ -6176,13 +6387,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 1, RB_E, pred2
         | subd      4, KBASE, RC_E, RC
         | ldd       5, BASE, RB_E, RB       // GCtab *
         | disp      ctpr1, ->vmeta_tgets
         | --
         | pipe_scale 0, 1, 2, 3
         | ldd       5, RC, -8, RC           // GCstr *
-        | wait_load RB, 1
+        | --
+        | pipe_bypass_none 0
+        | pipe_bypass_use 5, RB, pred2
+        | wait_load RB, 2
         | --
         | addd      0, 0x0, LJ_TSTR, T1
         | sard      4, RB, 47, ITYPE
@@ -6249,8 +6464,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct        ctpr2, pred2            // >2
         | wait_pred pred1, 1
         | --
-        | std       5, BASE, RA_E, ITYPE, ~pred1
+        | pipe_bypass_some_if 0, RA_E, ~pred1
+        | addd      5, ITYPE, 0, RESULT_E, ~pred1
         | --
+        | std       5, BASE, RA_E, ITYPE, ~pred1
         | pipe_dispatch_if 0, ctpr3, ~pred1
         | --
         |2:
@@ -6270,8 +6487,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p4, pred0
         | wait_pred pred0, 0
         | --
-        | std       5, BASE, RA_E, ITYPE, ~pred0
+        | pipe_bypass_some_if 0, RA_E, ~pred0
+        | addd      5, ITYPE, 0, RESULT_E, ~pred0
         | --
+        | std       5, BASE, RA_E, ITYPE, ~pred0
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
         | ct        ctpr1                   // vmeta_tgets(RB, RC)
@@ -6281,14 +6500,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_TGETB:
         | // ins_ABC RA_E = dst*8, RB_E = table*8, RC_E = index*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 4, RB_E, pred2
         | ldd       5, BASE, RB_E, RB
         | disp      ctpr1, ->vmeta_tgetb
         | --
         | pipe_scale 0, 1, 2, 3
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_use 5, RB, pred2
         | wait_load RB, 2
         | --
         | sard      3, RB, 0x2f, ITYPE
@@ -6329,8 +6551,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p5, pred0
         | wait_pred pred0, 0
         | --
-        | std       5, BASE, RA_E, ITYPE, ~pred0
+        | pipe_bypass_some_if 0, RA_E, ~pred0
+        | addd      5, ITYPE, 0, RESULT_E, ~pred0
         | --
+        | std       5, BASE, RA_E, ITYPE, ~pred0
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
         | ct        ctpr1                   // vmeta_tgetb, 'no __index' flag NOT set: check.
@@ -6341,15 +6565,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_ABC RA_E = dst*8, RB_E = table*8, RC_E = key*8
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
+        | pipe_bypass_check 1, RB_E, pred2
+        | pipe_bypass_check 4, RC_E, pred3
         | ldd       3, BASE, RB_E, RB
-        | addd      4, RA_E, 0, RA
         | ldd       5, BASE, RC_E, RC
         | disp      ctpr1, ->vmeta_tgetr
         | --
-        | pipe_scale 0, 1, 2, 3
-        | --
-        | pipe_extract 0, 1, 2, 3, 4
         | pipe_dispatch_load 5
+        | --
+        | pipe_bypass_none 0
+        | pipe_bypass_use 3, RB, pred2
+        | pipe_bypass_use 5, RC, pred3
         | wait_load RC, 2
         | --
         | getfd     3, RB, (47 << 6), RB
@@ -6362,18 +6588,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | cmpbsb    3, RC, T1, pred0
         | shls      4, RC, 0x3, T3
+        | addd      5, RA_E, 0, RA
         | --
-        | sxt       3, 0x2, T3, T3
+        | pipe_scale 0, 1, 2, 3
+        | sxt       5, 0x2, T3, T3
         | --
-        | addd      3, T2, T3, T3
+        | pipe_extract 0, 1, 2, 3, 4
+        | addd      5, T2, T3, T3
         | --
-        | ldd       3, T3, 0x0, ITYPE, pred0 // Get array slot.
+        | ldd       3, T3, 0x0, RESULT_E, pred0 // Get array slot.
         | ct        ctpr1, ~pred0           // vmeta_tgetr(RA, RB, RC), Not in array part? Use fallback.
         | --
-        | wait_load ITYPE, 1
+        | pipe_bypass_some 0, RA_E
+        | wait_load RESULT_E, 1
         | --
-        | std       5, BASE, RA, ITYPE
-        | --
+        | std       5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         break;
@@ -6382,18 +6611,22 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_ABC RA_E = src*8, RB_E = table*8, RC_E = key*8
         | pipe_dispatch_prep 0, ctpr3
         | pipe_dispatch_load 2
-        | addd      1, RA_E, 0, RA
+        | pipe_bypass_check 1, RB_E, pred2
+        | pipe_bypass_check 4, RC_E, pred3
         | ldd       3, BASE, RB_E, RB
         | ldd       5, BASE, RC_E, RC
         | disp      ctpr1, ->vmeta_tsetv
         | --
-        | pipe_scale 0, 1, 2, 3
+        | pipe_extract 0, 1, 2, 3, 4
         | pipe_fetch 5
         | disp      ctpr2, ->BC_TSETS_Z
         | --
-        | pipe_extract 0, 1, 2, 3, 4
+        | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_use 4, RB, pred2
+        | pipe_bypass_use 5, RC, pred3
         | wait_load RB, 2
         | --
+        | pipe_bypass_none 0
         | sard      3, RB, 0x2f, T1
         | fdtoistr  4, RC, S0
         | getfd     5, RB, (47 << 6), RB
@@ -6413,6 +6646,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | lddsm     5, RB, TAB->metatable, S1
         | wait      pred2, 1, 3
         | --
+        | addd      1, RA_E, 0, RA
         | pass      pred0, p0
         | pass      pred2, p1
         | pass      pred3, p2
@@ -6481,6 +6715,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 1, RB_E, pred2
         | subd      4, KBASE, RC_E, S0
         | ldd       5, BASE, RB_E, RB
         | disp      ctpr2, ->vmeta_tsets
@@ -6488,7 +6723,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_scale 0, 1, 2, 4
         | ldd       3, S0, -8, RC
         | addd      5, RA_E, 0, RA
-        | wait_load RB, 1
+        | --
+        | pipe_bypass_none 0
+        | pipe_bypass_use 5, RB, pred2
+        | wait_load RB, 2
         | --
         | sard      3, RB, 0x2f, ITYPE
         | getfd     4, RB, (47 << 6), RB
@@ -6651,12 +6889,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 1, RB_E, pred2
         | addd      4, RC_E, 0, RC
         | ldd       5, BASE, RB_E, RB
         | disp      ctpr1, ->vmeta_tsetb
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | wait_load RB, 1
+        | --
+        | pipe_bypass_none 0
+        | pipe_bypass_use 5, RB, pred2
+        | wait_load RB, 2
         | --
         | pipe_scale 0, 1, 2, 3
         | sard      4, RB, 0x2f, ITYPE
@@ -6720,7 +6962,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_ABC RA_E = src*8, RB_E = table*8, RC_E = key*8
         | pipe_dispatch_prep 0, ctpr3
         | pipe_fetch 2
-        | addd      1, RA_E, 0, RA
+        | pipe_bypass_check 1, RB_E, pred2
+        | pipe_bypass_check 4, RC_E, pred3
         | ldd       3, BASE, RB_E, RB
         | ldd       5, BASE, RC_E, RC
         | disp      ctpr1, ->vmeta_tsetr
@@ -6729,13 +6972,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_dispatch_load 3
         | ldd       5, DISPATCH, DISPATCH_GL(gc.grayagain), T3
         | --
-        | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_none 0
+        | pipe_bypass_use 3, RB, pred2
+        | pipe_bypass_use 5, RC, pred3
         | wait_load RB, 2
         | --
         | getfd     3, RB, (47 << 6), RB
         | fdtoistr  4, RC, RC
         | lddsm     5, RB, TAB->array, T5
         | --
+        | addd      0, RA_E, 0, RA
         | ldb       3, RB, TAB->marked, T1
         | ldbsm     5, RB, TAB->marked, T2
         | wait_load T1, 0
@@ -6747,7 +6993,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | std       2, DISPATCH, DISPATCH_GL(gc.grayagain), RB, ~pred0
         | stb       5, RB, TAB->marked, T2, ~pred0
         | --
-        | shls      3, RC, 0x3, T1
+        | pipe_extract 0, 1, 2, 3, 4
+        | shls      5, RC, 0x3, T1
         | wait_load T4, 2
         | --
         | ldd       3, BASE, RA_E, ITYPE
@@ -6782,6 +7029,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_extract 0, 1, 2, 3, 4
         | wait_load RB, 2
         | --
+        | pipe_bypass_none 0
         | subd      2, RD, 0x8, RD
         | shld      3, T5, 0x3, T5
         | getfd     4, RB, (47 << 6), RB
@@ -7200,6 +7448,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_VARG:
         | // ins_ABC RA_E = base*8, RB_E = (nresults+1)*8, RC_E = numparams*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
         | --
@@ -7391,10 +7640,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | subd      3, BASE, T3, BASE, pred0
         | ct        ctpr2, ~pred0           // >4, More results expected?
         | --
-        | subd      0, BASE, 0x10, BASE     // base = base - (RA+2)*8
+        | subd      3, BASE, 0x10, BASE     // base = base - (RA+2)*8
         | disp      ctpr3, ->vm_restart_pipeline
         | --
-        | ldd       0, BASE, -16, KBASE
+        | ldd       3, BASE, -16, KBASE
         | wait_load KBASE, 0
         | --
         | getfd     3, KBASE, (47 << 6), KBASE
@@ -7520,6 +7769,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldd       5, RA, 0x0, S0
         | --
         | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_none 4
         | --
         | pipe_extract 0, 1, 2, 3, 4
         | wait_load S0, 2
@@ -7579,6 +7829,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_extract 0, 1, 2, 3, 4
         | wait_load RB, 2
         | --
+        | pipe_bypass_none 0
         | sard      1, RB, 47, ITYPE
         | sard      3, S0, 47, T1
         | sard      4, S1, 47, T2
@@ -7646,6 +7897,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_extract 0, 1, 2, 3, 4
         | wait_load RB, 2
         | --
+        | pipe_bypass_none 0
         | cmpedb    3, RB, LJ_TNIL, pred0
         | --
         | shld      0, RARG1, 3, RARG1
@@ -7717,6 +7969,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_IFUNCF:
         | // ins_AD BASE = new_base*8, RA_E = framesize*8, RD_E = (nargs+1)*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_dispatch_load 2
         | ldd       3, PC, PC2PROTO(k)-4, KBASE
         | addd      4, BASE, RA_E, RA       // Top of frame.
@@ -7772,6 +8025,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // RB_E = LFUNC (but we need tagged)
         | // RD_E = (nargs+1)*8
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
         | ldd       5, BASE, -16, KBASE
