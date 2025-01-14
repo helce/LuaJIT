@@ -6564,16 +6564,19 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_ABC RA_E = src*8, RB_E = table*8, RC_E = key*8
         | pipe_dispatch_prep 0, ctpr3
         | pipe_dispatch_load 2
-        | addd      1, RA_E, 0, RA
+        | pipe_bypass_check 1, RB_E, pred2
+        | pipe_bypass_check 4, RC_E, pred3
         | ldd       3, BASE, RB_E, RB
         | ldd       5, BASE, RC_E, RC
         | disp      ctpr1, ->vmeta_tsetv
         | --
-        | pipe_scale 0, 1, 2, 3
+        | pipe_extract 0, 1, 2, 3, 4
         | pipe_fetch 5
         | disp      ctpr2, ->BC_TSETS_Z
         | --
-        | pipe_extract 0, 1, 2, 3, 4
+        | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_use 4, RB, pred2
+        | pipe_bypass_use 5, RC, pred3
         | wait_load RB, 2
         | --
         | pipe_bypass_none 0
@@ -6596,6 +6599,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | lddsm     5, RB, TAB->metatable, S1
         | wait      pred2, 1, 3
         | --
+        | addd      1, RA_E, 0, RA
         | pass      pred0, p0
         | pass      pred2, p1
         | pass      pred3, p2
