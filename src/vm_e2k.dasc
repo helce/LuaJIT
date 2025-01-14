@@ -5036,12 +5036,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 4, RA_E, pred1
         | ldd       5, BASE, RA_E, T1
         | disp      ctpr2, ->vmeta_istype
         | --
         | pipe_scale 0, 1, 2, 3
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_use 5, T1, pred1
         | wait_load T1, 2
         | --
         | addd      0, RA_E, 0, RA
