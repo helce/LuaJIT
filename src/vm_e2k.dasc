@@ -6517,17 +6517,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_TGETR:
         | // ins_ABC RA_E = dst*8, RB_E = table*8, RC_E = key*8
         | pipe_dispatch_prep 0, ctpr3
-        | pipe_bypass_none 1
         | pipe_fetch 2
+        | pipe_bypass_check 1, RB_E, pred2
+        | pipe_bypass_check 4, RC_E, pred3
         | ldd       3, BASE, RB_E, RB
-        | addd      4, RA_E, 0, RA
         | ldd       5, BASE, RC_E, RC
         | disp      ctpr1, ->vmeta_tgetr
         | --
-        | pipe_scale 0, 1, 2, 3
-        | --
-        | pipe_extract 0, 1, 2, 3, 4
         | pipe_dispatch_load 5
+        | --
+        | pipe_bypass_none 0
+        | pipe_bypass_use 3, RB, pred2
+        | pipe_bypass_use 5, RC, pred3
         | wait_load RC, 2
         | --
         | getfd     3, RB, (47 << 6), RB
@@ -6540,18 +6541,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | cmpbsb    3, RC, T1, pred0
         | shls      4, RC, 0x3, T3
+        | addd      5, RA_E, 0, RA
         | --
-        | sxt       3, 0x2, T3, T3
+        | pipe_scale 0, 1, 2, 3
+        | sxt       5, 0x2, T3, T3
         | --
-        | addd      3, T2, T3, T3
+        | pipe_extract 0, 1, 2, 3, 4
+        | addd      5, T2, T3, T3
         | --
-        | ldd       3, T3, 0x0, ITYPE, pred0 // Get array slot.
+        | ldd       3, T3, 0x0, RESULT_E, pred0 // Get array slot.
         | ct        ctpr1, ~pred0           // vmeta_tgetr(RA, RB, RC), Not in array part? Use fallback.
         | --
-        | wait_load ITYPE, 1
+        | pipe_bypass_some 0, RA_E
+        | wait_load RESULT_E, 1
         | --
-        | std       5, BASE, RA, ITYPE
-        | --
+        | std       5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         break;
