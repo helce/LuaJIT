@@ -5471,26 +5471,27 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_POW:
         | // ins_ABC RA_E = dst*8, RB_E = src1*8, RC_E = src2*8 or num_const*8
-        | addd      1, RA_E, 0, RA
-        | ldd       3, BASE, RB_E, T1
-        | ldd       5, BASE, RC_E, T2
+        | pipe_bypass_check 0, RB_E, pred2
+        | pipe_bypass_check 1, RC_E, pred3
+        | ldd       3, BASE, RB_E, PARG1
+        | ldd       5, BASE, RC_E, PARG2
         | disp      ctpr2, ->vmeta_arith_vv
         | --
         | pipe_fetch 0
         | pipe_dispatch_load 2
         | pipe_scale 1, 3, 4, 5
         | disp      ctpr1, extern pow
-        | wait_load T1, 1
         | --
-        | sard      3, T1, 0x2f, T3
-        | sard      4, T2, 0x2f, ITYPE
+        | pipe_bypass_use 3, PARG1, pred2
+        | pipe_bypass_use 4, PARG2, pred3
+        | wait_load PARG1, 2
         | --
-        | pipe_bypass_none 0
+        | sard      3, PARG1, 0x2f, T3
+        | sard      4, PARG2, 0x2f, T4
+        | --
         | cmpbsb    3, T3, LJ_TISNUM, pred0
-        | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
+        | cmpbsb    4, T4, LJ_TISNUM, pred1
         | --
-        | addd      0, T1, 0, PARG1
-        | addd      1, T2, 0, PARG2
         | pass      pred0, p0
         | pass      pred1, p1
         | landp     p0, p1, p4
@@ -5498,14 +5499,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_pred_ct pred0, 0
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_none 5
         | ct        ctpr2, ~pred0           // vmeta_arith_vv
         | --
         | pipe_call ctpr1
         | --
         | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_some 1, RA_E
+        | wait      ctpr3, 0, 9
         | --
-        | std       5, BASE, RA, PARG1
-        | --
+        | addd      3, PARG1, 0, RESULT_E
+        | std       5, BASE, RA_E, PARG1
         | pipe_dispatch 0, ctpr3
         | --
         break;
