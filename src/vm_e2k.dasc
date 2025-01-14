@@ -7640,10 +7640,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | subd      3, BASE, T3, BASE, pred0
         | ct        ctpr2, ~pred0           // >4, More results expected?
         | --
-        | subd      0, BASE, 0x10, BASE     // base = base - (RA+2)*8
+        | subd      3, BASE, 0x10, BASE     // base = base - (RA+2)*8
         | disp      ctpr3, ->vm_restart_pipeline
         | --
-        | ldd       0, BASE, -16, KBASE
+        | ldd       3, BASE, -16, KBASE
         | wait_load KBASE, 0
         | --
         | getfd     3, KBASE, (47 << 6), KBASE
