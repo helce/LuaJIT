@@ -5657,17 +5657,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_KPRI:
         | // ins_AD RA_E = dst*8, RD_E = primitive_type*8 (~)
         | pipe_dispatch_prep 0, ctpr3
-        | pipe_bypass_none 1
+        | pipe_bypass_some 1, RA_E
         | pipe_fetch 2
         | pipe_dispatch_load 3
-        | shld      5, RD_E, 0x2c, T1
+        | shld      5, RD_E, 0x2c, RESULT_E
         | --
         | pipe_extract 0, 1, 2, 3, 4
-        | xord      5, T1, -1, T1
+        | xord      5, RESULT_E, -1, RESULT_E
         | --
         | pipe_scale 1, 2, 3, 4
-        | std       5, BASE, RA_E, T1
-        | --
+        | std       5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
         | --
         break;
