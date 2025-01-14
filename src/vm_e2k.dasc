@@ -6666,9 +6666,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_TSETS:
         | // ins_ABC  RA_E = src*8, RB_E = table*8, RC_E = str_const*8 (~)
         | pipe_dispatch_prep 0, ctpr3
-        | pipe_bypass_none 1
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 1, RB_E, pred2
         | subd      4, KBASE, RC_E, S0
         | ldd       5, BASE, RB_E, RB
         | disp      ctpr2, ->vmeta_tsets
@@ -6676,7 +6676,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_scale 0, 1, 2, 4
         | ldd       3, S0, -8, RC
         | addd      5, RA_E, 0, RA
-        | wait_load RB, 1
+        | --
+        | pipe_bypass_none 0
+        | pipe_bypass_use 5, RB, pred2
+        | wait_load RB, 2
         | --
         | sard      3, RB, 0x2f, ITYPE
         | getfd     4, RB, (47 << 6), RB
