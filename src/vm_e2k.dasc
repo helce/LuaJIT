@@ -6168,6 +6168,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd 3, 0x0, LJ_TNIL, ITYPE, pred2 // End of hash chain: key not found, nil result.
         | ct        ctpr2, pred2            // >2
         | --
+        | pipe_bypass_some_if 0, RA_E, ~pred1
+        | addd      3, ITYPE, 0, RESULT_E, ~pred1
+        | --
         | std       5, BASE, RA_E, ITYPE, ~pred1
         | pipe_dispatch_if 0, ctpr3, ~pred1
         | --
@@ -6188,8 +6191,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass p4, pred0
         | wait_pred pred0, 0
         | --
-        | std       5, BASE, RA_E, ITYPE, ~pred0
+        | pipe_bypass_some_if 0, RA_E, ~pred0
+        | addd      3, ITYPE, 0, RESULT_E, ~pred0
         | --
+        | std       5, BASE, RA_E, ITYPE, ~pred0
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
         | ct        ctpr1                   // vmeta_tgets(TODO)
