@@ -5082,9 +5082,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_NOT:
         | // ins_AD RA_E = dst*8, RD_E = src*8
         | pipe_dispatch_prep 0, ctpr3
-        | pipe_bypass_none 1
+        | pipe_bypass_some 1, RA_E
         | pipe_fetch 2
         | pipe_dispatch_load 3
+        | pipe_bypass_check 4, RD_E, pred1
         | ldd       5, BASE, RD_E, T0
         | --
         | pipe_scale 0, 1, 2, 3
@@ -5092,6 +5093,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | shld      5, 2, 0x2f, T2
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        | pipe_bypass_use 5, T0, pred1
         | wait_load T0, 2
         | --
         | sard      3, T0, 0x2f, T0
@@ -5099,11 +5101,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | xord      5, T2, -1, T2
         | --
         | cmpbsb    3, T0, LJ_TISTRUECOND, pred0
-        | wait_pred pred0, 0
+        | wait_pred_ct pred0, 0
         | --
+        | addd      1, T1, 0, RESULT_E, pred0
+        | addd      3, T2, 0, RESULT_E, ~pred0
         | std       2, BASE, RA_E, T1, pred0
         | std       5, BASE, RA_E, T2, ~pred0
-        | --
         | pipe_dispatch 0, ctpr3
         | --
         break;
