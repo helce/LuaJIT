@@ -7121,19 +7121,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_pred pred2, 0
         | --
         | pipe_bypass_use 0, RB, pred2
+        | disp      ctpr2, ->vm_enter_pipeline
         | wait_load RB, LATENCY_PRED
         | --
-        |// XXX: DO NOT USE IF INSIDE A BUNDLE!!!
         if (op == BC_CALLM) {
           | sard    0, RB, 0x2f, ITYPE
           | extract_value 1, RB, RB
           | addd    2, RD, S0, RD
-          | disp    ctpr2, ->vm_enter_pipeline // TODO: inline
           | --
         } else {
           | sard    0, RB, 0x2f, ITYPE
           | extract_value 1, RB, RB
-          | disp    ctpr2, ->vm_enter_pipeline // TODO: inline
           | --
         }
         | lddsm     0, RB, LFUNC->pc, RARG1
@@ -7147,7 +7145,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | std       2, T1, -8, PC
         | ct        ctpr2                   // vm_enter_pipeline
-        | wait_load RARG1, 2
+        | wait_load RARG1, LATENCY_PRED_CT + 1
         | --
         break;
 
