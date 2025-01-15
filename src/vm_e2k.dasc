@@ -7798,11 +7798,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | fcmpltdb  3, S1, S0, pred0
         | fcmpltdb  4, S0, S1, pred1        // Invert comparison if step is negative.
+        | wait      pred0, 0, 3
         | --
         | std       2, RA, 0x0, S0
         | std       5, RA, 0x18, S0
-        | wait      pred0, 1, 3
-        | --
         | pass      pred0, p0
         | pass      pred1, p1
         | pass      pred2, p2
