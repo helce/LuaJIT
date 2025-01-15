@@ -7104,12 +7104,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_CALL: case BC_CALLM:
         | // ins_A_C  RA_E = base*8, (RB_E = (nresults+1)*8,) RD_E = (nargs+1)*8 | extra_nargs*8
+        | pipe_bypass_check 4, RA_E, pred2
         | ldd       0, BASE, RA_E, RB
         | addd      1, RA_E, 0x10, RA
         | ldw       2, STACK, MULTRES, S0
         | andd      3, RD_E, 0x7f8, RD
         | disp      ctpr1, ->vmeta_call
-        | wait_load RB, 0
+        | wait_pred pred2, 0
+        | --
+        | pipe_bypass_use 0, RB, pred2
+        | wait_load RB, LATENCY_PRED
         | --
         |// XXX: DO NOT USE IF INSIDE A BUNDLE!!!
         if (op == BC_CALLM) {
