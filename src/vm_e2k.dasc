@@ -7731,18 +7731,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct        ctpr2, ~pred0           // >3, More results expected?
         | --
         | subd      3, BASE, RA, BASE       // base = base - (RA+2)*8
-        | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
+        | disp      ctpr1, ->vm_restart_pipeline_fast
         | --
+        | ldb       0, PC, PC_OP, RARG1     // Load an opcode for next insn.
         | ldd       3, BASE, -16, KBASE
         | wait_load KBASE, 0
         | --
+        | shld      0, RARG1, 3, RARG1
         | extract_value 3, KBASE, KBASE
         | --
+        | ldd       0, DISPATCH, RARG1, RARG1
         | ldd       3, KBASE, LFUNC->pc, KBASE
         | wait_load KBASE, 0
         | --
         | ldd       3, KBASE, PC2PROTO(k), KBASE
-        | ct        ctpr1                   // vm_restart_pipeline
+        | ct        ctpr1                   // vm_restart_pipeline_fast(RARG1)
         |3:                                 // Fill up results with nil.
         | subd      3, BASE, 0x18, S0
         | addd      4, 0x0, LJ_TNIL, S1
