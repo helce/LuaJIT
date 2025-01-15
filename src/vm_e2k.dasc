@@ -7674,67 +7674,67 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_RET0: case BC_RET1:
         | // ins_AD RA = results*8, RD = (nresults+1)*8
-        | addd      3, RA_E, 0, RA
-        | addd      4, RD_E, 0, RD
-        | --
         |1:
-        | ldd       0, BASE, -8, PC
+        | ldd       3, BASE, -8, PC
+        | stw       5, STACK, MULTRES, RD_E // Save (nresults+1)*8.
         | disp      ctpr3, ->vm_return
-        | nop 2
         | --
-        | stw       2, STACK, MULTRES, RD   // Save (nresults+1)*8.
         | disp      ctpr1, <1
+        | wait_load PC, 1
         | --
-        | cmpandedb 1, PC, FRAME_TYPE, pred0   // Check frame type marker.
+        | cmpandedb 3, PC, FRAME_TYPE, pred0   // Check frame type marker.
         | subdsm    4, PC, FRAME_VARG, RB
         | disp      ctpr2, >3
         | --
         | cmpandedbsm 3, RB, FRAME_TYPEP, pred1
         | --
+        | addd      3, RA_E, 0, RA          // Used in vm_return.
+        | addd      4, RD_E, 0, RD          // Used in vm_return and modified later.
         | pass      pred0, p0
         | pass      pred1, p1
         | landp     ~p0, ~p1, p4
         | pass      p4, pred1
+        | wait_pred_ct pred1, 0
         | --
         | ct        ctpr3, pred1            // vm_return(RA, RD)
         | --
         if (op == BC_RET1) {
           | subd    3, BASE, RB, BASE, ~pred0   // Return from vararg function: relocate BASE down and RA up.
-          | addd    4, RA, RB, RA, ~pred0
-          | ldd     5, BASE, RA, RB, pred0
+          | addd    4, RA_E, RB, RA_E, ~pred0
+          | ldd     5, BASE, RA_E, RB, pred0
           | ct      ctpr1, ~pred0           // <1
+          | --
+          | wait_load RB, 1
+          | --
+          | std     5, BASE, -16, RB
           | --
         } else {
           | subd    3, BASE, RB, BASE, ~pred0   // Return from vararg function: relocate BASE down and RA up.
           | ct      ctpr1, ~pred0           // <1
           | --
         }
-        if (op == BC_RET1) {
-          | std     5, BASE, -16, RB
-          | --
-        }
         |2:
-        | ldb       0, PC, PREV_PC_RB, S0
+        | ldb       2, PC, PREV_PC_RB, RB
         | ldb       3, PC, PREV_PC_RA, RA
         | disp      ctpr1, <2
         | --
-        | andd      4, RD, 0x7f8, S1
-        | wait_load S0, 1
+        | andd      0, RD, 0x7f8, T0
         | --
-        | shld      0, S0, 0x3, S0
+        | shrd      0, T0, 3, T0
+        | wait_load RB, 2
         | --
-        | cmpbedb   0, S0, S1, pred0
-        | wait_pred_ct pred0, 0
+        | cmpbedb   0, RB, T0, pred0
+        | shld      1, RB, 3, RB
+        | shld      3, RA, 3, RA
+        | subd      4, BASE, 0x10, T1
+        | wait_pred pred0, 0
         | --
-        | shld      3, RA, 0x3, RA, pred0
-        | subd      4, BASE, 0x10, BASE, pred0
+        | subd      3, T1, RA, BASE, pred0  // base = base - (RA+2)*8
         | ct        ctpr2, ~pred0           // >3, More results expected?
-        | --
-        | subd      3, BASE, RA, BASE       // base = base - (RA+2)*8
-        | disp      ctpr1, ->vm_restart_pipeline_fast
         | --
         | ldb       0, PC, PC_OP, RARG1     // Load an opcode for next insn.
         | ldd       3, BASE, -16, KBASE
+        | disp      ctpr1, ->vm_restart_pipeline_fast
         | wait_load KBASE, 0
         | --
         | shld      0, RARG1, 3, RARG1
@@ -7746,12 +7746,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldd       3, KBASE, PC2PROTO(k), KBASE
         | ct        ctpr1                   // vm_restart_pipeline_fast(RARG1)
+        | --
         |3:                                 // Fill up results with nil.
-        | subd      3, BASE, 0x18, S0
-        | addd      4, 0x0, LJ_TNIL, S1
+        | subd      3, BASE, 0x18, T0
+        | addd      4, 0x0, LJ_TNIL, T1
         | --
         | addd      3, RD, 0x8, RD
-        | std       5, S0, RD, S1
+        | std       5, T0, RD, T1
         | ct        ctpr1                   // <2
         | --
         break;
