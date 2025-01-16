@@ -3891,22 +3891,28 @@ static void build_subroutines(BuildCtx *ctx)
     | // RD_E
     | addd      0, RD_E, 0, RD
     | lddsm     3, BASE, 0x0, S0
-    | cmpbdb    4, RD_E, (1+1)*8, pred0
     | disp      ctpr1, ->fff_fallback
-    | wait_load S0, 0
     | --
-    | sardsm    3, S0, 0x2f, ITYPE
-    | fadddsm   4, S0, U64x(0x43380000,0x00000000), S0
     | disp      ctpr2, ->fff_resb
+    | wait_load S0, 1
     | --
-    | cmpbsbsm  3, ITYPE, LJ_TISNUM, pred1
+    | sardsm    3, S0, 0x2f, T1
+    | fadddsm   4, S0, U64x(0x43380000,0x00000000), S0
     | --
-    | ct        ctpr1, pred0                // fff_fallback(RD)
+    | cmpbdb    3, RD, (1+1)*8, pred0
+    | cmpbsbsm  4, T1, LJ_TISNUM, pred1
     | --
-    | wait_pred_ct pred1, 2
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | adds      3, S0, 0x0, RB, pred1
-    | ct        ctpr1, ~pred1               // fff_fallback(RD)
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
+    | --
+    | wait      S0, 3 + LATENCY_PRED_CT, 4 + 2
+    | --
+    | adds      3, S0, 0x0, RB
     | --
     |.endmacro
     |
