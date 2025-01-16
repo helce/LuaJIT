@@ -7613,8 +7613,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_RET:
         | // ins_AD RA_E = results*8, RD_E = (nresults+1)*8
-        | addd      0, RA_E, 0, RA
-        | addd      1, RD_E, 0, RD
         |1:
         | stw       2, STACK, MULTRES, RD_E // Save (nresults+1)*8.
         | ldd       5, BASE, -8, PC
@@ -7627,6 +7625,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | cmpandedbsm 3, RB, FRAME_TYPEP, pred1
         | --
+        | addd      0, RA_E, 0, RA          // Used in vm_return and BC_RET_Z.
+        | addd      1, RD_E, 0, RD          // Used in vm_return and BC_RET_Z.
         | pass      pred0, p0
         | pass      pred1, p1
         | landp     ~p0, ~p1, p4
@@ -7636,7 +7636,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct        ctpr3, pred1            // vm_return(RA, RD)
         | --
         | subd      3, BASE, RB, BASE, ~pred0 // Return from vararg function: relocate BASE down and RA up.
-        | addd      4, RA, RB, RA, ~pred0
+        | addd      4, RA_E, RB, RA_E, ~pred0
         | ct        ctpr1, ~pred0           // <1
         | --
         |->BC_RET_Z:
@@ -7656,6 +7656,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | shld      0, T2, 0x3, T2
         | shld      3, T3, 0x3, T3
         | ct        ctpr1, pred0            // >3
+        | --
         |2:                                 // Move results down.
         | ldd       3, KBASE, RA, RB
         | subd      4, RD, 0x8, RD
@@ -7666,6 +7667,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd      4, KBASE, 0x8, KBASE
         | std       5, KBASE, -16, RB
         | ct        ctpr2, ~pred0           // <2
+        | --
         |3:
         | cmpbedb   0, T2, T1, pred0
         | disp      ctpr2, >4
@@ -7675,18 +7677,22 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct        ctpr2, ~pred0           // >4, More results expected?
         | --
         | subd      3, BASE, 0x10, BASE     // base = base - (RA+2)*8
-        | disp      ctpr3, ->vm_restart_pipeline
+        | disp      ctpr3, ->vm_restart_pipeline_fast
         | --
+        | ldb       0, PC, PC_OP, RARG1     // Load an opcode for next insn for fast restart.
         | ldd       3, BASE, -16, KBASE
         | wait_load KBASE, 0
         | --
+        | shld      0, RARG1, 3, RARG1
         | extract_value 3, KBASE, KBASE
         | --
+        | ldd       0, DISPATCH, RARG1, RARG1
         | ldd       3, KBASE, LFUNC->pc, KBASE
         | wait_load KBASE, 0
         | --
+        | setwd_pipe
         | ldd       5, KBASE, PC2PROTO(k), KBASE
-        | ct        ctpr3                   // vm_restart_pipeline
+        | ct        ctpr3                   // vm_restart_pipeline_fast(RARG1)
         | --
         |4:                                 // Fill up results with nil.
         | addd      0, T1, 0x8, T1
