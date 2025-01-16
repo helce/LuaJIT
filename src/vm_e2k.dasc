@@ -3193,24 +3193,28 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |
     |->ff_math_sqrt:
-    | ldd 3, BASE, 0x0, CARG1
-    | disp ctpr1, ->fff_fallback
-    | nop 2
+    | ldd       3, BASE, 0x0, T0
+    | disp      ctpr1, ->fff_fallback
+    | wait_load T0, 0
     | --
-    | sard 3, CARG1, 0x2f, ITYPE
-    | fsqrtid 5, CARG1, S1
+    | sard      3, T0, 0x2f, T1
+    | fsqrtid   5, T0, T2
     | --
-    | cmpbdb 3, RD, (1+1)*8, pred0
-    | cmpbsb 4, ITYPE, LJ_TISNUM, pred1
+    | cmpbdb    3, RD, (1+1)*8, pred0
+    | cmpbsb    4, T1, LJ_TISNUM, pred1
     | --
-    | pass pred0, p0
-    | pass pred1, p1
-    | landp ~p0, p1, p4
-    | pass p4, pred0
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | ct ctpr1, ~pred0
+    | ct        ctpr1, ~pred0
     | --
-    | fsqrttd 5, CARG1, S1, S0
+    | wait      T2, 3 + LATENCY_PRED_CT, 16
+    | --
+    | fsqrttd   5, T0, T2, S0
+    | wait      S0, 3, 14 + 2
     | --
     | // fallthrough
     |
