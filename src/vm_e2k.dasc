@@ -175,8 +175,10 @@
 |.endmacro
 |
 |.macro wait_impl, n, latency
-|.if n + 1 >= latency
+|.if n >= latency
 | // nop 0
+|.elif n + 1 >= latency
+| nop
 |.elif n + 2 >= latency
 | nop 1
 |.elif n + 3 >= latency
@@ -3318,8 +3320,7 @@ static void build_subroutines(BuildCtx *ctx)
     | disp      ctpr2, ->fff_fallback
     | --
     | disp      ctpr1, extern log
-    | --
-    | wait_load T1, 2
+    | wait_load T1, 1
     | --
     | addd      0, T1, 0, CARG1
     | sard      3, T1, 0x2f, ITYPE
@@ -5851,8 +5852,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ldbsm     3, T5, GCOBJ->gch.marked, T3
         | subs      4, T4, LJ_TISGCV, T4
         | disp      ctpr1, extern lj_gc_barrieruv
-        | --
-        | wait_load T3, 2
+        | wait_load T3, 1
         | --
         | cmpbesb   3, T4, LJ_TNUMX - LJ_TISGCV, pred0
         | cmpandedbsm 4, T3, LJ_GC_WHITES, pred1
