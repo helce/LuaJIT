@@ -3228,42 +3228,50 @@ static void build_subroutines(BuildCtx *ctx)
     |->fff_res:
     | // RD = (nargs+1)*8
     | cmpandedb 0, PC, FRAME_TYPE, pred0
-    | stw       5, STACK, MULTRES, RD
+    | ldbsm     2, PC, PC_OP, RARG1
+    | ldbsm     3, PC, PREV_PC_RA, RA
+    | ldbsm     5, PC, PREV_PC_RB, RB
     | disp      ctpr1, ->vm_return
     | --
-    | addd      4, 0x0, LJ_TNIL, S1
-    | disp      ctpr2, >2
+    | stw       5, STACK, MULTRES, RD
+    | disp      ctpr2, >1
     | --
-    | ldb       3, PC, PREV_PC_RB, RB, pred0
+    | disp      ctpr3, ->vm_restart_pipeline_fast
+    | wait_load RARG1, 2
     | --
-    | ldb       3, PC, PREV_PC_RA, RA, pred0
-    | subd      4, 0x0, 0x10, RA, ~pred0    // Results start at BASE+RA = BASE-16
-    | wait_load RB, 1
+    | shld      0, RARG1, 3, RARG1, pred0
+    | shld      3, RB, 0x3, RB, pred0
+    | subd      5, 0x0, 0x10, RA, ~pred0    // Results start at BASE+RA = BASE-16
     | --
-    | shld      4, RB, 0x3, RB, pred0
-    | disp      ctpr3, >1
-    | --
+    | ldd       0, DISPATCH, RARG1, RARG1, pred0
     | cmpbedbsm 3, RB, RD, pred1            // More results expected?
-    | ct        ctpr1, ~pred0               // vm_return(RA, RD), Non-standard return case.
-    | wait_pred_ct pred1, 0
     | --
-    | shld      3, RA, 0x3, T5
-    | ct        ctpr2, pred1                // >2
+    | ct        ctpr1, ~pred0               // vm_return(RA, RD), Non-standard return case.
+    | wait_pred_ct pred1, 1
+    | --
+    | addd      3, 0, LJ_TNIL, T1
+    | shld      4, RA, 0x3, T2
+    | subd      5, BASE, 0x10, BASE, pred1
+    | ct        ctpr2, ~pred1               // >1
+    | --
+    | setwd_pipe
+    | subd      3, BASE, T2, BASE           // base = base - (RA+2)*8
+    | ct        ctpr3                       // vm_restart_pipeline_fast(RARG1)
+    | --
     |1:                                     // Fill up results with nil.
-    | subd      3, RD, 0x18, S0
+    | subd      3, RD, 0x18, T0
     | addd      4, RD, 0x8, RD
     | --
     | cmpbedb   3, RB, RD, pred1
-    | std       5, BASE, S0, S1
+    | std       5, BASE, T0, T1
     | wait_pred_ct pred1, 0
     | --
-    | ct        ctpr3, ~pred1               // <1
-    |2:
-    | subd      3, BASE, 0x10, BASE
-    | disp      ctpr1, ->vm_restart_pipeline    // TODO: opmitize
+    | subd      3, BASE, 0x10, BASE, pred1
+    | ct        ctpr2, ~pred1               // <1
     | --
-    | subd      3, BASE, T5, BASE           // base = base - (RA+2)*8
-    | ct        ctpr1                       // vm_restart_pipeline
+    | setwd_pipe
+    | subd      3, BASE, T2, BASE           // base = base - (RA+2)*8
+    | ct        ctpr3                       // vm_restart_pipeline_fast(RARG1)
     | --
     |
     |.macro math_round, func
