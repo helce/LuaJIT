@@ -3286,6 +3286,7 @@ static void build_subroutines(BuildCtx *ctx)
     | disp      ctpr2, ->fff_fallback
     | --
     | disp      ctpr1, ->vm_ .. func
+    | wait_load T1, 1
     | --
     | addd      0, T1, 0, CARG1
     | sard      3, T1, 0x2f, ITYPE
