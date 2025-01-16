@@ -3163,16 +3163,19 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->ff_math_abs:
     | // RD_E = (nargs+1)*8
+    | lddsm     0, BASE, -8, T0
+    | addd      1, RD_E, 0, RD
     | ldd       3, BASE, 0x0, RB
     | disp      ctpr1, ->fff_fallback
-    | wait_load RB, 0
     | --
-    | addd      0, RD_E, 0, RD
-    | sard      3, RB, 0x2f, ITYPE
+    | disp      ctpr2, ->fff_res
+    | wait_load RB, 1
+    | --
+    | sard      3, RB, 0x2f, T1
     | shld      4, RB, 0x1, RB
     | --
-    | cmpbdb    3, RD_E, (1+1)*8, pred0
-    | cmpbsb    4, ITYPE, LJ_TISNUM, pred1
+    | cmpbdb    3, RD, (1+1)*8, pred0
+    | cmpbsb    4, T1, LJ_TISNUM, pred1
     | shrd      5, RB, 0x1, RB
     | --
     | pass      pred0, p0
@@ -3183,13 +3186,10 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
-    | ldd       0, BASE, -8, PC
-    | disp      ctpr1, ->fff_res
-    | wait_load PC, 0
-    | --
+    | addd      0, T0, 0, PC
     | addd      3, 0x0, (1+1)*8, RD
     | std       5, BASE, -16, RB
-    | ct        ctpr1                       // fff_res(RD)
+    | ct        ctpr2                       // fff_res(RD)
     | --
     |
     |->ff_math_sqrt:
