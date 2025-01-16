@@ -355,8 +355,9 @@ int dasm_encode(Dst_DECL, void *buffer)
           case DASM_STOP: case DASM_SECTION: goto stop;
           case DASM_ESC: *cp++ = *p++; break;
           case DASM_REL_EXT:
-            n = DASM_EXTERN(Dst, (unsigned char *)cp, (ins & 2047), 1);
-            goto patchrel;
+            int info = ((ins & 0xff000) >> 12);
+            n = DASM_EXTERN(Dst, (unsigned char *)cp, (ins & 2047), info);
+            break;
           case DASM_REL_LG:
             CK(n >= 0, UNDEF_LG);
           case DASM_REL_PC:
