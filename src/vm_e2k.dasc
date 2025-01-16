@@ -6549,22 +6549,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | cmpesb    3, ITYPE, LJ_TTAB, pred0
         | cmpbdbsm  4, T2, T1, pred1
+        | lddsm     5, T3, RC_E, RESULT_E   // Get array slot.
         | --
-        | ldbsm     0, T4, TAB->nomm, T5
+        | ldbsm     3, T4, TAB->nomm, T5    // FIXME: ~8 cycles penalty if T4 is zero
         | pass      pred0, p0
         | pass      pred1, p1
         | landp     p0, p1, p4
         | pass      p4, pred0
         | wait_pred_ct pred0, 0
         | --
-        | addd      3, RC_E, T3, RC_E, pred0
         | ct        ctpr1, ~pred0           // vmeta_tgetb(TODO)
         | --
-        | // Get array slot.
-        | ldd       3, RC_E, 0x0, ITYPE
+        | wait_load T5, LATENCY_PRED_CT
         | --
         | cmpedbsm  0, T4, 0x0, pred1       // Check for __index if table value is nil.
-        | cmpedb    3, ITYPE, LJ_TNIL, pred0
+        | cmpedb    3, RESULT_E, LJ_TNIL, pred0
         | cmpandedbsm 4, T5, 1<<MM_index, pred2
         | --
         | pass      pred0, p0
@@ -6576,9 +6575,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_pred pred0, 0
         | --
         | pipe_bypass_some_if 0, RA_E, ~pred0
-        | addd      5, ITYPE, 0, RESULT_E, ~pred0
         | --
-        | std       5, BASE, RA_E, ITYPE, ~pred0
+        | std       5, BASE, RA_E, RESULT_E, ~pred0
         | pipe_dispatch_if 0, ctpr3, ~pred0
         | --
         | ct        ctpr1                   // vmeta_tgetb, 'no __index' flag NOT set: check.
