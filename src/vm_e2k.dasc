@@ -6551,23 +6551,24 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | cmpbdbsm  4, T2, T1, pred1
         | lddsm     5, T3, RC_E, RESULT_E   // Get array slot.
         | --
-        | ldbsm     3, T4, TAB->nomm, T5    // FIXME: ~8 cycles penalty if T4 is zero
+        | ldbsm     3, T4, TAB->nomm, T5
+        | cmpedbsm  4, T4, 0, pred3         // Check for __index if table value is nil.
         | pass      pred0, p0
         | pass      pred1, p1
         | landp     p0, p1, p4
         | pass      p4, pred0
         | wait_pred_ct pred0, 0
         | --
+        | addd      3, 0, 0, T5, pred3      // Break RAW dependency on load, saves ~8 cycle penalty.
         | ct        ctpr1, ~pred0           // vmeta_tgetb(TODO)
         | --
         | wait_load T5, LATENCY_PRED_CT
         | --
-        | cmpedbsm  0, T4, 0x0, pred1       // Check for __index if table value is nil.
         | cmpedb    3, RESULT_E, LJ_TNIL, pred0
         | cmpandedbsm 4, T5, 1<<MM_index, pred2
         | --
         | pass      pred0, p0
-        | pass      pred1, p1
+        | pass      pred3, p1
         | pass      pred2, p2
         | landp     p0, ~p1, p4
         | landp     p4, p2, p5
