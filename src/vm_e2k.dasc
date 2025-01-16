@@ -1581,122 +1581,105 @@ static void build_subroutines(BuildCtx *ctx)
     |//-----------------------------------------------------------------------
     |
     |->vmeta_tsets:
-    | // RA, RB, RC
-    | setwd_call
-    | ldb       0, PC, PREV_PC_OP, S0
-    | addd      1, 0x0, LJ_TSTR, ITYPE
-    | ldbsm     2, PC, PREV_PC_RB, T1       // Reload TValue *t from RB.
-    | addd      3, 0x0, LJ_TTAB, T2
-    | disp      ctpr1, >1
+    | // RA, RB = GCtab *, RC = GCstr *
+    | ldd       0, STACK, SAVE_L, RARG1
+    | cmpedb    1, OP_E, BC_GSET << 3, pred0
+    | addd      2, 0, LJ_TSTR, T1
+    | addd      3, 0, LJ_TTAB, T2
+    | addd      4, BASE, RB_E, RARG2        // TValue *t
+    | addd      5, STACK, STACK_TMP, RARG3
+    | disp      ctpr2, >1
     | --
-    | shld      0, ITYPE, 0x2f, ITYPE
-    | shld      1, T2, 0x2f, CARG2
+    | shld      0, T1, 0x2f, T1
+    | shld      3, T2, 0x2f, T2
+    | disp      ctpr1, extern lj_meta_tset
     | --
-    | ord       0, RC, ITYPE, S1            // STR:RC = GCstr *
-    | addd      1, STACK, STACK_TMP, CARG3
-    | wait_load S0, 2
+    | ord       0, RC, T1, T1               // STR:RC = GCstr *
+    | ord       3, T2, RB, RA, pred0        // RB = GCtab *
+    | addd      4, DISPATCH, DISPATCH_GL(tmptv), RARG2, pred0 // Store fn->l.env in g->tmptv
     | --
-    | cmpedb    0, S0, BC_GSET, pred0
-    | shld      1, T1, 0x3, T1
-    | std       2, STACK, STACK_TMP, S1
-    | wait_pred pred0, 0
-    | --
-    | addd      0, BASE, T1, CARG2, ~pred0
-    | ord       1, CARG2, RB, RA, pred0        // RB = GCtab *
-    | addd      2, DISPATCH, DISPATCH_GL(tmptv), CARG2, pred0 // Store fn->l.env in g->tmptv
-    | --
-    | std       2, CARG2, 0x0, RA, pred0
-    | ct        ctpr1                       // >1
+    | std       2, STACK, STACK_TMP, T1
+    | std       5, RARG2, 0x0, RA, pred0
+    | ct        ctpr2                       // >1
     | --
     |
     |->vmeta_tsetb:
-    | setwd_call
-    | ldb       0, PC, PREV_PC_RC, S0
-    | ldb       2, PC, PREV_PC_RB, RB       // Reload TValue *t from RB.
-    | disp      ctpr1, >1
-    | wait_load S0, 0
+    | ldd       0, STACK, SAVE_L, RARG1
+    | sard      1, RC_E, 3, T0
+    | disp      ctpr2, >1
     | --
-    | istofd    0, S0, S0
-    | shld      1, RB, 0x3, RB
-    | wait      S0, 0, 2
+    | istofd    0, T0, T0
+    | disp      ctpr1, extern lj_meta_tset
+    | wait      T0, 0, 2 + 2                // extra fp->int penalty
     | --
-    | addd      0, STACK, STACK_TMP, CARG3
-    | addd      1, BASE, RB, CARG2
-    | std       2, STACK, STACK_TMP, S0
-    | ct        ctpr1                       // >1
+    | addd      0, BASE, RB_E, RARG2        // TValue *t
+    | addd      1, STACK, STACK_TMP, RARG3  // TValue *k
+    | std       2, STACK, STACK_TMP, T0
+    | ct        ctpr2                       // >1
     | --
     |
     |->vmeta_tsetv:
-    | setwd_call
-    | ldb       0, PC, PREV_PC_RC, RC       // Reload TValue *k from RC.
-    | ldb       2, PC, PREV_PC_RB, RB       // Reload TValue *t from RB.
-    | wait_load RC, 0
-    | --
-    | shld      0, RC, 0x3, RC
-    | shld      1, RB, 0x3, RB
-    | --
-    | addd      0, BASE, RC, CARG3
-    | addd      1, BASE, RB, CARG2
-    |1:                                     // entry point for vmeta_tsets and vmeta_tsetb
+    | ldd       0, STACK, SAVE_L, RARG1
+    | addd      1, BASE, RB_E, RARG2        // TValue *t
+    | addd      2, BASE, RC_E, RARG3        // TValue *k
     | disp      ctpr1, extern lj_meta_tset
+    | wait_load RARG1, 0
     | --
-    | ldd       0, STACK, SAVE_L, CARG1
+    |1:                                     // entry point for vmeta_tsets and vmeta_tsetb
+    | // (lua_State *L, TValue *o, TValue *k)
+    | // ctpr1 = extern lj_meta_tset
+    | setwd_call
+    | addd      0, DISPATCH_B, 0, S0        // Save dispatch for fast restart.
+    | addd      1, RA_E, 0, S1
     | --
-    | std       2, STACK, SAVE_PC, PC
-    | --
-    | std       2, CARG1, L->base, BASE
-    | addd      0, CARG1, 0x0, RB
-    | call      ctpr1, wbs = 0x8            // lj_meta_tset(lua_State *L, TValue *o, TValue *k)
+    | addd      0, RARG1, 0, CARG1
+    | std       2, RARG1, L->base, BASE
+    | addd      3, RARG2, 0, CARG2
+    | addd      4, RARG3, 0, CARG3
+    | std       5, STACK, SAVE_PC, PC
+    | call      ctpr1, wbs = 0x8            // lj_meta_tset(lua_State *L, TValue *t, TValue *k)
     | --
     | // TValue * (finished) or NULL (metamethod) returned.
-    | cmpedb    0, CRET1, 0x0, pred0
+    | cmpedb    1, CRET1, 0, pred0
+    | lddsm     2, BASE, S1, T0
+    | ldd       3, RARG1, L->base, BASE
     | disp      ctpr1, >2
-    | wait_pred_ct pred0, 0
     | --
-    | ldd       3, RB, L->base, BASE
+    | disp      ctpr2, ->vm_restart_pipeline_fast
+    | wait_pred_ct pred0, 1
+    | --
     | ct        ctpr1, pred0                // >2
     | --
     | // NOBARRIER: lj_meta_tset ensures the table is not black.
-    | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline
-    | ldb       0, PC, PREV_PC_RA, T2
-    | wait_load T2, 0
+    | setwd_pipe
+    | addd      0, S0, 0, RARG1
+    | std       2, CRET1, 0, T0
+    | ct        ctpr2                       // vm_restart_pipeline_fast(RARG1)
     | --
-    | shld      0, T2, 0x3, T2
-    | --
-    | ldd       0, BASE, T2, T3
-    | wait_load T3, 0
-    | --
-    | std       2, CRET1, 0x0, T3
-    | ct        ctpr1                       // vm_restart_pipeline
     |
     |2: // Call __newindex metamethod
     | // BASE = base, L->top = new base, stack = cont/func/t/k/(v)
     | // Copy value to third argument.
-    | ldd       0, RB, L->top, RA
-    | ldb       2, PC, PREV_PC_RA, RC
+    | ldd       0, RARG1, L->top, RA
+    | ldd       2, BASE, S1, T0
     | disp      ctpr1, ->vm_enter_pipeline
     | wait_load RA, 0
     | --
-    | std       2, RA, -24, PC              // [cont|PC]
-    | shld      3, RC, 0x3, RC
-    | --
     | addd      0, RA, FRAME_CONT, PC
-    | ldd       3, BASE, RC, RB
+    | std       2, RA, -24, PC              // [cont|PC]
+    | --
+    | ldd       0, RA, -16, RB              // Guaranteed to be a function here.
+    | subd      1, PC, BASE, PC
+    | std       2, RA, 0x10, T0
     | wait_load RB, 0
     | --
-    | subd      0, PC, BASE, PC
-    | std       2, RA, 0x10, RB
-    | --
-    | ldd       3, RA, -16, RB              // Guaranteed to be a function here.
-    | addd      4, 0x0, (3+1)*8, RD         // 3 args for func (t, k, v)
-    | wait_load RB, 0
-    | --
-    | extract_value 3, RB, RB
-    | addd      4, RA, 0x0, BASE
+    | extract_value 0, RB, RB
+    | addd      1, RA, 0x0, BASE
+    | addd      2, 0x0, (3+1)*8, RD         // 3 args for func (t, k, v)
     | --
     | // BASE = new base, RB = LFUNC, RD = (nargs+1)*8, PC = caller PC
-    | ldd       2, RB, LFUNC->pc, RARG1
-    | std       5, BASE, -8, PC
+    | ldd       0, RB, LFUNC->pc, RARG1
+    | std       2, BASE, -8, PC
     | wait_load RARG1, 0
     | ct        ctpr1                       // vm_enter_pipeline
     | --
@@ -3656,7 +3639,7 @@ static void build_subroutines(BuildCtx *ctx)
     | landp     p0, p1, p4
     | pass      p4, pred0
     | wait_pred_ct pred0, 0
-    | wait      RB, 2, 4 + 2                // extra fp->int pernalty
+    | wait      RB, 2, 4 + 2                // extra fp->int penalty
     | --
     | cmpbesb   3, RB, 255, pred1
     | ct        ctpr3, ~pred0               // fff_fallback(RD), prepared in ffgccheck
