@@ -3219,7 +3219,7 @@ static void build_subroutines(BuildCtx *ctx)
     | // fallthrough
     |
     |->fff_resb:
-    | // RD, S0
+    | // S0
     | ldd       0, BASE, -8, PC
     | wait_load PC, 1
     | wait      S0, 1, 4
@@ -3301,7 +3301,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, CRET1, 0x0, S0
     | disp      ctpr1, ->fff_resb
     | --
-    | ct        ctpr1                       // fff_resb(RD, S0)
+    | ct        ctpr1                       // fff_resb(S0)
     | --
     |.endmacro
     |
@@ -3337,7 +3337,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, CRET1, 0x0, S0
     | disp      ctpr2, ->fff_resb
     | --
-    | ct        ctpr2                       // fff_resb(RD, S0)
+    | ct        ctpr2                       // fff_resb(S0)
     | --
     |
     |.macro math_extern, func
@@ -3370,7 +3370,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, CRET1, 0x0, S0
     | disp      ctpr2, ->fff_resb
     | --
-    | ct        ctpr2                       // fff_resb(RD, S0)
+    | ct        ctpr2                       // fff_resb(S0)
     | --
     |.endmacro
     |
@@ -3411,7 +3411,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      3, CRET1, 0x0, S0
     | disp      ctpr1, ->fff_resb
     | --
-    | ct        ctpr1                       // fff_resb(RD, S0)
+    | ct        ctpr1                       // fff_resb(S0)
     | --
     |.endmacro
     |
@@ -3575,7 +3575,7 @@ static void build_subroutines(BuildCtx *ctx)
     | lddsm     3, S1, -8, S1
     | wait_pred_ct pred0, 1
     | --
-    | ct        ctpr2, ~pred0               /// fff_resb(RD, S0)
+    | ct        ctpr2, ~pred0               // fff_resb(S0)
     | --
     | sard      3, S1, 0x2f, ITYPE
     | --
@@ -3631,7 +3631,7 @@ static void build_subroutines(BuildCtx *ctx)
     | istofd    3, RB, S0
     | ct        ctpr2, pred1                // fff_res(RD), Return no results for empty string.
     | --
-    | ct        ctpr3                       // fff_resb(RD, S0)
+    | ct        ctpr3                       // fff_resb(S0)
     | --
     |
     |->ff_string_char:
@@ -3986,7 +3986,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.ffunc_bit tobit
     | istofd    3, RB, S0
-    | ct        ctpr2                       // fff_resb(RD, S0)
+    | ct        ctpr2                       // fff_resb(S0)
     | --
     |
     |.ffunc_bit bswap
@@ -3996,14 +3996,14 @@ static void build_subroutines(BuildCtx *ctx)
     | pshufb    3, RB, RB, S0, RB
     | --
     | istofd    3, RB, S0
-    | ct        ctpr2                       // fff_resb(RD, S0)
+    | ct        ctpr2                       // fff_resb(S0)
     | --
     |
     |.ffunc_bit bnot
     | xors      3, RB, -1, RB
     | --
     | istofd    3, RB, S0
-    | ct        ctpr2                       // fff_resb(RD, S0)
+    | ct        ctpr2                       // fff_resb(S0)
     | --
     |
     |.macro .ffunc_bit_sh, name, ins
@@ -4042,7 +4042,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ins       3, RB, RA, RB
     | --
     | istofd    3, RB, S0
-    | ct        ctpr2                       // fff_resb(RD, S0)
+    | ct        ctpr2                       // fff_resb(S0)
     | --
     |.endmacro
     |
