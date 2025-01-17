@@ -3917,37 +3917,66 @@ static void build_subroutines(BuildCtx *ctx)
     |.endmacro
     |
     |.macro .ffunc_bit_op, name, ins
-    | .ffunc_bit name
-    | addd      3, RD, 0x0, S1              // Save for fallback.
-    | addd      4, BASE, RD, RD
+    |->ff_bit_..name:
+    | // RD_E
+    | addd      0, 16, 0, RC                // Current agument.
+    | addd      1, RD_E, 0, RD              // Used in fff_fallback.
+    | sard      2, RD_E, 3, T2
+    | lddsm     3, BASE, 0, RA              // Load 1st argument.
+    | lddsm     5, BASE, 8, RB              // Load 2nd argument.
     | disp      ctpr1, ->fff_fallback
     | --
-    | subd      3, RD, 0x10, RD
+    | subd      1, T2, 2, T2                // LSR.lcnt (loop count)
+    | shld      2, 1, 37, T3                // LSR.vlc (loop count valid bit)
+    | disp      ctpr2, ->fff_resb
+    | --
+    | ord       1, T2, T3, T2               // LSR = (vlc | lcnt)
     | disp      ctpr3, >1
+    | wait_load RA, 2
     | --
-    |1:
-    | istofd    3, RB, S0
-    | cmpbedb   4, RD, BASE, pred0
-    | lddsm     5, RD, 0x0, T1
+    | rwd       0, T2, lsr
+    | sardsm    3, RA, 0x2f, T4
+    | fadddsm   4, RA, U64x(0x43380000,0x00000000), RA
+    | // TODO: handle second agument in prologue
+    | --
+    | cmpbedb   0, RD, 0x10, pred2          // Is only 1 argument? RD <= (1+1)*8
+    | cmpbdb    1, RD, 0x10, pred0          // Is 0 arguments? RD < (1+1)*8
+    | cmpbsbsm  3, T4, LJ_TISNUM, pred1
+    | --
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred0
     | wait_pred_ct pred0, 0
-    | wait_load T1, 0
-    | --
-    | sardsm    3, T1, 0x2f, ITYPE
-    | fadddsm   4, T1, U64x(0x43380000,0x00000000), T1
-    | ct        ctpr2, pred0                // fff_resb(RD, S0)
-    | --
-    | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
-    | --
-    | addd      3, S1, 0x0, RD, ~pred0      // Restore for fallback
-    | wait_pred_ct pred0, 1
     | --
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
     | --
-    | adds      3, T1, 0x0, RA
-    | subd      4, RD, 0x8, RD
+    | wait      RA, 3 + LATENCY_PRED_CT, 4 + 2
+    | ct        ctpr3, ~pred2               // >1
     | --
-    | ins       3, RB, RA, RB
-    | ct        ctpr3                       // <1
+    | istofd    3, RA, S0
+    | ct        ctpr2                       // fff_resb(S0)
+    | --
+    |1:
+    | sardsm    3, RB, 0x2f, ITYPE
+    | fadddsm   4, RB, U64x(0x43380000,0x00000000), T2
+    | lddsm     5, BASE, RC, RB
+    | --
+    | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
+    | wait_pred_ct pred0, 0
+    | --
+    | ct        ctpr1, ~pred0               // fff_fallback(RD)
+    | --
+    | wait      T2, 2 + LATENCY_PRED_CT, 4 + 2
+    | --
+    | alcf
+    | alct
+    | ins       3, RA, T2, RA
+    | addd      4, RC, 8, RC
+    | ct        ctpr3, ~loop_end            // <1
+    | --
+    | istofd    3, RA, S0
+    | ct        ctpr2                       // fff_resb(S0)
     | --
     |.endmacro
     |
@@ -4004,6 +4033,7 @@ static void build_subroutines(BuildCtx *ctx)
     | pass      pred2, p1
     | landp     p0, p1, p4
     | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
     | adds      3, T1, 0x0, RB, pred0
     | ands      4, T2, 0xff, RA, pred0
