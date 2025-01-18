@@ -725,6 +725,8 @@ local function check_operand(opnd)
     operand = {t = "LOOP_END", n = 0 }
   elseif opnd == '~loop_end' then
     operand = {t = "NOT_LOOP_END", n = 0 }
+  elseif opnd == '_' then
+    operand = {t = "EMPTY", n = 0 }
   else
     if match(opnd, "^U64x%(.*%)$") then
       local u64 = {}
@@ -799,6 +801,8 @@ local function gen_code_dst(opnd)
     -- 1, 1, 1, reg_num(5)
     value = 0x7
     value = shl(value,5) + dst.n
+  elseif dst.t == "EMPTY" then
+    value = 0xdf
   else
     werror("operand of type: "..dst.t.." unsupported for dst")
   end
