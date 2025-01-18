@@ -5733,7 +5733,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | pipe_extract 0, 1, 2, 4, 5
         | idtofd 3, RESULT_E, RESULT_E
-        | wait RESULT_E, 0, 3
+        | wait RESULT_E, 0, 2 + 2           // extra fp->int penalty
         | --
         | std 5, BASE, RA_E, RESULT_E
         | pipe_dispatch 0, ctpr3
