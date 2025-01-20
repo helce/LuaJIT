@@ -6383,6 +6383,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | ct        ctpr1, ~pred0           // vmeta_tgetv(TODO)
         | --
         | ldd       3, RC, 0x0, ITYPE
+        | ldbsm     5, RC, 64, _            // Prefetch next cache line for sequential access.
         | wait_load ITYPE, 0
         | --
         | cmpedb    3, ITYPE, LJ_TNIL, pred0
@@ -6737,7 +6738,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         | ldw       3, RC, 0x0, S0
         | lddsm     5, BASE, RA, T0
-        | wait_load S0, 0
+        | --
+        | ldbsm     3, RC, 64, _            // Prefetch next cache line for sequential access.
+        | wait_load S0, 1
         | --
         | cmpesb    4, S0, LJ_TNIL, pred0   // Previous value is nil?
         | --
