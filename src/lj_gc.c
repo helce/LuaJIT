@@ -28,6 +28,9 @@
 #include "lj_dispatch.h"
 #include "lj_vm.h"
 #include "lj_vmevent.h"
+#ifdef __e2k__
+#include "e2kintrin.h"
+#endif
 
 #define GCSTEPSIZE	1024u
 #define GCSWEEPMAX	40
@@ -408,6 +411,9 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
   int ow = otherwhite(g);
   GCobj *o;
   while ((o = gcref(*p)) != NULL && lim-- > 0) {
+#ifdef __e2k__
+    __builtin_e2k_prefetch(gcref(o->gch.nextgc), E2K_HINT_T0);
+#endif
     if (o->gch.gct == ~LJ_TTHREAD)  /* Need to sweep open upvalues, too. */
       gc_fullsweep(g, &gco2th(o)->openupval);
     if (((o->gch.marked ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
