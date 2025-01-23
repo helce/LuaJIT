@@ -28,6 +28,9 @@
 #include "lj_dispatch.h"
 #include "lj_vm.h"
 #include "lj_vmevent.h"
+#ifdef __e2k__
+#include "e2kintrin.h"
+#endif
 
 #define GCSTEPSIZE	1024u
 #define GCSWEEPMAX	40
@@ -46,6 +49,14 @@
   { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
 	       "TValue and GC type mismatch"); \
     if (tviswhite(tv)) gc_mark(g, gcV(tv)); }
+
+#ifdef __e2k__
+/* Mark a TValue (if needed). */
+#define gc_marktv_volatile(g, tv) \
+  { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
+	       "TValue and GC type mismatch"); \
+    if (tviswhite_volatile(tv)) gc_mark(g, gcV(tv)); }
+#endif
 
 /* Mark a GCobj (if needed). */
 #define gc_markobj(g, o) \
@@ -203,8 +214,24 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     return 1;
   if (!(weak & LJ_GC_WEAKVAL)) {  /* Mark array part. */
     MSize i, asize = t->asize;
+#ifdef __e2k__
+    for (i = 0; i < asize; i++) {
+      const TValue *tv = arrayslot(t, i);
+
+      // Prefetch next cache line in array.
+      __builtin_e2k_prefetch(((const uint8_t *) tv) + 64, E2K_HINT_T0);
+
+      // Prefetch next iteration pointer.
+      if ((i + 1) < asize && tvisgcv(&tv[1])) {
+        __builtin_e2k_prefetch(gcV(&tv[1]), E2K_HINT_T0);
+      }
+
+      gc_marktv_volatile(g, tv);
+    }
+#else
     for (i = 0; i < asize; i++)
       gc_marktv(g, arrayslot(t, i));
+#endif
   }
   if (t->hmask > 0) {  /* Mark hash part. */
     Node *node = noderef(t->node);
@@ -408,6 +435,9 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
   int ow = otherwhite(g);
   GCobj *o;
   while ((o = gcref(*p)) != NULL && lim-- > 0) {
+#ifdef __e2k__
+    __builtin_e2k_prefetch(gcref(o->gch.nextgc), E2K_HINT_T0);
+#endif
     if (o->gch.gct == ~LJ_TTHREAD)  /* Need to sweep open upvalues, too. */
       gc_fullsweep(g, &gco2th(o)->openupval);
     if (((o->gch.marked ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
