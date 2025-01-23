@@ -50,6 +50,14 @@
 	       "TValue and GC type mismatch"); \
     if (tviswhite(tv)) gc_mark(g, gcV(tv)); }
 
+#ifdef __e2k__
+/* Mark a TValue (if needed). */
+#define gc_marktv_volatile(g, tv) \
+  { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
+	       "TValue and GC type mismatch"); \
+    if (tviswhite_volatile(tv)) gc_mark(g, gcV(tv)); }
+#endif
+
 /* Mark a GCobj (if needed). */
 #define gc_markobj(g, o) \
   { if (iswhite(obj2gco(o))) gc_mark(g, obj2gco(o)); }
@@ -206,8 +214,13 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     return 1;
   if (!(weak & LJ_GC_WEAKVAL)) {  /* Mark array part. */
     MSize i, asize = t->asize;
+#ifdef __e2k__
+    for (i = 0; i < asize; i++)
+      gc_marktv_volatile(g, arrayslot(t, i));
+#else
     for (i = 0; i < asize; i++)
       gc_marktv(g, arrayslot(t, i));
+#endif
   }
   if (t->hmask > 0) {  /* Mark hash part. */
     Node *node = noderef(t->node);
