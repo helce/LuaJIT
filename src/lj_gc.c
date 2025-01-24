@@ -207,6 +207,19 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 #ifdef __e2k__
     for (i = 0; i < asize; i++)
       gc_marktv_volatile(g, arrayslot(t, i));
+    for (i = 0; i < asize; i++) {
+      const TValue *tv = arrayslot(t, i);
+
+      // Prefetch next cache line in array.
+      __builtin_e2k_prefetch(((const uint8_t *) tv) + 64, E2K_HINT_T0);
+
+      // Prefetch next iteration pointer.
+      if ((i + 1) < asize && tvisgcv(&tv[1])) {
+        __builtin_e2k_prefetch(gcV(&tv[1]), E2K_HINT_T0);
+      }
+
+      gc_marktv_volatile(g, tv);
+    }
 #else
     for (i = 0; i < asize; i++)
       gc_marktv(g, arrayslot(t, i));
