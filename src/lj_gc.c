@@ -205,8 +205,6 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   if (!(weak & LJ_GC_WEAKVAL)) {  /* Mark array part. */
     MSize i, asize = t->asize;
 #ifdef __e2k__
-    for (i = 0; i < asize; i++)
-      gc_marktv_volatile(g, arrayslot(t, i));
     for (i = 0; i < asize; i++) {
       const TValue *tv = arrayslot(t, i);
 
