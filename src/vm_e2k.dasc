@@ -5036,41 +5036,63 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_ISEQP: case BC_ISNEP:
         vk = op == BC_ISEQP;
         | // ins_AND RA_E = src*8, RD_E = primitive_type*8 (~), JMP with RD = target
-        | addd      0, PC, 0x4, PC
-        | shrd      1, INSN_B, 0xe, T1      // JMP.RD*4
+        | pipe_dispatch_load 0
+        | pipe_extract_d 1                  // JMP.RD*8
+        | pipe_fetch 2
         | ldd       3, BASE, RA_E, RA
-        | shrd      4, RD_E, 0x3, RD
+        | shrd      5, RD_E, 0x3, RD
         | disp      ctpr1, ->vmeta_equal_cd
         | --
-        | andd      0, T1, 0x3fffc, T1      // extract JMP.RD*4 (18 bits)
-        | subd      1, PC, BCBIAS_J*4, T2
+        | pipe_extract_op 1
+        | sard      0, RD_B, 1, T1          // JMP.RD*4
+        | subd      2, PC, BCBIAS_J*4 - 4, T2
         | xord      3, RD, -1, RD
-        | disp      ctpr2, ->vm_restart_pipeline    // TODO: inline
+        | disp      ctpr2, ->vm_restart_pipeline_fast
         | --
+        | abnf                              // Advance pipeline to JMP insn.
+        | pipe_scale 2, 3, 4, 5
+        | ldb       0, T2, T1, RARG1        // Target branch insn opcode.
+        | addd      1, PC, 0x4, PC
+        | wait_load RA, 2
+        | --
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 5
+        | pipe_bypass_none 1
         | sard      3, RA, 0x2f, RA
         | --
+        | pipe_scale 0, 1, 2, 5
         | cmpesb    3, RA, RD, pred0
         | cmpesb    4, RA, LJ_TCDATA, pred1
         | --
+        | pipe_extract 1, 2, 3, 4, 5
+        | shld      0, RARG1, 3, RARG1
         | pass      pred0, p0
         | pass      pred1, p1
         | landp     ~p0, p1, p4
         | landp     ~p0, ~p1, p5
         | pass      p4, pred2
         | pass      p5, pred1
-        | wait_pred_ct pred2, 0
         | --
         if (vk) {
-          | addd    0, T2, T1, PC, pred0
+          | ldd     0, DISPATCH, RARG1, RARG1
+          | wait_pred_ct pred2, 1
+          | --
           | ct      ctpr1, pred2            // vmeta_equal_cd
+          | --
+          | pipe_dispatch_if 0, ctpr3, ~pred0
           | --
         } else {
-          | addd    0, T2, T1, PC, pred1
+          | ldd     0, DISPATCH, RARG1, RARG1
+          | wait_pred_ct pred2, 1
+          | --
           | ct      ctpr1, pred2            // vmeta_equal_cd
           | --
+          | pipe_dispatch_if 0, ctpr3, ~pred1
+          | --
         }
-        | // TODO: skip jump and continue if not taken
-        | ct        ctpr2                   // vm_restart_pipeline
+        | addd      0, T2, T1, PC
+        | ct        ctpr2                   // vm_restart_pipeline_fast(RARG1)
         | --
         break;
 
