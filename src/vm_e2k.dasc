@@ -4902,59 +4902,53 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_AND RA_E = src*8, RD_E = str_const*8, JMP with RD = target
         | addd      0, PC, 0x4, PC
         | subd      1, PC, BCBIAS_J*4 - 4, T2
-        | shrd      2, INSN_B, 0xe, T1      // JMP.RD*4
+        | pipe_extract_d 2                  // JMP.RD*8
         | ldd       3, BASE, RA_E, RA
         | subd      4, KBASE, RD_E, RD
-        | disp      ctpr1, >3
+        |.if FFI
+        | disp      ctpr1, ->vmeta_equal_cd
+        |.endif
         | --
-        | andd      0, T1, 0x3fffc, T1      // extract JMP.RD*4 (18 bits)
+        | sard      0, RD_B, 1, T1          // JMP.RD*4
         | ldd       3, RD, -8, RD
-        | disp      ctpr2, >2
+        | disp      ctpr2, ->vm_restart_pipeline_fast
         | --
-        | disp      ctpr3, >1
+        | ldb       0, T2, T1, RARG1        // Branch target insn opcode.
+        | disp      ctpr3, ->vm_restart_pipeline    // TODO: inline/optimize
         | wait_load RA, 2
         | --
         | sard      3, RA, 0x2f, ITYPE
         | extract_value 4, RA, RA
         | --
-        | cmpesb    3, ITYPE, LJ_TSTR, pred1
-        | cmpedb    4, RA, RD, pred0
-        | wait_pred_ct pred1, 0
+        | cmpesb    4, ITYPE, LJ_TSTR, pred1
+        | cmpedb    3, RA, RD, pred0
         | --
-        | ct        ctpr1, ~pred1           // >3
+        | shld      0, RARG1, 3, RARG1
+        |.if FFI
+        | cmpesb    3, ITYPE, LJ_TCDATA, pred2
+        | wait_pred_ct pred2, 0
+        |.endif
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | landp     p0, p1, p4
+        | pass      p4, pred0
+        | --
+        | ldd       0, DISPATCH, RARG1, RARG1   // Branch target insn dispatch.
+        |.if FFI
+        | ct        ctpr1, pred2            // vmeta_equal_cd(TODO)
+        |.endif
         | --
         if (vk) {
-          | ct      ctpr2, ~pred0           // >2
-          |1: // EQ: Branch to the target.
-          | addd    0, T2, T1, PC
-          |2: // NE: Fallthrough to next instruction.
-          |.if not FFI
-          |3:
-          |.endif
+          | addd    0, T2, T1, PC, pred0    // Taken branch if equal.
+          | ct      ctpr2, pred0            // vm_restart_pipeline_fast(RARG1)
+          | --
         } else {
-          | ct      ctpr3, pred0            // >1
-          |.if not FFI
-          |3:
-          |.endif
-          |2: // NE: Branch to the target.
-          | addd    0, T2, T1, PC
-          |1: // EQ: Fallthrough to next instruction.
+          | addd    0, T2, T1, PC, ~pred0   // Taken branch if not equal.
+          | ct      ctpr2, ~pred0           // vm_restart_pipeline_fast(RARG1)
+          | --
         }
-        | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline/optimize
+        | ct        ctpr3                   // vm_restart_pipeline
         | --
-        | ct        ctpr1                   // vm_restart_pipeline
-        | --
-        |.if FFI
-        |3:
-        | cmpesb 3, ITYPE, LJ_TCDATA, pred0
-        | disp      ctpr1, ->vmeta_equal_cd
-        | wait_pred_ct pred0, 0
-        | --
-        | ct        ctpr2, ~pred0           // <2
-        | --
-        | ct        ctpr1                   // vmeta_equal_cd(TODO)
-        | --
-        |.endif
         break;
 
     case BC_ISEQN: case BC_ISNEN:
