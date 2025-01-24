@@ -4967,31 +4967,41 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_ISEQN: case BC_ISNEN:
         vk = op == BC_ISEQN;
         | // ins_AD RA_E = src*8, RD_E = num_const*8, JMP with RD = target
-        | addd      0, PC, 0x4, PC
-        | subd      1, PC, BCBIAS_J*4 - 4, T2
-        | pipe_extract_d 2                  // JMP.RD*8
+        | pipe_dispatch_load 0
+        | pipe_extract_d 1                  // JMP.RD*8
+        | pipe_fetch 2
         | ldd       3, BASE, RA_E, RA
+        | subd      4, PC, BCBIAS_J*4 - 4, T2
         | ldd       5, KBASE, RD_E, RD
         |.if FFI
         | disp      ctpr1, ->vmeta_equal_cd
         |.endif
         | --
+        | pipe_scale 1, 2, 3, 4
         | sard      0, RD_B, 1, T1          // JMP.RD*4
         | disp      ctpr2, ->vm_restart_pipeline_fast
         | --
+        | abnf                              // Advance pipeline to next insn (JMP).
         | ldb       0, T2, T1, RARG1        // Branch target insn opcode.
-        | disp      ctpr3, ->vm_restart_pipeline    // TODO: optimize
+        | pipe_extract_op 1
+        | addd      2, PC, 0x4, PC
         | wait_load RD, 2
         | --
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
         | fcmpuoddb 3, RD, RA, pred2
         | fcmpeqdb  4, RD, RA, pred3
         | sard      5, RA, 0x2f, ITYPE
         | --
+        | pipe_dispatch_load 0
         | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
         |.if FFI
         | cmpesb    4, ITYPE, LJ_TCDATA, pred4
         |.endif
+        | wait      pred2, 1, 3
         | --
+        | pipe_scale 1, 2, 3, 4
+        | pipe_bypass_none 5
         | shld      0, RARG1, 3, RARG1
         | pass      pred2, p0
         | pass      pred3, p1
@@ -4999,23 +5009,25 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p4, pred1
         |.if FFI
         | wait_pred_ct pred4, 1
-        |.else
-        | wait_pred_ct pred1, 0
         |.endif
         | --
         | ldd       0, DISPATCH, RARG1, RARG1
         |.if FFI
         | ct        ctpr1, pred4            // vmeta_equal_cd
+        |.else
+        | wait_pred_ct pred1, 1
         |.endif
         | --
         if (vk) {
-          | ct      ctpr3, ~pred1           // vm_restart_pipeline
+          | pipe_extract 1, 2, 3, 4, 5
+          | pipe_dispatch_if 0, ctpr3, ~pred1
           | --
         } else {
-          | ct      ctpr3, pred1            // vm_restart_pipeline
+          | pipe_extract 1, 2, 3, 4, 5
+          | pipe_dispatch_if 0, ctpr3, pred1
           | --
         }
-        | addd      0, T2, T1, PC           // Taken branch if not equal.
+        | addd      0, T2, T1, PC
         | wait_load RARG1, 2
         | ct        ctpr2                   // vm_restart_pipeline_fast(RARG1)
         | --
