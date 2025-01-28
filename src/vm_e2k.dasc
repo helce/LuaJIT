@@ -4900,165 +4900,199 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_ISEQS: case BC_ISNES:
         vk = op == BC_ISEQS;
         | // ins_AND RA_E = src*8, RD_E = str_const*8, JMP with RD = target
-        | addd      0, PC, 0x4, PC
+        | pipe_dispatch_load 0
+        | pipe_fetch 5
         | subd      1, PC, BCBIAS_J*4 - 4, T2
-        | shrd      2, INSN_B, 0xe, T1      // JMP.RD*4
+        | pipe_extract_d 2                  // JMP.RD*8
         | ldd       3, BASE, RA_E, RA
         | subd      4, KBASE, RD_E, RD
-        | disp      ctpr1, >3
+        |.if FFI
+        | disp      ctpr1, ->vmeta_equal_cd
+        |.endif
         | --
-        | andd      0, T1, 0x3fffc, T1      // extract JMP.RD*4 (18 bits)
-        | ldd       3, RD, -8, RD
-        | disp      ctpr2, >2
+        | pipe_extract_op 1
+        | sard      0, RD_B, 1, T1          // JMP.RD*4
+        | ldd       5, RD, -8, RD
+        | disp      ctpr2, ->vm_restart_pipeline_fast
         | --
-        | disp      ctpr3, >1
+        | abnf                              // Advance pipeline to JMP insn.
+        | pipe_scale 2, 3, 4, 5
+        | ldb       0, T2, T1, RARG1        // Branch target insn opcode.
+        | addd      1, PC, 0x4, PC
         | wait_load RA, 2
         | --
-        | sard      3, RA, 0x2f, ITYPE
-        | extract_value 4, RA, RA
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | sard      4, RA, 0x2f, ITYPE
+        | extract_value 5, RA, RA
         | --
-        | cmpesb    3, ITYPE, LJ_TSTR, pred1
-        | cmpedb    4, RA, RD, pred0
-        | wait_pred_ct pred1, 0
+        | pipe_scale 0, 1, 2, 5
+        | cmpedb    3, RA, RD, pred0
+        | cmpesb    4, ITYPE, LJ_TSTR, pred1
         | --
-        | ct        ctpr1, ~pred1           // >3
+        | pipe_bypass_none 1
+        | shld      0, RARG1, 3, RARG1
+        |.if FFI
+        | cmpesb    3, ITYPE, LJ_TCDATA, pred2
+        | wait_pred_ct pred2, 0
+        |.endif
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | landp     p0, p1, p4
+        | pass      p4, pred0
+        | --
+        | ldd       0, DISPATCH, RARG1, RARG1   // Branch target insn dispatch.
+        |.if FFI
+        | ct        ctpr1, pred2            // vmeta_equal_cd(TODO)
+        |.else
+        | wait_pred_ct pred0, 1
+        |.endif
         | --
         if (vk) {
-          | ct      ctpr2, ~pred0           // >2
-          |1: // EQ: Branch to the target.
-          | addd    0, T2, T1, PC
-          |2: // NE: Fallthrough to next instruction.
-          |.if not FFI
-          |3:
-          |.endif
+          | pipe_extract 1, 2, 3, 4, 5
+          | pipe_dispatch_if 0, ctpr3, ~pred0
+          | --
         } else {
-          | ct      ctpr3, pred0            // >1
-          |.if not FFI
-          |3:
-          |.endif
-          |2: // NE: Branch to the target.
-          | addd    0, T2, T1, PC
-          |1: // EQ: Fallthrough to next instruction.
+          | pipe_extract 1, 2, 3, 4, 5
+          | pipe_dispatch_if 0, ctpr3, pred0
+          | --
         }
-        | disp      ctpr1, ->vm_restart_pipeline    // TODO: inline/optimize
+        | addd      0, T2, T1, PC
+        | wait_load RARG1, 2
+        | ct        ctpr2                   // vm_restart_pipeline_fast(RARG1)
         | --
-        | ct        ctpr1                   // vm_restart_pipeline
-        | --
-        |.if FFI
-        |3:
-        | cmpesb 3, ITYPE, LJ_TCDATA, pred0
-        | disp      ctpr1, ->vmeta_equal_cd
-        | wait_pred_ct pred0, 0
-        | --
-        | ct        ctpr2, ~pred0           // <2
-        | --
-        | ct        ctpr1                   // vmeta_equal_cd(TODO)
-        | --
-        |.endif
         break;
 
     case BC_ISEQN: case BC_ISNEN:
         vk = op == BC_ISEQN;
         | // ins_AD RA_E = src*8, RD_E = num_const*8, JMP with RD = target
-        | addd      0, PC, 0x4, PC
-        | subd      1, PC, BCBIAS_J*4 - 4, T2
-        | shrd      2, INSN_B, 0xe, T1      // JMP.RD*4
+        | pipe_dispatch_load 0
+        | pipe_extract_d 1                  // JMP.RD*8
+        | pipe_fetch 2
         | ldd       3, BASE, RA_E, RA
+        | subd      4, PC, BCBIAS_J*4 - 4, T2
         | ldd       5, KBASE, RD_E, RD
-        | disp      ctpr1, >3
+        |.if FFI
+        | disp      ctpr1, ->vmeta_equal_cd
+        |.endif
         | --
-        | andd      0, T1, 0x3fffc, T1      // extract JMP.RD*4 (18 bits)
-        | disp      ctpr3, >1
+        | pipe_scale 1, 2, 3, 4
+        | sard      0, RD_B, 1, T1          // JMP.RD*4
+        | disp      ctpr2, ->vm_restart_pipeline_fast
         | --
-        | disp      ctpr2, >2
+        | abnf                              // Advance pipeline to next insn (JMP).
+        | ldb       0, T2, T1, RARG1        // Branch target insn opcode.
+        | pipe_extract_op 1
+        | addd      2, PC, 0x4, PC
         | wait_load RD, 2
         | --
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
         | fcmpuoddb 3, RD, RA, pred2
         | fcmpeqdb  4, RD, RA, pred3
         | sard      5, RA, 0x2f, ITYPE
         | --
+        | pipe_dispatch_load 0
         | cmpbsb    3, ITYPE, LJ_TISNUM, pred0
-        | wait_pred_ct pred0, 0
+        |.if FFI
+        | cmpesb    4, ITYPE, LJ_TCDATA, pred4
+        |.endif
+        | wait      pred2, 1, 3
         | --
+        | pipe_scale 1, 2, 3, 4
+        | pipe_bypass_none 5
+        | shld      0, RARG1, 3, RARG1
         | pass      pred2, p0
         | pass      pred3, p1
         | landp     ~p0, p1, p4
         | pass      p4, pred1
-        | ct        ctpr1, ~pred0           // >3
+        |.if FFI
+        | wait_pred_ct pred4, 1
+        |.endif
+        | --
+        | ldd       0, DISPATCH, RARG1, RARG1
+        |.if FFI
+        | ct        ctpr1, pred4            // vmeta_equal_cd
+        |.else
+        | wait_pred_ct pred1, 1
+        |.endif
         | --
         if (vk) {
-          | ct      ctpr2, ~pred1           // >2
-          |1: // EQ: Branch to the target.
-          | addd    0, T2, T1, PC
-          |2: // NE: Fallthrough to next instruction.
-          |.if not FFI
-          |3:
-          |.endif
-        } else {
-          | ct      ctpr3, pred1            // >1
+          | pipe_extract 1, 2, 3, 4, 5
+          | pipe_dispatch_if 0, ctpr3, ~pred1
           | --
-          |.if not FFI
-          |3:
-          |.endif
-          |2: // NE: Branch to the target.
-          | addd    0, T2, T1, PC
-          |1: // EQ: Fallthrough to next instruction.
+        } else {
+          | pipe_extract 1, 2, 3, 4, 5
+          | pipe_dispatch_if 0, ctpr3, pred1
+          | --
         }
-        | disp      ctpr1, ->vm_restart_pipeline    // TODO: optimize
+        | addd      0, T2, T1, PC
+        | wait_load RARG1, 2
+        | ct        ctpr2                   // vm_restart_pipeline_fast(RARG1)
         | --
-        | ct        ctpr1                   // vm_restart_pipeline
-        | --
-        |.if FFI
-        |3:
-        | cmpesb    3, ITYPE, LJ_TCDATA, pred0
-        | disp      ctpr1, ->vmeta_equal_cd
-        | wait_pred_ct pred0, 0
-        | --
-        | ct        ctpr2, ~pred0           // <2
-        | --
-        | ct        ctpr1                   // vmeta_equal_cd
-        | --
-        |.endif
         break;
 
     case BC_ISEQP: case BC_ISNEP:
         vk = op == BC_ISEQP;
         | // ins_AND RA_E = src*8, RD_E = primitive_type*8 (~), JMP with RD = target
-        | addd      0, PC, 0x4, PC
-        | shrd      1, INSN_B, 0xe, T1      // JMP.RD*4
+        | pipe_dispatch_load 0
+        | pipe_extract_d 1                  // JMP.RD*8
+        | pipe_fetch 2
         | ldd       3, BASE, RA_E, RA
-        | shrd      4, RD_E, 0x3, RD
+        | shrd      5, RD_E, 0x3, RD
         | disp      ctpr1, ->vmeta_equal_cd
         | --
-        | andd      0, T1, 0x3fffc, T1      // extract JMP.RD*4 (18 bits)
-        | subd      1, PC, BCBIAS_J*4, T2
+        | pipe_extract_op 1
+        | sard      0, RD_B, 1, T1          // JMP.RD*4
+        | subd      2, PC, BCBIAS_J*4 - 4, T2
         | xord      3, RD, -1, RD
-        | disp      ctpr2, ->vm_restart_pipeline    // TODO: inline
+        | disp      ctpr2, ->vm_restart_pipeline_fast
         | --
+        | abnf                              // Advance pipeline to JMP insn.
+        | pipe_scale 2, 3, 4, 5
+        | ldb       0, T2, T1, RARG1        // Target branch insn opcode.
+        | addd      1, PC, 0x4, PC
+        | wait_load RA, 2
+        | --
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 5
+        | pipe_bypass_none 1
         | sard      3, RA, 0x2f, RA
         | --
+        | pipe_scale 0, 1, 2, 5
         | cmpesb    3, RA, RD, pred0
         | cmpesb    4, RA, LJ_TCDATA, pred1
         | --
+        | pipe_extract 1, 2, 3, 4, 5
+        | shld      0, RARG1, 3, RARG1
         | pass      pred0, p0
         | pass      pred1, p1
         | landp     ~p0, p1, p4
         | landp     ~p0, ~p1, p5
         | pass      p4, pred2
         | pass      p5, pred1
-        | wait_pred_ct pred2, 0
         | --
         if (vk) {
-          | addd    0, T2, T1, PC, pred0
+          | ldd     0, DISPATCH, RARG1, RARG1
+          | wait_pred_ct pred2, 1
+          | --
           | ct      ctpr1, pred2            // vmeta_equal_cd
+          | --
+          | pipe_dispatch_if 0, ctpr3, ~pred0
           | --
         } else {
-          | addd    0, T2, T1, PC, pred1
+          | ldd     0, DISPATCH, RARG1, RARG1
+          | wait_pred_ct pred2, 1
+          | --
           | ct      ctpr1, pred2            // vmeta_equal_cd
           | --
+          | pipe_dispatch_if 0, ctpr3, ~pred1
+          | --
         }
-        | // TODO: skip jump and continue if not taken
-        | ct        ctpr2                   // vm_restart_pipeline
+        | addd      0, T2, T1, PC
+        | ct        ctpr2                   // vm_restart_pipeline_fast(RARG1)
         | --
         break;
 
