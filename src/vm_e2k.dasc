@@ -6434,7 +6434,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | cmpbsb    1, ITYPE, LJ_TISNUM, pred1
         | ldwsm     3, RB, TAB->asize, T2
         | fcmpeqdb  4, RC, S1, pred2        // Convert number to int and back and compare.
-        | ldd       5, RB, TAB->array, T5
+        | lddsm     5, RB, TAB->array, T5
         | --
         | ct        ctpr1, ~pred0           // vmeta_tgetv(TODO)
         | wait_pred_ct pred1, 1
