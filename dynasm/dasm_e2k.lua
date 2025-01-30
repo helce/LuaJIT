@@ -1355,10 +1355,20 @@ local function generate_landp_oper(opc, opnd1, opnd2, opnd3)
   if (pred1.t ~= "LPRED" and pred1.t ~= "LIPRED")
          or (pred2.t ~= "LPRED" and pred2.t ~= "LIPRED")
          or res.t ~= "LPRED" then werror("Incorrect predicate") end
-  if res.n == 4 then pls = 0
-  elseif res.n == 5 then pls = 1
-  elseif res.n == 6 then pls = 2
+  if res.n == 4 then
+    if ((pred1.n > 1) or (pred2.n > 1)) then
+      werror("only @p0 and @p1 accepted for @p4")
+    end
+  elseif res.n == 5 then
+    if ((pred1.n > 4) or (pred2.n > 4)) then
+      werror("only @p0, @p1, @p2, @p3 and @p4 accepted for @p5")
+    end
+  elseif res.n == 6 then
+    if ((pred1.n > 5) or (pred2.n > 5)) then
+      werror("only @p0, @p1, @p2, @p3, @p4 and @p5 accepted for @p6")
+    end
   else werror("Incorrect local predicate") end
+  pls = res.n - 4
   if wide_instr["PLS"..pls] ~= nil then
     code = wide_instr["PLS"..pls].value
     if band(code, 0xffff) ~= 0 then werror("PLS already busy") end
