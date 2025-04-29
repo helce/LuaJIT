@@ -1772,7 +1772,6 @@ static void build_subroutines(BuildCtx *ctx)
     | // 0/1 or TValue * (metamethod) returned.
     | cmpbedb   0, CRET1, 0x1, pred0
     | cmpbdb    1, CRET1, 0x1, pred1
-    | addd      2, S1, 0x4, S1
     | ldd       3, RB, L->base, BASE
     | disp      ctpr2, ->vmeta_binop
     | wait      ctpr2, 0, 5
@@ -6552,7 +6551,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // TODO: convert to standard calling convention
         | shld      3, S1, 0x5, S0
         | shld      4, S1, 0x3, S1
-        | disp      ctpr1, <1
+        | disp      ctpr1, >1
         | --
         | subd      3, S0, S1, S1           // idx*32 - idx*8 = idx * #NODE (24)
         | disp      ctpr2, >2
