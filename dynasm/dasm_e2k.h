@@ -336,7 +336,7 @@ int dasm_encode(Dst_DECL, void *buffer)
     dasm_Section *sec = D->sections + secnum;
     int *b = sec->buf;
     int *endb = sec->rbuf + sec->pos;
-    int ofs, ofs_e, ofs_s = 0;
+    int ofs, ofs_e, ofs_s, info = 0;
 #if defined(__LCC__) && (__LCC__ >= 127)
     int range = 0;
 #endif
@@ -351,7 +351,7 @@ int dasm_encode(Dst_DECL, void *buffer)
           case DASM_STOP: case DASM_SECTION: goto stop;
           case DASM_ESC: *cp++ = *p++; break;
           case DASM_REL_EXT:
-            int info = ((ins & 0xff000) >> 12);
+            info = ((ins & 0xff000) >> 12);
             n = DASM_EXTERN(Dst, (unsigned char *)cp, (ins & 2047), info);
             break;
           case DASM_REL_LG:
