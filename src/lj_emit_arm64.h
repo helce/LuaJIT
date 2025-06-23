@@ -30,15 +30,15 @@ static uint32_t emit_isk12(int64_t n)
   uint64_t k = n < 0 ? ~(uint64_t)n+1u : (uint64_t)n;
   uint32_t m = n < 0 ? 0x40000000 : 0;
   if (k < 0x1000) {
-    return A64I_K12|m|A64F_U12(k);
+    return (uint32_t)(A64I_K12|m|A64F_U12(k));
   } else if ((k & 0xfff000) == k) {
-    return A64I_K12|m|0x400000|A64F_U12(k>>12);
+    return (uint32_t)(A64I_K12|m|0x400000|A64F_U12(k>>12));
   }
   return 0;
 }
 
-#define emit_clz64(n)	__builtin_clzll(n)
-#define emit_ctz64(n)	__builtin_ctzll(n)
+#define emit_clz64(n)	(lj_fls64(n)^63)
+#define emit_ctz64(n)	lj_ffs64(n)
 
 /* Encode constant in K13 format for logical data processing instructions. */
 static uint32_t emit_isk13(uint64_t n, int is64)
@@ -124,9 +124,9 @@ static LJ_AINLINE uint32_t emit_lso_pair_candidate(A64Ins ai, int ofs, int sc)
   }
 }
 
-static void emit_lso(ASMState *as, A64Ins ai, Reg rd, Reg rn, int64_t ofs)
+static void emit_lso(ASMState *as, A64Ins ai, Reg rd, Reg rn, int64_t ofs64)
 {
-  int ot = emit_checkofs(ai, ofs), sc = (ai >> 30) & 3;
+  int ot = emit_checkofs(ai, ofs64), sc = (ai >> 30) & 3, ofs = (int)ofs64;
   lj_assertA(ot, "load/store offset %d out of range", ofs);
   /* Combine LDR/STR pairs to LDP/STP. */
   if ((sc == 2 || sc == 3) &&
