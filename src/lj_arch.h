@@ -546,6 +546,11 @@
 #error "Only n64 ABI supported for MIPS64"
 #undef LJ_TARGET_MIPS
 #endif
+#elif LJ_TARGET_E2K
+#if defined(__ptr32__)
+#error "No support for ptr32 model on E2K"
+#undef LJ_TARGET_E2K
+#endif
 #endif
 #endif
 
