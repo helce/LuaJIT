@@ -1,6 +1,6 @@
 /*
 ** Common definitions for the JIT compiler.
-** Copyright (C) 2005-2023 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2025 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #ifndef _LJ_JIT_H
@@ -105,7 +105,7 @@
 /* -- JIT engine parameters ----------------------------------------------- */
 
 #if LJ_TARGET_WINDOWS || LJ_64
-/* See: http://blogs.msdn.com/oldnewthing/archive/2003/10/08/55239.aspx */
+/* See: https://devblogs.microsoft.com/oldnewthing/20031008-00/?p=42223 */
 #define JIT_P_sizemcode_DEFAULT		64
 #else
 /* Could go as low as 4K, but the mmap() overhead would be rather high. */
@@ -460,8 +460,8 @@ typedef struct jit_State {
 #endif
 
   IRIns *irbuf;		/* Temp. IR instruction buffer. Biased with REF_BIAS. */
-  IRRef irtoplim;	/* Upper limit of instuction buffer (biased). */
-  IRRef irbotlim;	/* Lower limit of instuction buffer (biased). */
+  IRRef irtoplim;	/* Upper limit of instruction buffer (biased). */
+  IRRef irbotlim;	/* Lower limit of instruction buffer (biased). */
   IRRef loopref;	/* Last loop reference or ref of final LOOP (or 0). */
 
   MSize sizesnap;	/* Size of temp. snapshot buffer. */

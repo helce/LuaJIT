@@ -1,6 +1,6 @@
 |// Low-level VM code for PowerPC 32 bit or 32on64 bit mode.
 |// Bytecode interpreter, fast functions and helper functions.
-|// Copyright (C) 2005-2023 Mike Pall. See Copyright Notice in luajit.h
+|// Copyright (C) 2005-2025 Mike Pall. See Copyright Notice in luajit.h
 |
 |.arch ppc
 |.section code_op, code_sub
@@ -1735,8 +1735,12 @@ static void build_subroutines(BuildCtx *ctx)
   |//-- Base library: catch errors ----------------------------------------
   |
   |.ffunc pcall
+  |    lwz TMP1, L->maxstack
+  |    add TMP2, BASE, NARGS8:RC
   |  cmplwi NARGS8:RC, 8
   |   lbz TMP3, DISPATCH_GL(hookmask)(DISPATCH)
+  |    cmplw cr1, TMP1, TMP2
+  |  cror 4*cr0+lt, 4*cr0+lt, 4*cr1+lt
   |  blt ->fff_fallback
   |   mr TMP2, BASE
   |   la BASE, 8(BASE)
@@ -1747,14 +1751,19 @@ static void build_subroutines(BuildCtx *ctx)
   |  b ->vm_call_dispatch
   |
   |.ffunc xpcall
+  |     lwz TMP1, L->maxstack
+  |     add TMP2, BASE, NARGS8:RC
   |  cmplwi NARGS8:RC, 16
   |   lwz CARG3, 8(BASE)
+  |     cmplw cr1, TMP1, TMP2
   |.if FPU
   |    lfd FARG2, 8(BASE)
+  |  cror 4*cr0+lt, 4*cr0+lt, 4*cr1+lt
   |    lfd FARG1, 0(BASE)
   |.else
   |    lwz CARG1, 0(BASE)
   |    lwz CARG2, 4(BASE)
+  |  cror 4*cr0+lt, 4*cr0+lt, 4*cr1+lt
   |    lwz CARG4, 12(BASE)
   |.endif
   |  blt ->fff_fallback
@@ -3269,14 +3278,13 @@ static void build_subroutines(BuildCtx *ctx)
   |    stw TMP0, 4(sp)
   |   cmpwi cr1, CARG3, 0
   |  mr TMP2, sp
-  |   addic. CARG2, CARG2, -1
+  |   addic. CARG2, CARG2, -4
   |  stwux sp, sp, TMP1
   |   crnot 4*cr1+eq, 4*cr1+eq		// For vararg calls.
   |  stw r14, -4(TMP2)
   |  stw CCSTATE, -8(TMP2)
   |  mr r14, TMP2
   |  la TMP1, CCSTATE->stack
-  |   slwi CARG2, CARG2, 2
   |   blty >2
   |  la TMP2, 8(sp)
   |1:

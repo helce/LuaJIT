@@ -1,6 +1,6 @@
 |// Low-level VM code for E2K CPUs.
 |// Bytecode interpreter, fast functions and helper functions.
-|// Copyright (C) 2005-2021 Mike Pall. See Copyright Notice in luajit.h
+|// Copyright (C) 2005-2025 Mike Pall. See Copyright Notice in luajit.h
 |
 |.arch e2k
 |.section code_op, code_sub
@@ -2726,20 +2726,31 @@ static void build_subroutines(BuildCtx *ctx)
     |->ff_pcall:
     | // RD_E
     | addd      0, RD_E, 0, RD
+    | addd      1, BASE, RD_E, T0
     | ldbsm     2, DISPATCH, DISPATCH_GL(hookmask), RB
     | cmpbdb    3, RD_E, (1+1)*8, pred0
+    | ldd       5, STACK, SAVE_L, T1
     | disp      ctpr1, ->fff_fallback
     | wait_load RB, 0
     | --
     | shrdsm    0, RB, HOOK_ACTIVE_SHIFT, RB
     | addd      3, BASE, 0x10, RA
+    | ldd       5, T1, L->maxstack, T2
     | disp      ctpr2, >1
+    | wait_load T2, 0
     | --
     | anddsm    0, RB, 0x1, RB
+    | cmpbdb    3, T2, T0, pred1
     | --
-    | addd      0, 0x0, 16+FRAME_PCALL, PC, ~pred0
-    | subd      3, RD, 0x8, RD, ~pred0
-    | ct        ctpr1, pred0                // fff_fallback(BASE, RD)
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, ~p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred0, 0
+    | --
+    | addd      0, 0x0, 16+FRAME_PCALL, PC, pred0
+    | subd      3, RD, 0x8, RD, pred0
+    | ct        ctpr1, ~pred0               // fff_fallback(BASE, RD)
     | --
     | addd      0, PC, RB, PC               // Remember active hook before pcall.
     | subd      3, RD, 0x8, KBASE
@@ -2779,20 +2790,27 @@ static void build_subroutines(BuildCtx *ctx)
     |->ff_xpcall:
     | // RD_E = (nargs+1)*8
     | addd      0, RD_E, 0, RD
+    | addd      1, BASE, RD_E, T0
+    | ldd       2, STACK, SAVE_L, T1
     | ldd       3, BASE, 0x8, RA
     | ldd       5, BASE, 0x0, RB
     | disp      ctpr1, ->fff_fallback
     | wait_load RA, 0
     | --
+    | ldd       2, T1, L->maxstack, T2
     | sard      3, RA, 0x2f, S2
+    | wait_load T2, 0
     | --
+    | cmpbdb    1, T2, T0, pred2
     | cmpbdb    3, RD, (2+1)*8, pred0
     | cmpesb    4, S2, LJ_TFUNC, pred1
     | --
     | pass      pred0, p0
     | pass      pred1, p1
+    | pass      pred2, p2
     | landp     ~p0, p1, p4
-    | pass      p4, pred0
+    | landp     p4, ~p2, p5
+    | pass      p5, pred0
     | wait_pred_ct pred0, 0
     | --
     | addd      1, 0x0, 0x18+FRAME_PCALL, PC, pred0
@@ -4527,14 +4545,13 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | subd 0, 0x0, RARG3, RARG3
-    | subd 1, RARG5, 0x1, RARG5
+    | subd 1, RARG5, 0x8, RARG5
     | --
     | getsp 0, RARG3, RARG4                 // allocate stack for parameters and return value
     | cmpldb 1, RARG5, 0x0, pred0
     | nop 2
     | --
     | // Copy stack slots.
-    | shld 0, RARG5, 0x3, RARG5, ~pred0
     | ct ctpr1, pred0
     |1:
     | addd 0, RARG5, 0x40, RARG2
