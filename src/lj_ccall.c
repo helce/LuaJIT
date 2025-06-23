@@ -575,6 +575,40 @@
     goto done; \
   }
 
+#elif LJ_TARGET_E2K
+/* -- E2K calling conventions --------------------------------------------- */
+
+#define CCALL_HANDLE_STRUCTRET \
+  cc->retref = 0; \
+  if (sz > 64) cc->ret_stack = dp;
+  /* Pass all structs by value in registers and/or on the stack. */
+
+#define CCALL_HANDLE_COMPLEXRET CCALL_HANDLE_STRUCTRET
+
+#define CCALL_HANDLE_COMPLEXRET2 \
+  memcpy(dp, sp, ctr->size);  /* Copy complex from GPRs. */
+
+#define CCALL_HANDLE_STRUCTARG \
+  /* Pass all structs by value in registers and/or on the stack. */
+
+#define CCALL_HANDLE_COMPLEXARG \
+  /* Pass complex by value in  GPRs. */
+
+#define CCALL_HANDLE_REGARG \
+  if (ngpr < maxgpr) { \
+    /* align 16 if arguments needs more than 1 slot */ \
+    if (n > 1) ngpr += (ngpr % 2); \
+    dp = &cc->gpr[ngpr]; \
+    if (ngpr + n > maxgpr) { \
+      nsp += (ngpr + n - maxgpr) * CTSIZE_PTR; \
+      if (nsp > CCALL_SIZE_STACK) goto err_nyi; /* Too many arguments. */ \
+      ngpr = maxgpr; \
+    } else { \
+      ngpr += n; \
+    } \
+    goto done; \
+  }
+
 #else
 #error "Missing calling convention definitions for this architecture"
 #endif
@@ -927,7 +961,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 {
   int gcsteps = 0;
   TValue *o, *top = L->top;
-  CTypeID fid;
+  CTypeID fid = 0;
   CType *ctr;
   MSize maxgpr, ngpr = 0, nsp = 0, narg;
 #if CCALL_NARG_FPR
@@ -1035,6 +1069,11 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 	align = CTSIZE_PTR-1;
       nsp = (nsp + align) & ~align;
     }
+#ifdef LJ_TARGET_E2K
+    /* align 16 if arguments needs more than 1 slot */
+    MSize align = CTSIZE_PTR*2 - 1;
+    if (n > 1) nsp = (nsp + align) & ~align;
+#endif
     dp = ((uint8_t *)cc->stack) + nsp;
     nsp += CCALL_PACK_STACKARG ? sz : n * CTSIZE_PTR;
     if (nsp > CCALL_SIZE_STACK) {  /* Too many arguments. */
@@ -1105,8 +1144,21 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 #endif
   cc->nsp = (nsp + CTSIZE_PTR-1) & ~(CTSIZE_PTR-1);
   cc->spadj = (CCALL_SPS_FREE + CCALL_SPS_EXTRA) * CTSIZE_PTR;
+#if LJ_TARGET_E2K
+  /* Reserve empty slots on stack */
+  cc->spadj += (((cc->nsp - CCALL_SPS_FREE * CTSIZE_PTR) + 15u) & ~15u);
+  cc->spadj += CCALL_NARG_GPR * CTSIZE_PTR;
+  if ((int32_t)ctr->size > CCALL_NARG_GPR * CTSIZE_PTR) {
+    if (cc->spadj < ctr->size)
+      cc->spadj = ctr->size;
+    cc->ret_size = ctr->size;
+  } else {
+    cc->ret_size = 0;
+  }
+#else
   if (cc->nsp > CCALL_SPS_FREE * CTSIZE_PTR)
     cc->spadj += (((cc->nsp - CCALL_SPS_FREE * CTSIZE_PTR) + 15u) & ~15u);
+#endif
   return gcsteps;
 }
 

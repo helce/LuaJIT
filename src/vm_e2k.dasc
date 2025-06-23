@@ -4527,14 +4527,13 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | subd 0, 0x0, RARG3, RARG3
-    | subd 1, RARG5, 0x1, RARG5
+    | subd 1, RARG5, 0x8, RARG5
     | --
     | getsp 0, RARG3, RARG4                 // allocate stack for parameters and return value
     | cmpldb 1, RARG5, 0x0, pred0
     | nop 2
     | --
     | // Copy stack slots.
-    | shld 0, RARG5, 0x3, RARG5, ~pred0
     | ct ctpr1, pred0
     |1:
     | addd 0, RARG5, 0x40, RARG2
