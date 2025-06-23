@@ -106,6 +106,7 @@ static void emit_asm_words(BuildCtx *ctx, uint8_t *p, int n)
   if ((n & 15) != 0) putc('\n', ctx->fp);
 }
 
+#if !LJ_TARGET_E2K
 /* Emit relocation as part of an instruction. */
 static void emit_asm_wordreloc(BuildCtx *ctx, uint8_t *p, int n,
 			       const char *sym)
@@ -156,12 +157,11 @@ static void emit_asm_wordreloc(BuildCtx *ctx, uint8_t *p, int n,
 	  "Error: unsupported opcode %08x for %s symbol relocation.\n",
 	  ins, sym);
   exit(1);
-#elif LJ_TARGET_E2K
-  /* ureachable */
 #else
 #error "missing relocation support for this architecture"
 #endif
 }
+#endif
 #endif
 
 #if LJ_TARGET_ARM
