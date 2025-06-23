@@ -1,6 +1,6 @@
 /*
 ** Lua parser (source code -> bytecode).
-** Copyright (C) 2005-2023 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2025 Mike Pall. See Copyright Notice in luajit.h
 **
 ** Major portions taken verbatim or adapted from the Lua interpreter.
 ** Copyright (C) 1994-2008 Lua.org, PUC-Rio. See Copyright Notice in lua.h
@@ -1517,23 +1517,11 @@ static void fs_fixup_var(LexState *ls, GCproto *pt, uint8_t *p, size_t ofsvar)
 
 #endif
 
-/* Check if bytecode op returns. */
-static int bcopisret(BCOp op)
-{
-  switch (op) {
-  case BC_CALLMT: case BC_CALLT:
-  case BC_RETM: case BC_RET: case BC_RET0: case BC_RET1:
-    return 1;
-  default:
-    return 0;
-  }
-}
-
 /* Fixup return instruction for prototype. */
 static void fs_fixup_ret(FuncState *fs)
 {
   BCPos lastpc = fs->pc;
-  if (lastpc <= fs->lasttarget || !bcopisret(bc_op(fs->bcbase[lastpc-1].ins))) {
+  if (lastpc <= fs->lasttarget || !bc_isret_or_tail(bc_op(fs->bcbase[lastpc-1].ins))) {
     if ((fs->bl->flags & FSCOPE_UPVAL))
       bcemit_AJ(fs, BC_UCLO, 0, 0);
     bcemit_AD(fs, BC_RET0, 0, 1);  /* Need final return. */
@@ -1725,7 +1713,7 @@ static void expr_table(LexState *ls, ExpDesc *e)
   FuncState *fs = ls->fs;
   BCLine line = ls->linenumber;
   GCtab *t = NULL;
-  int vcall = 0, needarr = 0, fixt = 0;
+  int vcall = 0, needarr = 0;
   uint32_t narr = 1;  /* First array index. */
   uint32_t nhash = 0;  /* Number of hash entries. */
   BCReg freg = fs->freereg;
@@ -1769,9 +1757,10 @@ static void expr_table(LexState *ls, ExpDesc *e)
       lj_gc_anybarriert(fs->L, t);
       if (expr_isk_nojump(&val)) {  /* Add const key/value to template table. */
 	expr_kvalue(fs, v, &val);
-      } else {  /* Otherwise create dummy string key (avoids lj_tab_newkey). */
-	settabV(fs->L, v, t);  /* Preserve key with table itself as value. */
-	fixt = 1;   /* Fix this later, after all resizes. */
+	/* Mark nil value with table value itself to preserve the key. */
+	if (key.k == VKSTR && tvisnil(v)) settabV(fs->L, v, t);
+      } else {  /* Preserve the key for the following non-const store.  */
+	settabV(fs->L, v, t);
 	goto nonconst;
       }
     } else {
@@ -1813,17 +1802,6 @@ static void expr_table(LexState *ls, ExpDesc *e)
   } else {
     if (needarr && t->asize < narr)
       lj_tab_reasize(fs->L, t, narr-1);
-    if (fixt) {  /* Fix value for dummy keys in template table. */
-      Node *node = noderef(t->node);
-      uint32_t i, hmask = t->hmask;
-      for (i = 0; i <= hmask; i++) {
-	Node *n = &node[i];
-	if (tvistab(&n->val)) {
-	  lj_assertFS(tabV(&n->val) == t, "bad dummy key in template table");
-	  setnilV(&n->val);  /* Turn value into nil. */
-	}
-      }
-    }
     lj_gc_check(fs->L);
   }
 }
@@ -2339,11 +2317,15 @@ static void parse_return(LexState *ls)
     BCReg nret = expr_list(ls, &e);
     if (nret == 1) {  /* Return one result. */
       if (e.k == VCALL) {  /* Check for tail call. */
+#ifdef LUAJIT_DISABLE_TAILCALL
+	goto notailcall;
+#else
 	BCIns *ip = bcptr(fs, &e);
 	/* It doesn't pay off to add BC_VARGT just for 'return ...'. */
 	if (bc_op(*ip) == BC_VARG) goto notailcall;
 	fs->pc--;
 	ins = BCINS_AD(bc_op(*ip)-BC_CALL+BC_CALLT, bc_a(*ip), bc_c(*ip));
+#endif
       } else {  /* Can return the result from any register. */
 	ins = BCINS_AD(BC_RET1, expr_toanyreg(fs, &e), 2);
       }
@@ -2517,11 +2499,9 @@ static void parse_for_num(LexState *ls, GCstr *varname, BCLine line)
 */
 static int predict_next(LexState *ls, FuncState *fs, BCPos pc)
 {
-  BCIns ins;
+  BCIns ins = fs->bcbase[pc].ins;
   GCstr *name;
   cTValue *o;
-  if (pc >= fs->bclim) return 0;
-  ins = fs->bcbase[pc].ins;
   switch (bc_op(ins)) {
   case BC_MOV:
     if (bc_d(ins) >= fs->nactvar) return 0;
@@ -2570,7 +2550,7 @@ static void parse_for_iter(LexState *ls, GCstr *indexname)
   assign_adjust(ls, 3, expr_list(ls, &e), &e);
   /* The iterator needs another 3 [4] slots (func [pc] | state ctl). */
   bcreg_bump(fs, 3+ls->fr2);
-  isnext = (nvars <= 5 && predict_next(ls, fs, exprpc));
+  isnext = (nvars <= 5 && fs->pc > exprpc && predict_next(ls, fs, exprpc));
   var_add(ls, 3);  /* Hidden control variables. */
   lex_check(ls, TK_do);
   loop = bcemit_AJ(fs, isnext ? BC_ISNEXT : BC_JMP, base, NO_JMP);

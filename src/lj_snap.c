@@ -1,6 +1,6 @@
 /*
 ** Snapshot handling.
-** Copyright (C) 2005-2023 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2025 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #define lj_snap_c
@@ -801,7 +801,6 @@ static void snap_restoredata(jit_State *J, GCtrace *T, ExitState *ex,
 	*(lua_Number *)dst = (lua_Number)*(int32_t *)dst;
 	return;
       }
-      src = (int32_t *)&ex->gpr[r-RID_MIN_GPR];
 #if !LJ_SOFTFP
       if (r >= RID_MAX_GPR) {
 	src = (int32_t *)&ex->fpr[r-RID_MIN_FPR];
@@ -815,7 +814,10 @@ static void snap_restoredata(jit_State *J, GCtrace *T, ExitState *ex,
 #endif
       } else
 #endif
-      if (LJ_64 && LJ_BE && sz == 4) src++;
+      {
+	src = (int32_t *)&ex->gpr[r-RID_MIN_GPR];
+	if (LJ_64 && LJ_BE && sz == 4) src++;
+      }
     }
   }
   lj_assertJ(sz == 1 || sz == 2 || sz == 4 || sz == 8,
@@ -954,8 +956,11 @@ const BCIns *lj_snap_restore(jit_State *J, void *exptr)
   const BCIns *pc = snap_pc(&map[nent]);
   lua_State *L = J->L;
 
-  /* Set interpreter PC to the next PC to get correct error messages. */
-  setcframe_pc(cframe_raw(L->cframe), pc+1);
+  /* Set interpreter PC to the next PC to get correct error messages.
+  ** But not for returns or tail calls, since pc+1 may be out-of-range.
+  */
+  setcframe_pc(L->cframe, bc_isret_or_tail(bc_op(*pc)) ? pc : pc+1);
+  setcframe_pc(cframe_raw(cframe_prev(L->cframe)), pc);
 
   /* Make sure the stack is big enough for the slots from the snapshot. */
   if (LJ_UNLIKELY(L->base + snap->topslot >= tvref(L->maxstack))) {
