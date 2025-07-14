@@ -4339,6 +4339,9 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr3                       // Jump to the insn handler for stage E.
     | --
     |
+    |->cont_stitch:                         // Trace stitching.
+    | do_fault
+    |
     |->vm_profhook:                         // Dispatch target for profiler hook.
 #if LJ_HASPROFILE
     | disp ctpr1, extern lj_dispatch_profile
@@ -4481,6 +4484,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_next:
     | // Unsupported
+    | do_fault
     |
     |//-----------------------------------------------------------------------
     |//-- Miscellaneous functions --------------------------------------------
@@ -7917,6 +7921,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_JFORI: case BC_JFORL:
         | // Unsupported
+        | do_fault
         break;
 
     case BC_IFORL:
@@ -8042,6 +8047,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_JITERL:
         | // Unsupported
+        | do_fault
         break;
 
     case BC_IITERL:
@@ -8092,6 +8098,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_JLOOP:
         | // Unsupported
+        | do_fault
         break;
 
     case BC_JMP:
@@ -8128,6 +8135,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_JFUNCF:
         | // Unsupported
+        | do_fault
         break;
 
     case BC_IFUNCF:
@@ -8180,6 +8188,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_JFUNCV:
         | // Unsupported
+        | do_fault
         break;
 
     case BC_IFUNCV:
