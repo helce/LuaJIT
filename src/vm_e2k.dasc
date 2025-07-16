@@ -126,6 +126,8 @@
 | --
 | ldd 0, RARG1, 0x0, RARG1
 | --
+| addd 0, RARG1, 0x0, RARG1
+| --
 |.endmacro
 |
 |// Type definitions. Some of these are only used for documentation.
@@ -644,6 +646,29 @@
 |// Assumes DISPATCH is relative to GL.
 #define DISPATCH_GL(field)      (GG_DISP2G + (int)offsetof(global_State, field))
 #define PC2PROTO(field)         ((int)offsetof(GCproto, field)-(int)sizeof(GCproto))
+|
+|// Decrement hashed hotcount and trigger trace recorder if zero.
+|// TODO: inline
+|.macro hotloop
+| shrd 0, PC, 1, T0
+| disp ctpr1, ->vm_hotloop
+| --
+| andd 0, T0, HOTCOUNT_PCMASK, T0
+| --
+| addd 0, T0, GG_DISP2HOT, T0
+| --
+| ldh 0, DISPATCH, T0, T1
+| wait_load T1, 0
+| --
+| subd 0, T1, HOTCOUNT_LOOP, T1
+| --
+| cmpandedb 0, T1, 0x8000, pred0
+| sth 2, DISPATCH, T0, T1
+| wait_pred_ct pred0, 0
+| --
+| ct ctpr1, ~pred0
+| --
+|.endmacro
 |//-----------------------------------------------------------------------
 
 /* Generate subroutines used by opcodes and other parts of the VM */
@@ -4272,6 +4297,9 @@ static void build_subroutines(BuildCtx *ctx)
     |->cont_hook:                           // Continue from hook yield.
     | do_fault
     |
+    |->vm_hotloop:                          // Hot loop counter underflow.
+    | do_fault
+    |
     |->vm_callhook:                         // Dispatch target for call hooks.
     | std       2, STACK, SAVE_PC, PC
     | --
@@ -7454,6 +7482,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_ITERN:
         | // ins_A RA = base*8, (RB = (nresults+1)*8, RC = (nargs+1)*8 (2+1)*8)
+        |.if JIT
+        | hotloop
+        |.endif
         | // Unsupported. Just label for compatibility
         |->vm_IITERN:
         | addd      0, RA_E, 0, RA
@@ -7916,12 +7947,86 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Loops and branches ------------------------------------------------ */
 
     case BC_FORL:
-        | // Fall through. Assumes BC_IFORL follows and ins_AJ is a no-op.
+        | // ins_AJ RA_E = base*8, RD_E = target*8 (after end of loop or start of loop)
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_dispatch_load 3
+        | subd      1, PC, BCBIAS_J*4, T3
+        | shrd      2, RD_E, 1, T2          // RD*4
+        | addd      4, BASE, RA_E, RA
+        |.if JIT
+        | shrd      5, PC, 1, T4
+        |.endif
+        | disp      ctpr1, ->vm_restart_pipeline_fast
+        | --
+        | pipe_fetch 2
+        | ldbsm     0, T3, T2, RARG1        // Branch target insn opcode.
+        | ldd       3, RA, 0x10, RB
+        | ldd       5, RA, 0x0, S0
+        |.if JIT
+        | andd      4, T4, HOTCOUNT_PCMASK, T4
+        | disp      ctpr2, ->vm_hotloop
+        |.endif
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_none 4
+        |.if JIT
+        | addd 5, T4, GG_DISP2HOT, T4
+        |.endif
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        |.if JIT
+        | ldh       5, DISPATCH, T4, T5
+        | wait_load_extra T5, 0, 1
+        |.else
+        | wait_load S0, 2
+        |.endif
+        | --
+        | shld      0, RARG1, 3, RARG1
+        |.if JIT
+        | subd      2, T5, HOTCOUNT_LOOP, T5
+        |.endif
+        | faddd     3, S0, RB, S0
+        | fcmpltdb  4, RB, 0x0, pred2
+        | ldd       5, RA, 0x8, S1
+        | --
+        | ldd       0, RARG1, DISPATCH, RARG1   // Load dispath for branch target.
+        |.if JIT
+        | cmpandedb 1, T5, 0x8000, pred3
+        | sth       2, DISPATCH, T4, T5
+        | wait_pred_ct pred3, 0
+        |.else
+        | wait_load S1, 1
+        | wait      S0, 1, 4
+        |.endif
+        | --
+        | fcmpltdb  3, S1, S0, pred0
+        | fcmpltdb  4, S0, S1, pred1        // Invert comparison if step is negative.
+        | wait      pred0, 0, 3
+        |.if JIT
+        | ct        ctpr2, ~pred3
+        |.endif
+        | --
+        | std       2, RA, 0x0, S0
+        | std       5, RA, 0x18, S0
+        | pass      pred0, p0
+        | pass      pred2, p1
+        | pass      pred1, p2
+        | landp     ~p0, ~p1, p4
+        | landp     ~p2, p1, p5
+        | landp     ~p4, ~p5, p6
+        | pass      p6, pred0
+        | wait_pred pred0, 0
+        | --
+        | addd      0, T3, T2, PC, ~pred0   // Set PC to branch target if taken.
+        | --
+        | ct        ctpr1, ~pred0           // vm_restart_pipeline_fast(RARG1)
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
         break;
 
     case BC_JFORI: case BC_JFORL:
         | // Unsupported
-        | do_fault
         break;
 
     case BC_IFORL:
@@ -8042,12 +8147,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_ITERL:
+        |.if JIT
+        | hotloop
+        |.endif
         | // Fall through. Assumes BC_IITERL follows and ins_AJ is a no-op.
         break;
 
     case BC_JITERL:
         | // Unsupported
-        | do_fault
         break;
 
     case BC_IITERL:
@@ -8088,6 +8195,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_A RA_E = base*8, RD_E = target*8 (loop extent)
         | // Note: RA/RD is only used by trace recorder to determine scope/extent
         | // This opcode does NOT jump, it's only purpose is to detect a hot loop.
+        |.if JIT
+        | hotloop
+        |.endif
         | //Fall through. Assumes BC_ILOOP follows and ins_A is a no-op.
         break;
 
