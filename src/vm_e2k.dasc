@@ -4301,51 +4301,76 @@ static void build_subroutines(BuildCtx *ctx)
     |->vm_hotloop:                          // Hot loop counter underflow.
     |.if JIT
     | setwd_call
-    | ldd       0, BASE, -16, RB            // Same as curr_topL(L).
+    | ldd       0, BASE, -16, T0            // Same as curr_topL(L).
+    | ldd       2, STACK, SAVE_L, RB
     | disp      ctpr1, extern lj_trace_hot
+    | wait_load T0, 0
     | --
-    | extract_value 0, RB, RB
+    | extract_value 0, T0, T0
     | --
-    | ldd       0, RB, LFUNC->pc, RB
-    | wait_load RB, 0
+    | ldd       0, T0, LFUNC->pc, T0
+    | wait_load T0, 0
     | --
-    | ldb       0, RB, PC2PROTO(framesize), RD
+    | ldb       0, T0, PC2PROTO(framesize), RD
+    | std       2, STACK, SAVE_PC, PC
     | wait_load RD, 0
     | --
     | shld      0, RD, 3, RD
-    | --
-    | addd      0, BASE, RD, RD
-    | --
-    | ldd       0, STACK, SAVE_L, RB
-    | wait_load RB, 0
-    | --
-    | std       2, RB, L->base, BASE
-    | --
-    | std       2, RB, L->top, RD
-    | --
-    | addd      0, PC, 0, CARG2
-    | --
-    | addd      0, DISPATCH, GG_DISP2J, CARG1
-    | --
     | std       2, DISPATCH, DISPATCH_J(L), RB
     | --
-    | std       2, STACK, SAVE_PC, PC
+    | addd      0, BASE, RD, RD
+    | std       2, RB, L->base, BASE
     | --
+    | addd      0, DISPATCH, GG_DISP2J, CARG1
+    | addd      1, PC, 0, CARG2
+    | std       2, RB, L->top, RD
     | call      ctpr1, wbs = 0x8            // lj_trace_hot(jit_State *J, const BCIns *pc)
     | --
+    | // PC, RA, restart pipeline static
+    | setwd_pipe
     | ldd       0, RB, L->base, BASE
-    | wait_load BASE, 0
+    | subd      1, PC, 4, PC                // Current PC.
+    | ldb       2, PC, PREV_PC_RA, RA
     | --
-    | ldb       0, PC, PREV_PC_RA, RA
-    | wait_load RA, 0
+    | ldw       0, PC, 0, INSN_E            // Load insns.
+    | ldwsm     2, PC, 4, INSN_B
+    | ldwsm     3, PC, 8, INSN_L
+    | ldwsm     5, PC,12, INSN_D
     | --
-    | shld      0, RA, 0x3, RA
+    | ldwsm     0, PC,16, INSN_S
+    | addd      1, PC, 4, PC                // FIXME: insn hanlders expect it to be NPC but not current PC
+    | wait_load INSN_E, 1
     | --
-    | // RA
-    | subd      0, PC, 4, PC                   // Current PC.
-    | disp      ctpr1, ->vm_restart_pipeline_static_ra // TODO: inline/optimize
+    | shld      0, INSN_E, 3, OP_E          // Scale opcode fields.
+    | shldsm    2, INSN_B, 3, OP_B
+    | shldsm    3, INSN_L, 3, OP_L
+    | shldsm    5, INSN_D, 3, OP_D
     | --
-    | ct        ctpr1
+    | andd      0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | anddsm    2, OP_B, 0x7f8, OP_B
+    | anddsm    3, OP_L, 0x7f8, OP_L
+    | --
+    | addd      0, OP_E, DISPATCH, DISPATCH_E
+    | --
+    | ldd       0, DISPATCH_E, GG_DISP2STATIC, DISPATCH_E   // Load pointers to insn handlers.
+    | shld      1, RA, 0x3, RA
+    | lddsm     2, OP_B, DISPATCH, DISPATCH_B
+    | shrd      3, INSN_E, 0x15, RB_E       // Scale other fields for stage E.
+    | shrd      4, INSN_E, 0xd, T0
+    | --
+    | subd      0, 0, 1, BYPASS_W
+    | addd      1, RA, 0, RA_E              // Extract other fields for stage E.
+    | andd      3, RB_E, 0x7f8, RB_E
+    | andd      4, T0, 0x7f8, RC_E
+    | andd      5, T0, 0x7fff8, RD_E
+    | wait_load DISPATCH_E, 1
+    | --
+    | movtd     0, DISPATCH_E, ctpr3        // Prepare an insn handler for stage E.
+    | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
+    | shrdsm    4, INSN_B, 0x15, RB_B
+    | shrdsm    5, INSN_B, 0xd, RCD_B
+    | --
+    | ct        ctpr3                       // Jump to the insn handler for stage E.
     | --
     |.endif
     |
