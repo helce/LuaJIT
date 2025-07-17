@@ -645,6 +645,7 @@
 |
 |// Assumes DISPATCH is relative to GL.
 #define DISPATCH_GL(field)      (GG_DISP2G + (int)offsetof(global_State, field))
+#define DISPATCH_J(field)       (GG_DISP2J + (int)offsetof(jit_State, field))
 #define PC2PROTO(field)         ((int)offsetof(GCproto, field)-(int)sizeof(GCproto))
 |
 |// Decrement hashed hotcount and trigger trace recorder if zero.
@@ -4298,7 +4299,55 @@ static void build_subroutines(BuildCtx *ctx)
     | do_fault
     |
     |->vm_hotloop:                          // Hot loop counter underflow.
-    | do_fault
+    |.if JIT
+    | setwd_call
+    | ldd       0, BASE, -16, RB            // Same as curr_topL(L).
+    | disp      ctpr1, extern lj_trace_hot
+    | --
+    | extract_value 0, RB, RB
+    | --
+    | ldd       0, RB, LFUNC->pc, RB
+    | wait_load RB, 0
+    | --
+    | ldb       0, RB, PC2PROTO(framesize), RD
+    | wait_load RD, 0
+    | --
+    | shld      0, RD, 3, RD
+    | --
+    | addd      0, BASE, RD, RD
+    | --
+    | ldd       0, STACK, SAVE_L, RB
+    | wait_load RB, 0
+    | --
+    | std       2, RB, L->base, BASE
+    | --
+    | std       2, RB, L->top, RD
+    | --
+    | addd      0, PC, 0, CARG2
+    | --
+    | addd      0, DISPATCH, GG_DISP2J, CARG1
+    | --
+    | std       2, DISPATCH, DISPATCH_J(L), RB
+    | --
+    | std       2, STACK, SAVE_PC, PC
+    | --
+    | call      ctpr1, wbs = 0x8            // lj_trace_hot(jit_State *J, const BCIns *pc)
+    | --
+    | ldd       0, RB, L->base, BASE
+    | wait_load BASE, 0
+    | --
+    | ldb       0, PC, PREV_PC_RA, RA
+    | wait_load RA, 0
+    | --
+    | shld      0, RA, 0x3, RA
+    | --
+    | // RA
+    | subd      0, PC, 4, PC                   // Current PC.
+    | disp      ctpr1, ->vm_restart_pipeline_static_ra // TODO: inline/optimize
+    | --
+    | ct        ctpr1
+    | --
+    |.endif
     |
     |->vm_callhook:                         // Dispatch target for call hooks.
     | std       2, STACK, SAVE_PC, PC
