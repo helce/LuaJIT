@@ -452,9 +452,11 @@
 #define LJ_TARGET_E2K    1
 #define LJ_TARGET_EHRETREG 64
 #define LJ_TARGET_MASKSHIFT	1
+#define LJ_TARGET_JUMPRANGE	28	/* +-2^28 = +-256MB */
 #define LJ_TARGET_MASKROT	1
 #define LJ_ARCH_NUMMODE    LJ_NUMMODE_SINGLE
 #define LJ_TARGET_GC64   1
+#define LJ_GPRASFPR     1
 
 #else
 #error "No target architecture defined"
@@ -579,11 +581,6 @@
 #endif
 #endif
 
-#if LJ_TARGET_E2K
-/* NIY */
-#define LJ_ARCH_NOJIT   1
-#endif
-
 /* 64 bit GC references. */
 #if LJ_TARGET_GC64
 #define LJ_GC64			1
@@ -645,6 +642,10 @@
 
 #ifndef LJ_ABI_PAUTH
 #define LJ_ABI_PAUTH		0
+#endif
+
+#ifndef LJ_GPRASFPR
+#define LJ_GPRASFPR     0
 #endif
 
 #if LJ_ARCH_ENDIAN == LUAJIT_BE
@@ -711,7 +712,7 @@ extern void *LJ_WIN_LOADLIBA(const char *path);
 #define LJ_UNWIND_EXT		0
 #endif
 
-#if LJ_UNWIND_EXT && LJ_HASJIT && !LJ_TARGET_ARM && !(LJ_ABI_WIN && LJ_TARGET_X86)
+#if LJ_UNWIND_EXT && LJ_HASJIT && !LJ_TARGET_ARM && !(LJ_ABI_WIN && LJ_TARGET_X86) && !LJ_TARGET_E2K
 #define LJ_UNWIND_JIT		1
 #else
 #define LJ_UNWIND_JIT		0
