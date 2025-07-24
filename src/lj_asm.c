@@ -54,6 +54,10 @@ typedef struct ASMState {
   x86ModRM mrm;		/* Fused x86 address operand. */
 #endif
 
+#if LJ_TARGET_E2K
+  E2kBundle bundle; /* E2k bundle descripter */
+#endif
+
   RegSet freeset;	/* Set of free registers. */
   RegSet modset;	/* Set of registers modified inside the loop. */
   RegSet weakset;	/* Set of weakly referenced registers. */
@@ -227,6 +231,8 @@ static Reg rset_pickrandom(ASMState *as, RegSet rs)
 #include "lj_emit_ppc.h"
 #elif LJ_TARGET_MIPS
 #include "lj_emit_mips.h"
+#elif LJ_TARGET_E2K
+#include "lj_emit_e2k.h"
 #else
 #error "Missing instruction emitter for target CPU"
 #endif
@@ -239,7 +245,7 @@ static Reg rset_pickrandom(ASMState *as, RegSet rs)
 
 /* -- Register allocator debugging ---------------------------------------- */
 
-/* #define LUAJIT_DEBUG_RA */
+#define LUAJIT_DEBUG_RA
 
 #ifdef LUAJIT_DEBUG_RA
 
@@ -249,6 +255,12 @@ static Reg rset_pickrandom(ASMState *as, RegSet rs)
 #define RIDNAME(name)	#name,
 static const char *const ra_regname[] = {
   GPRDEF(RIDNAME)
+  #ifdef LJ_TARGET_E2K
+  BREGDEF(RIDNAME)
+  GREGDEF(RIDNAME)
+  PREDREGDEF(RIDNAME)
+  CTPRDEF(RIDNAME)
+  #endif
   FPRDEF(RIDNAME)
   VRIDDEF(RIDNAME)
   NULL
@@ -1637,7 +1649,7 @@ static void asm_phi_fixup(ASMState *as)
 /* Setup right PHI reference. */
 static void asm_phi(ASMState *as, IRIns *ir)
 {
-  RegSet allow = ((!LJ_SOFTFP && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR) &
+  RegSet allow = ((!LJ_SOFTFP && !LJ_GPRASFPR && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR) &
 		 ~as->phiset;
   RegSet afree = (as->freeset & allow);
   IRIns *irl = IR(ir->op1);
@@ -1708,6 +1720,8 @@ static void asm_loop(ASMState *as)
 #include "lj_asm_ppc.h"
 #elif LJ_TARGET_MIPS
 #include "lj_asm_mips.h"
+#elif LJ_TARGET_E2K
+#include "lj_asm_e2k.h"
 #else
 #error "Missing assembler for target CPU"
 #endif
