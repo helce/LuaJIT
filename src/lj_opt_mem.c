@@ -826,7 +826,7 @@ TRef LJ_FASTCALL lj_opt_fwd_xload(jit_State *J)
   IRRef xref = fins->op1;
   IRIns *xr = IR(xref);
   IRRef lim = xref;  /* Search limit. */
-  IRRef ref;
+  IRRef ref = 0;
 
   if ((fins->op2 & IRXLOAD_READONLY))
     goto cselim;
