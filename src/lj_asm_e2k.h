@@ -7,6 +7,78 @@
 
 /* -- Register allocator extensions --------------------------------------- */
 
+static Reg ra_pred(ASMState *as, RegSet allow)
+{
+  Reg r = ra_pick(as, allow);
+  ra_modified(as, r);
+  RA_DBGX((as, "assign predicate    $r", r));
+  return r;
+}
+
+static Reg ra_ctpr(ASMState *as, RegSet allow)
+{
+  Reg r = ra_pick(as, allow);
+  ra_modified(as, r);
+  RA_DBGX((as, "assign ctpr         $r", r));
+  return r;
+}
+
+static Reg ra_gpr(ASMState *as, RegSet allow)
+{
+  Reg r = ra_pick(as, allow);
+  ra_modified(as, r);
+  RA_DBGX((as, "assign gpr          $r",  r));
+  return r;
+}
+
+static Reg ra_hintalloc(ASMState *as, IRRef ref, Reg hint, RegSet allow)
+{
+  Reg r = IR(ref)->r;
+  if (ra_noreg(r)) {
+    if (!ra_hashint(r) && !iscrossref(as, ref))
+      ra_sethint(IR(ref)->r, hint);  /* Propagate register hint. */
+    r = ra_allocref(as, ref, allow);
+  }
+  ra_noweak(as, r);
+  return r;
+}
+
+/* -- Guard handling ------------------------------------------------------ */
+
+/* Setup all needed exit stubs. */
+static void asm_exitstub_setup(ASMState *as)
+{
+  /*
+    disp ctpr1, ->lj_vm_exit_handler
+    adds  0, as->T->traceno, reg
+    --
+    stw STACK, STACK_TMP, reg
+    ct ctpr1
+    --
+  */
+
+  /* Register allocation is not started yet */
+  MCode *mxp = as->mctop;
+  E2kOperand op1, op2, op3;
+
+  E2K_REG(REG_R, RID_SP, op1);
+  E2K_CONST(CONST_U16, E2K_STACK_TMP, op2);
+  E2K_REG(REG_R, RID_R0, op3);
+  E2K_ALOPF3(as, 0, OPC_STW, op1, op2, op3, RES_ALS_25);
+  E2K_CT(as, RID_CTPR1);
+  mxp = emit_bundle_finalize(as, mxp);
+
+  E2K_COPF2(as, OPC_DISP, RID_CTPR1,
+            (uintptr_t)((void *)lj_vm_exit_handler - (void *)mxp));
+  E2K_CONST(CONST_U4, 0, op1);
+  E2K_CONST(CONST_U16, as->T->traceno, op2);
+  E2K_ALOPF1(as, 0, OPC_ADDS, op1, op2, op3, RES_ALS_012345);
+  E2K_NOP(as, E2K_NOP_DISP_CT);
+  mxp = emit_bundle_finalize(as, mxp);
+
+  as->mctop = mxp;
+}
+
 static void asm_fpdiv(ASMState *as, IRIns *ir)
 {  NIY }
 
@@ -20,9 +92,6 @@ static void asm_hiop(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_prof(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_comp(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_retf(ASMState *as, IRIns *ir)
@@ -56,9 +125,6 @@ static void asm_brol(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bror(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_add(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_sub(ASMState *as, IRIns *ir)
@@ -167,13 +233,7 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
 static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
 { NIY }
 
-static void asm_setup_target(ASMState *as)
-{ NIY }
-
 static void asm_tail_fixup(ASMState *as, TraceNo lnk)
-{ NIY }
-
-static void asm_tail_prep(ASMState *as)
 { NIY }
 
 static void asm_loop_tail_fixup(ASMState *as)
@@ -199,3 +259,109 @@ static void asm_loop_fixup(ASMState *as)
 
 void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 { NIY }
+
+/* -- FP/int arithmetic and logic operations ------------------------------ */
+
+static void asm_add(ASMState *as, IRIns *ir)
+{
+  IRRef lref = ir->op1;
+  IRRef rref = ir->op2;
+  RA_DBG_FLUSH();
+  E2kOperand op1, op2, op3;
+
+  if (irt_isnum(ir->t)) {
+    NIY
+  } else {
+      int cop = irt_is64(ir->t) ? OPC_ADDD : OPC_ADDS;
+
+      Reg dest = ra_dest(as, ir, RSET_GPR);
+      if (irref_isk(lref)) {
+        NIY //swap ??
+      }
+      Reg left = ra_hintalloc(as, lref, dest, RSET_GPR);
+      if (irref_isk(rref)) {
+        NIY
+      } else {
+        E2K_REG(REG_R, left, op1);
+        E2K_REG(REG_R, ra_alloc1(as, rref, rset_exclude(RSET_GPR, left)), op2);
+        E2K_REG(REG_R, dest, op3);
+        E2K_ALOPF1(as, 0, cop, op1, op2, op3, RES_ALS_012345);
+      }
+  }
+}
+
+/* -- Comparisons --------------------------------------------------------- */
+
+static const uint32_t asm_compmap[IR_ABC+1] = {
+  /* op    opce  */
+  /* LT  */ OPCE_LT,
+  /* GE  */ OPCE_LT, /* inverted */
+  /* LE  */ OPCE_LE,
+  /* GT  */ OPCE_LE, /* inverted */
+  /* ULT */ OPCE_B,
+  /* UGE */ OPCE_B,  /* inverted */
+  /* ULE */ OPCE_BE,
+  /* UGT */ OPCE_BE, /* inverted */
+  /* EQ  */ OPCE_EQ,
+  /* NE  */ OPCE_EQ, /* inverted */
+  /* ABC */ OPCE_BE, /* inverted */  /* same as UGT */
+};
+
+static void asm_comp(ASMState *as, IRIns *ir)
+{
+  IRRef lref = ir->op1;
+  IRRef rref = ir->op2;
+  IROp op = ir->o;
+  RA_DBG_FLUSH();
+  E2kOperand op1, op2;
+
+  if (irt_isnum(ir->t)) {
+    //TODO
+    NIY
+  } else {
+    // TODO IDK
+    // asm_guardcc
+
+    if (op == IR_ABC) op = IR_UGT;
+    int inverted = (op&1) ? 1 : 0;
+    int cop = irt_is64(ir->t) ? OPC_CMPDB : OPC_CMPSB;
+    if (irref_isk(lref)) {
+      NIY //swap ??
+    }
+    Reg left = ra_alloc1(as, lref, RSET_GPR);
+    if (irref_isk(rref)) {
+      NIY
+    } else {
+      Reg right = ra_alloc1(as, rref, rset_exclude(RSET_GPR, left));
+      E2K_REG(REG_R, left, op1);
+      E2K_REG(REG_R, right, op2);
+
+      E2K_ALOPF7(as, 0, cop, asm_compmap[op], op1, op2, ra_pred(as, RSET_PRED),
+               RES_ALS_0134);
+    }
+
+    NIY
+    // TODO make a ct here, check inverted!!!
+  }
+}
+
+/* -- Tail of trace ------------------------------------------------------- */
+
+/* Prepare tail of code. */
+static void asm_tail_prep(ASMState *as)
+{
+  //IDK whats here
+  //TODO
+  return;
+}
+
+/* -- Trace setup --------------------------------------------------------- */
+
+/* Target-specific setup. */
+static void asm_setup_target(ASMState *as)
+{
+  emit_bundle_setup(as);
+  asm_exitstub_setup(as);
+}
+
+/* -- Trace patching ------------------------------------------------------ */
