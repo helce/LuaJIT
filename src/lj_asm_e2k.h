@@ -45,14 +45,14 @@ static Reg ra_hintalloc(ASMState *as, IRRef ref, Reg hint, RegSet allow)
 
 /* -- Guard handling ------------------------------------------------------ */
 
-/* Setup all needed exit stubs. */
+/* Setup exit stub after the end of each trace. */
 static void asm_exitstub_setup(ASMState *as)
 {
   /*
     disp ctpr1, ->lj_vm_exit_handler
-    adds  0, as->T->traceno, reg
+    stw STACK, STACK_TMP, TMP0
     --
-    stw STACK, STACK_TMP, reg
+    addd  0, as->T->traceno, TMP0
     ct ctpr1
     --
   */
@@ -61,22 +61,57 @@ static void asm_exitstub_setup(ASMState *as)
   MCode *mxp = as->mctop;
   E2kOperand op1, op2, op3;
 
-  E2K_REG(REG_R, RID_SP, op1);
-  E2K_CONST(CONST_U16, E2K_STACK_TMP, op2);
-  E2K_REG(REG_R, RID_R0, op3);
-  E2K_ALOPF3(as, 0, OPC_STW, op1, op2, op3, RES_ALS_25);
-  E2K_CT(as, RID_CTPR1);
-  mxp = emit_bundle_finalize(as, mxp);
-
-  E2K_COPF2(as, OPC_DISP, RID_CTPR1,
-            (uintptr_t)((void *)lj_vm_exit_handler - (void *)mxp));
   E2K_CONST(CONST_U4, 0, op1);
   E2K_CONST(CONST_U16, as->T->traceno, op2);
-  E2K_ALOPF1(as, 0, OPC_ADDS, op1, op2, op3, RES_ALS_012345);
+  E2K_REG(REG_G, RID_TMP, op3);
+  E2K_ALOPF1(as, 0, OPC_ADDD, op1, op2, op3, RES_ALS_012345);
+  E2K_CT(as, RID_CTPR1, 0, 0);
+  mxp = emit_bundle_finalize(as, mxp);
+
+
+  E2K_REG(REG_R, RID_SP, op1);
+  E2K_CONST(CONST_U16, E2K_STACK_TMP, op2);
+  E2K_ALOPF3(as, 0, OPC_STW, op1, op2, op3, RES_ALS_25);
+  E2K_COPF2(as, OPC_DISP, RID_CTPR1,
+            (ptrdiff_t)((void *)lj_vm_exit_handler - (void *)mxp));
   E2K_NOP(as, E2K_NOP_DISP_CT);
   mxp = emit_bundle_finalize(as, mxp);
 
   as->mctop = mxp;
+}
+
+/* Keep this in-sync with exitstub_trace_addr(). */
+#define asm_exitstub_addr(as) ((as)->mctop)
+
+/* Emit conditional branch to exit for guard */
+static void asm_guard(ASMState *as, Reg pred, int inverted)
+{
+  MCode *target = asm_exitstub_addr(as);
+  MCode *p = as->mcp;
+  if (LJ_UNLIKELY(p == as->invmcp)) {
+    as->invmcp = NULL;
+    as->loopinv = 1;
+    as->mcp = p + 1;
+    inverted = inverted ? 0 : 1;
+    target = p; /* Patch target later in asm_loop_fixup. */
+  }
+  E2kOperand op1, op2, op3;
+  E2K_CONST(CONST_U4, 0, op1);
+  E2K_CONST(CONST_U32, as->snapno, op2);
+  E2K_REG(REG_G, RID_TMP, op3);
+  E2K_ALOPF1(as, 0, OPC_ADDD, op1, op2, op3, RES_ALS_012345);
+  p = emit_bundle_finalize(as, p);
+
+  E2K_CT(as, RID_CTPR1, pred, inverted);
+  p = emit_bundle_finalize(as, p);
+
+  // TODO make a conditional COPF2 here
+  E2K_COPF2(as, OPC_DISP, RID_CTPR1,
+            (ptrdiff_t)((void *)target - (void *)p));
+  E2K_NOP(as, E2K_NOP_DISP_CT);
+  /* do not finalize here */
+  //p = emit_bundle_finalize(as, p);
+  as->mcp = p;
 }
 
 static void asm_fpdiv(ASMState *as, IRIns *ir)
@@ -319,11 +354,19 @@ static void asm_comp(ASMState *as, IRIns *ir)
     //TODO
     NIY
   } else {
-    // TODO IDK
-    // asm_guardcc
-
+    // TODO
     if (op == IR_ABC) op = IR_UGT;
     int inverted = (op&1) ? 1 : 0;
+    /*
+      disp ctprN, stub(patch) or to mctop
+      cmp src1, src2, predN
+      --
+      addd  0, as->snapno, TMP0
+      ct ctprN, predN (inverted)
+    */
+    Reg pred = ra_pred(as, RSET_PRED);
+    asm_guard(as, pred, inverted);
+
     int cop = irt_is64(ir->t) ? OPC_CMPDB : OPC_CMPSB;
     if (irref_isk(lref)) {
       NIY //swap ??
@@ -335,13 +378,10 @@ static void asm_comp(ASMState *as, IRIns *ir)
       Reg right = ra_alloc1(as, rref, rset_exclude(RSET_GPR, left));
       E2K_REG(REG_R, left, op1);
       E2K_REG(REG_R, right, op2);
-
       E2K_ALOPF7(as, 0, cop, asm_compmap[op], op1, op2, ra_pred(as, RSET_PRED),
-               RES_ALS_0134);
+                 RES_ALS_0134);
+      as->mcp = emit_bundle_finalize(as, as->mcp);
     }
-
-    NIY
-    // TODO make a ct here, check inverted!!!
   }
 }
 
@@ -350,9 +390,9 @@ static void asm_comp(ASMState *as, IRIns *ir)
 /* Prepare tail of code. */
 static void asm_tail_prep(ASMState *as)
 {
-  //IDK whats here
-  //TODO
-  return;
+  // TODO leave space for branch ??
+  // as->mcp =  as->mctop - N;
+  as->invmcp = as->loopref ? as->mcp : NULL;
 }
 
 /* -- Trace setup --------------------------------------------------------- */

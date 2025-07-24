@@ -163,13 +163,22 @@ static uint32_t E2K_PDST(ASMState *as, Reg pred)
 #define E2K_NOP(as, nops) \
   as->bundle.nop = nops
 
-static void E2K_CT(ASMState *as, Reg ctpr)
+static void E2K_CT(ASMState *as, Reg ctpr, Reg pred, int inverted)
 {
   // TODO it takes not a full syl
   E2K_check_resource(as, RES_SS);
   E2kSS syl;
   syl.i = 0;
-  syl.fields.ctcond = 0x20; // unconditional
+  if (pred) {
+    // do not check loop_end and so on right now
+    if (inverted) {
+      syl.fields.ctcond = 0x60 + (pred - RID_PRED0);
+    } else {
+      syl.fields.ctcond = 0x40 + (pred - RID_PRED0);
+    }
+  } else {
+    syl.fields.ctcond = 0x20; // unconditional
+  }
   syl.fields.ctop = ctpr - RID_CTPR1 + 1;
   syl.fields.ipd = 3;
 
