@@ -1001,7 +1001,7 @@ static void asm_snap_alloc1(ASMState *as, IRRef ref)
 	return;
       }
     nosink:
-      allow = (!LJ_SOFTFP && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR;
+      allow = (!LJ_SOFTFP && !LJ_GPRASFPR && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR;
       if ((as->freeset & allow) ||
 	       (allow == RSET_FPR && asm_snap_canremat(as))) {
 	/* Get a weak register if we have a free one or can rematerialize. */
