@@ -188,6 +188,7 @@ enum {
   RES_NONE    = 0,
   RES_ALS_012345 = RES_ALS0 | RES_ALS1 | RES_ALS2 | RES_ALS3 | RES_ALS4 | RES_ALS5,
   RES_ALS_0134   = RES_ALS0 | RES_ALS1 | RES_ALS3 | RES_ALS4,
+  RES_ALS_03     = RES_ALS0 | RES_ALS3,
   RES_ALS_25     = RES_ALS2 | RES_ALS5,
   RES_ALS_ALL    = RES_ALS_012345,
   RES_ALES_ALL   = RES_ALES0 | RES_ALES1 | RES_ALES2 | RES_ALES3 | RES_ALES4 | RES_ALES5,
@@ -328,14 +329,21 @@ typedef union {
 
 /* control operations */
 #define OPC_DISP   0x0
-/* non-combined operations */
+/* non-combined operations short */
 #define OPC_ADDS   0x10
 #define OPC_ADDD   0x11
+#define OPC_SUBS   0x12
+#define OPC_SUBD   0x13
 #define OPC_CMPSB  0x20
 #define OPC_CMPDB  0x21
 #define OPC_STW    0x26
 #define OPC_FCMPDB 0x2f
 #define OPC_FADDD  0x31
+#define OPC_FSUBD  0x33
+#define OPC_FMULD  0x39
+/* non-combined operations long */
+#define OPC_MULS   0x20
+#define OPC_MULD   0x21
 /* integer comparation opce */
 #define CMPI_O     0x0
 #define CMPI_B     0x1

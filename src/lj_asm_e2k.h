@@ -74,7 +74,6 @@ static void asm_exitstub_setup(ASMState *as)
   E2K_ALOPF3(as, 0, OPC_STW, op1, op2, op3, RES_ALS_25);
   E2K_COPF2(as, OPC_DISP, RID_CTPR1,
             (ptrdiff_t)((void *)lj_vm_exit_handler - (void *)mxp));
-  //E2K_NOP(as, E2K_NOP_DISP_CT);
   mxp = emit_bundle_finalize(as, mxp);
 
   as->mctop = mxp;
@@ -107,7 +106,6 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
 
   E2K_COPF2(as, OPC_DISP, RID_CTPR1,
             (ptrdiff_t)((void *)target - (void *)p));
-  //E2K_NOP(as, E2K_NOP_DISP_CT);
   /* do not finalize here */
   as->mcp = p;
 }
@@ -158,12 +156,6 @@ static void asm_brol(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bror(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_sub(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_mul(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_abs(ASMState *as, IRIns *ir)
@@ -295,21 +287,9 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 
 /* -- FP/int arithmetic and logic operations ------------------------------ */
 
-static void asm_add(ASMState *as, IRIns *ir)
+static void asm_alopf1(ASMState *as, IRIns *ir, int cop, int mask)
 {
-  IRType1 t = ir->t;
   E2kOperand op1, op2, op3;
-  int cop = 0;
-  /*
-    (f)add(s/d) rN, src2, rN
-  */
-  if (irt_isnum(t)) {
-    cop = OPC_FADDD; // only doubles
-    //E2K_NOP(as, E2K_NOP_OUT4F);
-  } else {
-    cop = irt_is64(t) ? OPC_ADDD : OPC_ADDS;
-  }
-
   Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg left = ra_hintalloc(as, ir->op1, dest, RSET_GPR);
   E2K_REG(REG_R, left, op1);
@@ -319,8 +299,59 @@ static void asm_add(ASMState *as, IRIns *ir)
     E2K_REG(REG_R, ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left)), op2);
   }
   E2K_REG(REG_R, dest, op3);
-  E2K_ALOPF1(as, 0, cop, op1, op2, op3, RES_ALS_012345);
+  E2K_ALOPF1(as, 0, cop, op1, op2, op3, mask);
   as->mcp = emit_bundle_finalize(as, as->mcp);
+
+}
+
+static void asm_add(ASMState *as, IRIns *ir)
+{
+  /*
+    (f)add(s/d) rN, src2, rN
+  */
+  int cop = 0, mask = 0;
+  if (irt_isnum(ir->t)) {
+    cop = OPC_FADDD; // only doubles
+    mask = RES_ALS_0134;
+  } else {
+    cop = irt_is64(ir->t) ? OPC_ADDD : OPC_ADDS;
+    mask = RES_ALS_012345;
+  }
+  asm_alopf1(as, ir, cop, mask);
+}
+
+static void asm_sub(ASMState *as, IRIns *ir)
+{
+  /*
+    (f)add(s/d) rN, src2, rN
+  */
+  int cop = 0, mask = 0;
+  if (irt_isnum(ir->t)) {
+    cop = OPC_FSUBD; // only doubles
+    mask = RES_ALS_0134;
+  } else {
+    cop = irt_is64(ir->t) ? OPC_SUBD : OPC_SUBS;
+    mask = RES_ALS_012345;
+  }
+  asm_alopf1(as, ir, cop, mask);
+}
+
+static void asm_mul(ASMState *as, IRIns *ir)
+{
+  int cop = 0, mask = 0;
+  /*
+    (f)mul(s/d) rN, src2, rN
+  */
+  if (irt_isnum(ir->t)) {
+    cop = OPC_FMULD; // only doubles
+    mask = RES_ALS_0134;
+    asm_alopf1(as, ir, cop, mask);
+  } else {
+    cop = irt_is64(ir->t) ? OPC_MULD : OPC_MULS;
+    mask = RES_ALS_03;
+    NIY
+    //asm_alopf11(as, ir, cop, opce);
+  }
 }
 
 /* -- Comparisons --------------------------------------------------------- */
