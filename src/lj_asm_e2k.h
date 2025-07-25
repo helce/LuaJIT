@@ -74,7 +74,7 @@ static void asm_exitstub_setup(ASMState *as)
   E2K_ALOPF3(as, 0, OPC_STW, op1, op2, op3, RES_ALS_25);
   E2K_COPF2(as, OPC_DISP, RID_CTPR1,
             (ptrdiff_t)((void *)lj_vm_exit_handler - (void *)mxp));
-  E2K_NOP(as, E2K_NOP_DISP_CT);
+  //E2K_NOP(as, E2K_NOP_DISP_CT);
   mxp = emit_bundle_finalize(as, mxp);
 
   as->mctop = mxp;
@@ -105,12 +105,10 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
   E2K_CT(as, RID_CTPR1, pred, inverted);
   p = emit_bundle_finalize(as, p);
 
-  // TODO make a conditional COPF2 here
   E2K_COPF2(as, OPC_DISP, RID_CTPR1,
             (ptrdiff_t)((void *)target - (void *)p));
-  E2K_NOP(as, E2K_NOP_DISP_CT);
+  //E2K_NOP(as, E2K_NOP_DISP_CT);
   /* do not finalize here */
-  //p = emit_bundle_finalize(as, p);
   as->mcp = p;
 }
 
@@ -299,90 +297,104 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 
 static void asm_add(ASMState *as, IRIns *ir)
 {
-  IRRef lref = ir->op1;
-  IRRef rref = ir->op2;
-  RA_DBG_FLUSH();
+  IRType1 t = ir->t;
   E2kOperand op1, op2, op3;
-
-  if (irt_isnum(ir->t)) {
-    NIY
+  int cop = 0;
+  /*
+    (f)add(s/d) rN, src2, rN
+  */
+  if (irt_isnum(t)) {
+    cop = OPC_FADDD; // only doubles
+    //E2K_NOP(as, E2K_NOP_OUT4F);
   } else {
-      int cop = irt_is64(ir->t) ? OPC_ADDD : OPC_ADDS;
-
-      Reg dest = ra_dest(as, ir, RSET_GPR);
-      if (irref_isk(lref)) {
-        NIY //swap ??
-      }
-      Reg left = ra_hintalloc(as, lref, dest, RSET_GPR);
-      if (irref_isk(rref)) {
-        NIY
-      } else {
-        E2K_REG(REG_R, left, op1);
-        E2K_REG(REG_R, ra_alloc1(as, rref, rset_exclude(RSET_GPR, left)), op2);
-        E2K_REG(REG_R, dest, op3);
-        E2K_ALOPF1(as, 0, cop, op1, op2, op3, RES_ALS_012345);
-      }
+    cop = irt_is64(t) ? OPC_ADDD : OPC_ADDS;
   }
+
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg left = ra_hintalloc(as, ir->op1, dest, RSET_GPR);
+  E2K_REG(REG_R, left, op1);
+  if (irref_isk(ir->op2)) {
+    op2 = get_kval(as, ir->op2);
+  } else {
+    E2K_REG(REG_R, ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left)), op2);
+  }
+  E2K_REG(REG_R, dest, op3);
+  E2K_ALOPF1(as, 0, cop, op1, op2, op3, RES_ALS_012345);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
 /* -- Comparisons --------------------------------------------------------- */
 
 static const uint32_t asm_compmap[IR_ABC+1] = {
-  /* op    opce  */
-  /* LT  */ OPCE_LT,
-  /* GE  */ OPCE_LT, /* inverted */
-  /* LE  */ OPCE_LE,
-  /* GT  */ OPCE_LE, /* inverted */
-  /* ULT */ OPCE_B,
-  /* UGE */ OPCE_B,  /* inverted */
-  /* ULE */ OPCE_BE,
-  /* UGT */ OPCE_BE, /* inverted */
-  /* EQ  */ OPCE_EQ,
-  /* NE  */ OPCE_EQ, /* inverted */
-  /* ABC */ OPCE_BE, /* inverted */  /* same as UGT */
+  /* op     opce  */
+  /* LT  */ CMPI_LT,
+  /* GE  */ CMPI_LT, /* inverted */
+  /* LE  */ CMPI_LE,
+  /* GT  */ CMPI_LE, /* inverted */
+  /* ULT */ CMPI_B,
+  /* UGE */ CMPI_B,  /* inverted */
+  /* ULE */ CMPI_BE,
+  /* UGT */ CMPI_BE, /* inverted */
+  /* EQ  */ CMPI_EQ,
+  /* NE  */ CMPI_EQ, /* inverted */
+  /* ABC */ CMPI_BE, /* inverted */  /* same as UGT */
+};
+
+static const uint32_t asm_fpcompmap[IR_ABC+1] = {
+  /* op     opce */
+  /* LT  */ CMPF_LT,
+  /* GE  */ CMPF_NLT,
+  /* LE  */ CMPF_LE,
+  /* GT  */ CMPF_NLE,
+  /* ULT */ CMPF_LT,
+  /* UGE */ CMPF_NLT,
+  /* ULE */ CMPF_LE,
+  /* UGT */ CMPF_NLE,
+  /* EQ  */ CMPF_EQ,
+  /* NE  */ CMPF_EQ, /* inverted, should be ordered */
+  /* ABC */ CMPF_NLE, /* same as UGT */
 };
 
 static void asm_comp(ASMState *as, IRIns *ir)
 {
-  IRRef lref = ir->op1;
-  IRRef rref = ir->op2;
   IROp op = ir->o;
   RA_DBG_FLUSH();
   E2kOperand op1, op2;
+  int inverted = 0, cop = 0, opce = 0;
+  /*
+    disp ctprN, stub(patch) or to mctop
+    cmp src1, src2, predN
+    --
+    addd  0, as->snapno, TMP0
+    ct ctprN, predN (inverted)
+  */
+  if (op == IR_ABC) op = IR_UGT;
+  Reg pred = ra_pred(as, RSET_PRED);
 
   if (irt_isnum(ir->t)) {
-    //TODO
-    NIY
+    inverted = (op == IR_NE) ? 1 : 0;
+    cop = OPC_FCMPDB; // only doubles
+    opce = asm_fpcompmap[op];
   } else {
-    // TODO
-    if (op == IR_ABC) op = IR_UGT;
-    int inverted = (op&1) ? 1 : 0;
-    /*
-      disp ctprN, stub(patch) or to mctop
-      cmp src1, src2, predN
-      --
-      addd  0, as->snapno, TMP0
-      ct ctprN, predN (inverted)
-    */
-    Reg pred = ra_pred(as, RSET_PRED);
-    asm_guard(as, pred, inverted);
-
-    int cop = irt_is64(ir->t) ? OPC_CMPDB : OPC_CMPSB;
-    if (irref_isk(lref)) {
-      NIY //swap ??
-    }
-    Reg left = ra_alloc1(as, lref, RSET_GPR);
-    if (irref_isk(rref)) {
-      NIY
-    } else {
-      Reg right = ra_alloc1(as, rref, rset_exclude(RSET_GPR, left));
-      E2K_REG(REG_R, left, op1);
-      E2K_REG(REG_R, right, op2);
-      E2K_ALOPF7(as, 0, cop, asm_compmap[op], op1, op2, ra_pred(as, RSET_PRED),
-                 RES_ALS_0134);
-      as->mcp = emit_bundle_finalize(as, as->mcp);
-    }
+    inverted = (op&1) ? 1 : 0;
+    cop = irt_is64(ir->t) ? OPC_CMPDB : OPC_CMPSB;
+    opce = asm_compmap[op];
   }
+
+  asm_guard(as, pred, inverted);
+
+  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
+  E2K_REG(REG_R, left, op1);
+
+  if (irref_isk(ir->op2)) {
+    op2 = get_kval(as, ir->op2);
+  } else {
+    E2K_REG(REG_R, ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left)), op2);
+  }
+
+  E2K_ALOPF7(as, 0, cop, opce, op1, op2, pred,
+             RES_ALS_0134);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
 /* -- Tail of trace ------------------------------------------------------- */

@@ -76,7 +76,34 @@ static uint32_t E2K_add_lts(ASMState *as, E2kOperand src)
 #define E2K_REG(t, val, op) \
   op.type = t; \
   op.value.regn = val;
-  
+
+#define checku4(x)  ((x) == (int32_t)(uint8_t)(x & 0xf))
+
+static E2kOperand get_kval(ASMState *as, IRRef ref)
+{
+  E2kOperand op;
+  IRIns *ir = IR(ref);
+  uint64_t k = ir_k64(ir)->u64;
+  /* speed up and ignore u5, u16 and so on */
+  if (ir->o == IR_KNULL) {
+    NIY // check
+    E2K_CONST(CONST_U4, 0, op);
+  } else if (!irt_is64(ir->t)) {
+    /* it is int, try to save a syl */
+    if (checku4(ir->i)) {
+      E2K_CONST(CONST_U4, (uint8_t)ir->i, op);
+    } else {
+      E2K_CONST(CONST_U32, (uint32_t)ir->i, op);
+    }
+  /* otherwise it is 64-bit, try to fit in 32-bit */
+  } else if (checku32(k)) {
+    E2K_CONST(CONST_U32, (uint32_t)k, op);
+  } else {
+    E2K_CONST(CONST_U64, k, op);
+  }
+  return op;
+}
+
 static uint32_t E2K_SRC1(ASMState *as, E2kOperand src1)
 {
   switch (src1.type) {

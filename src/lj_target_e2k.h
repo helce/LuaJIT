@@ -327,21 +327,36 @@ typedef union {
 /* -- Opcodes ------------------------------------------------------------- */
 
 /* control operations */
-#define OPC_DISP  0x0
+#define OPC_DISP   0x0
 /* non-combined operations */
-#define OPC_ADDS  0x10
-#define OPC_ADDD  0x11
-#define OPC_CMPSB 0x20
-#define OPC_CMPDB 0x21
-#define OPC_STW   0x26
-/* integer comparation, resulting predicate */
-#define OPCE_B    0x1
-#define OPCE_EQ   0x2
-#define OPCE_BE   0x3
-#define OPCE_LT   0x6
-#define OPCE_LE   0x7
+#define OPC_ADDS   0x10
+#define OPC_ADDD   0x11
+#define OPC_CMPSB  0x20
+#define OPC_CMPDB  0x21
+#define OPC_STW    0x26
+#define OPC_FCMPDB 0x2f
+#define OPC_FADDD  0x31
+/* integer comparation opce */
+#define CMPI_O     0x0
+#define CMPI_B     0x1
+#define CMPI_EQ    0x2
+#define CMPI_BE    0x3
+#define CMPI_S     0x4
+#define CMPI_P     0x5
+#define CMPI_LT    0x6
+#define CMPI_LE    0x7
+/* fp comporation opce */
+#define CMPF_EQ    0x0
+#define CMPF_LT    0x1
+#define CMPF_LE    0x2
+#define CMPF_UO    0x3
+#define CMPF_NE    0x4
+#define CMPF_NLT   0x5
+#define CMPF_NLE   0x6
+#define CMPF_OD    0x7
 
 /* -- static latency ------------------------------------------------------ */
 #define E2K_NOP_DISP_CT 4
+#define E2K_NOP_OUT4F   3
 
 #endif
