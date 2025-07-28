@@ -110,180 +110,116 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
   as->mcp = p;
 }
 
-static void asm_fpdiv(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_equal(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_neg(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_hiop(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_prof(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_retf(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bnot(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bswap(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_band(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bor(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bxor(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bshl(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bshr(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bsar(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_brol(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bror(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_abs(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_fpmath(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_tobit(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_min(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_max(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_addov(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_subov(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_mulov(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_aref(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_href(ASMState *as, IRIns *ir, IROp merge)
-{  NIY }
-
-static void asm_uref(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_hrefk(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_fref(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_strref(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_ahuvload(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_fload(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_xload(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_sload(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_ahustore(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_fstore(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_xstore(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_cnew(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_tbar(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_obar(ASMState *as, IRIns *ir)
-{  NIY }
+/* -- Type conversions ---------------------------------------------------- */
 
 static void asm_conv(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_strto(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_callx(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_head_root_base(ASMState *as)
-{  NIY }
-
-static Reg asm_head_side_base(ASMState *as, IRIns *irp)
 {
-  NIY
-  return 0;
+  IRType st = (IRType)(ir->op2 & IRCONV_SRCMASK);
+  int stfp = (st == IRT_NUM || st == IRT_FLOAT);
+  int st64 = (st == IRT_I64 || st == IRT_U64 || st == IRT_P64);
+  int cop = 0, opce = 0;
+
+  lj_assertA(irt_type(ir->t) != st, "inconsistent types for CONV");
+  E2kOperand op1, op2;
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
+  E2K_REG(REG_R, left, op1);
+  E2K_REG(REG_R, dest, op2);
+
+  if (irt_isfp(ir->t)) {
+    if (stfp) { /* FP to FP conversion */
+      if (st == IRT_NUM) { /* fp64 to fp32 */
+        cop = OPC_FDTOS;
+        opce = CO_FDTOFS;
+      } else { /* fp32 to fp64 */
+        cop = OPC_FSTOD;
+        opce = CO_FSTOFD;
+      }
+    } else { /* INT to FP conversion */
+      if (st == IRT_U32 || st == IRT_INT) {
+        if (irt_isnum(ir->t)) { /* int32 to fp64 */
+          cop = OPC_FSTOD;
+          opce = CO_ISTOFD;
+        } else { /* int32 to fp32 */
+          cop = OPC_FSTOS;
+          opce = CO_ISTOFS;
+        }
+      } else {
+        if (irt_isnum(ir->t)) { /* int64 to fp64 */
+          cop = OPC_FDTOD;
+          opce = CO_IDTOFD;
+        } else { /* int64 to fp32 */
+          cop = OPC_FDTOS;
+          opce = CO_IDTOFS;
+        }
+      }
+    }
+    E2K_ALOPF2(as, 0, cop, opce, op1, op2, RES_ALS_0134);
+  } else if (stfp) { /* FP to INT conversion */
+    NIY
+  } else { /* INT to INT conversion */
+    NIY
+  }
+  as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
-static void asm_stack_restore(ASMState *as, SnapShot *snap)
-{  NIY }
+/* -- Loads and stores ---------------------------------------------------- */
 
-static void asm_stack_check(ASMState *as, BCReg topslot,
-          IRIns *irp, RegSet allow, ExitNo exitno)
-{ NIY }
-
-static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
-{ NIY }
-
-static void asm_tail_fixup(ASMState *as, TraceNo lnk)
-{ NIY }
-
-static void asm_loop_tail_fixup(ASMState *as)
-{ NIY }
-
-static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
-{ NIY }
-
-static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
-{ NIY }
-
-static void asm_gc_check(ASMState *as)
-{ NIY }
-
-static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
-{ NIY }
-
-static void asm_bufhdr_write(ASMState *as, Reg sb)
-{ NIY }
-
-static void asm_loop_fixup(ASMState *as)
-{ NIY }
-
-void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
-{ NIY }
+static void asm_sload(ASMState *as, IRIns *ir)
+{
+  int32_t ofs = 8*((int32_t)ir->op1-2);
+  IRType1 t = ir->t;
+  E2kOperand op1, op2;
+  Reg dest = 0;
+  //Reg base;
+  lj_assertA(!(ir->op2 & IRSLOAD_PARENT),
+             "bad parent SLOAD");  /* Handled by asm_head_side(). */
+  lj_assertA(irt_isguard(ir->t) || !(ir->op2 & IRSLOAD_TYPECHECK),
+             "inconsistent SLOAD variant");
+  if ((ir->op2 & IRSLOAD_CONVERT) && irt_isguard(t) && irt_isint(t)) {
+    dest = ra_scratch(as, RSET_GPR);
+    NIY
+    // TODO asm_tointg(as, ir, dest);
+    t.irt = IRT_NUM; /* Continue with a regular number type check. */
+  } else if (ra_used(ir)) {
+    lj_assertA(irt_isnum(ir->t) || irt_isint(ir->t) || irt_isaddr(ir->t),
+               "bad SLOAD type %d", irt_type(t));
+    //TODO alloc base ?
+    dest = ra_dest(as, ir, RSET_GPR);
+    E2K_REG(REG_R, dest, op1);
+    op2 = op1;
+    //Reg base = ra_alloc1(as, REF_BASE, RSET_GPR); 
+    if (ir->op2 & IRSLOAD_CONVERT) {
+      if (irt_isint(t)) {
+        // fp64 -> int32
+        //TODO double -> int32
+        NIY
+        t.irt = IRT_NUM;
+      } else {
+        // int32 -> fp64
+        E2K_ALOPF2(as, 0, OPC_FSTOD, CO_ISTOFD, op1, op2, RES_ALS_0134);
+        t.irt = IRT_INT;
+      }
+    } else if (irt_isaddr(t)) {
+      /* Clear type from pointers. */
+      // TODO EXTRACT TYPE 
+      NIY
+    } else if (irt_isint(t) && (ir->op2 & IRSLOAD_TYPECHECK)) {
+      /* Sign-extend integers. */
+      // TODO SIGN EXTEND ??
+      NIY
+    }
+    // TODO skib base ??
+  }
+  // TODO aloc base ??z
+  Reg base = ra_alloc1(as, REF_BASE, RSET_GPR);
+  if (ir->op2 & IRSLOAD_TYPECHECK) {
+    NIY
+  } else {
+    // TODO make load
+    NIY
+  }
+}
 
 /* -- FP/int arithmetic and logic operations ------------------------------ */
 
@@ -428,6 +364,18 @@ static void asm_comp(ASMState *as, IRIns *ir)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+/* -- Loop handling ------------------------------------------------------- */
+
+static void asm_loop_fixup(ASMState *as)
+{
+  MCode *p = as->mctop;
+  MCode *target = as->mcp;
+  /* p[-10] - HS; p[-9] - ALS(cmp); p[-8] - CS0 */
+  uint32_t tmp = p[-8] & 0xf0000000;
+  uint32_t disp = (target - p + 8) >> 3;
+  p[-8] = tmp | (disp & 0xfffffff);
+}
+
 /* -- Tail of trace ------------------------------------------------------- */
 
 /* Prepare tail of code. */
@@ -448,3 +396,170 @@ static void asm_setup_target(ASMState *as)
 }
 
 /* -- Trace patching ------------------------------------------------------ */
+
+// TODO
+static void asm_fpdiv(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_equal(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_neg(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_hiop(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_prof(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_retf(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_bnot(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_bswap(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_band(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_bor(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_bxor(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_bshl(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_bshr(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_bsar(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_brol(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_bror(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_abs(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_fpmath(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_tobit(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_min(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_max(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_addov(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_subov(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_mulov(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_aref(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_href(ASMState *as, IRIns *ir, IROp merge)
+{  NIY }
+
+static void asm_uref(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_hrefk(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_fref(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_strref(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_ahuvload(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_fload(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_xload(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_ahustore(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_fstore(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_xstore(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_cnew(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_tbar(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_obar(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_strto(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_callx(ASMState *as, IRIns *ir)
+{  NIY }
+
+static void asm_head_root_base(ASMState *as)
+{  NIY }
+
+static Reg asm_head_side_base(ASMState *as, IRIns *irp)
+{
+  NIY
+  return 0;
+}
+
+static void asm_stack_restore(ASMState *as, SnapShot *snap)
+{  NIY }
+
+static void asm_stack_check(ASMState *as, BCReg topslot,
+          IRIns *irp, RegSet allow, ExitNo exitno)
+{ NIY }
+
+static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
+{ NIY }
+
+static void asm_tail_fixup(ASMState *as, TraceNo lnk)
+{ NIY }
+
+static void asm_loop_tail_fixup(ASMState *as)
+{ NIY }
+
+static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
+{ NIY }
+
+static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
+{ NIY }
+
+static void asm_gc_check(ASMState *as)
+{ NIY }
+
+static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
+{ NIY }
+
+static void asm_bufhdr_write(ASMState *as, Reg sb)
+{ NIY }
+
+void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
+{ NIY }
