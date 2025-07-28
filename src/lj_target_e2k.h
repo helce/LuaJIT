@@ -283,6 +283,17 @@ typedef union {
 typedef union {
   uint32_t i;
   struct {
+    uint32_t dst     : 8;
+    uint32_t src2    : 8;
+    uint32_t opce    : 8;
+    uint32_t cop     : 7;
+    uint32_t spec    : 1;
+  } fields;
+} E2kAlopf2;
+
+typedef union {
+  uint32_t i;
+  struct {
     uint32_t src3    : 8;
     uint32_t src2    : 8;
     uint32_t src1    : 8;
@@ -341,6 +352,10 @@ typedef union {
 #define OPC_FADDD  0x31
 #define OPC_FSUBD  0x33
 #define OPC_FMULD  0x39
+#define OPC_FSTOS  0x3c
+#define OPC_FDTOD  0x3d
+#define OPC_FSTOD  0x3e
+#define OPC_FDTOS  0x3f
 /* non-combined operations long */
 #define OPC_MULS   0x20
 #define OPC_MULD   0x21
@@ -362,6 +377,13 @@ typedef union {
 #define CMPF_NLT   0x5
 #define CMPF_NLE   0x6
 #define CMPF_OD    0x7
+/* convertation opc */
+#define CO_ISTOFS  0xc4
+#define CO_ISTOFD  0xc4
+#define CO_IDTOFS  0xc4
+#define CO_IDTOFD  0xc4
+#define CO_FSTOFD  0xc6
+#define CO_FDTOFS  0xc6
 
 /* -- static latency ------------------------------------------------------ */
 #define E2K_NOP_DISP_CT 4

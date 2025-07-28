@@ -242,6 +242,22 @@ static void E2K_ALOPF1(ASMState *as, uint32_t spec, uint32_t cop,
   as->bundle.f1++;
 }
 
+static void E2K_ALOPF2(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
+                       E2kOperand src2, E2kOperand dst, uint32_t als_mask)
+{
+  int als_idx = E2K_add_alu_op(as, als_mask);
+  E2kAlopf2 syl;
+  syl.i = 0;
+  syl.fields.dst  = E2K_DST(as, dst);
+  syl.fields.src2 = E2K_SRC2(as, src2);
+  syl.fields.opce = opce;
+  syl.fields.cop = cop;
+  syl.fields.spec = spec;
+
+  as->bundle.als[als_idx] = syl.i;
+  as->bundle.f1++;
+}
+
 static void E2K_ALOPF3(ASMState *as, uint32_t spec, uint32_t cop,
                        E2kOperand src1, E2kOperand src2, E2kOperand src3, uint32_t als_mask)
 {
@@ -357,12 +373,6 @@ static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
   NIY
 }
 
-static int emit_canremat(IRRef ref)
-{
-  NIY
-  return 0;
-}
-
 static void emit_opgl(ASMState *as, Reg r, void *p)
 {
   NIY
@@ -403,3 +413,5 @@ static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
 }
 
 #define emit_spsub(as, ofs) emit_addptr(as, 0, -(ofs))
+
+#define emit_canremat(ref)  ((ref) <= REF_BASE)
