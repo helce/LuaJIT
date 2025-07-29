@@ -112,6 +112,34 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
 
 /* -- Type conversions ---------------------------------------------------- */
 
+static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
+{
+  E2kOperand op_left, op_tmp, op_dest;
+  Reg pred = ra_pred(as, RSET_PRED);
+  Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, left));
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  asm_guard(as, pred, 1);
+  /*
+    fdtoistr left, dest
+    --
+    istofd dest, tmp
+    --
+    fcmpeqdb left, tmp, predN
+    disp ctprN, as->mctop
+    --
+    ct ctprN, ~predN
+  */
+  E2K_REG(REG_R, left, op_left);
+  E2K_REG(REG_R, tmp, op_tmp);
+  E2K_REG(REG_R, dest, op_dest);
+  E2K_ALOPF7(as, 0, OPC_FCMPDB, CMPF_EQ, op_left, op_tmp, pred, RES_ALS_0134);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  E2K_ALOPF2(as, 0, OPC_FSTOD, CO_ISTOFD, op_dest, op_tmp, RES_ALS_0134);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  E2K_ALOPF2(as, 0, OPC_FDTOS, CO_FDTOISTR, op_left, op_dest, RES_ALS_0134);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
 static void asm_conv(ASMState *as, IRIns *ir)
 {
   IRType st = (IRType)(ir->op2 & IRCONV_SRCMASK);
@@ -128,35 +156,36 @@ static void asm_conv(ASMState *as, IRIns *ir)
 
   if (irt_isfp(ir->t)) {
     if (stfp) { /* FP to FP conversion */
-      if (st == IRT_NUM) { /* fp64 to fp32 */
-        cop = OPC_FDTOS;
-        opce = CO_FDTOFS;
-      } else { /* fp32 to fp64 */
-        cop = OPC_FSTOD;
-        opce = CO_FSTOFD;
-      }
+      cop = (st == IRT_NUM ? OPC_FDTOS : OPC_FSTOD);
+      opce = CO_FSTOFD; /* smae for both cop */
     } else { /* INT to FP conversion */
-      if (st == IRT_U32 || st == IRT_INT) {
-        if (irt_isnum(ir->t)) { /* int32 to fp64 */
-          cop = OPC_FSTOD;
-          opce = CO_ISTOFD;
-        } else { /* int32 to fp32 */
-          cop = OPC_FSTOS;
-          opce = CO_ISTOFS;
-        }
-      } else {
-        if (irt_isnum(ir->t)) { /* int64 to fp64 */
-          cop = OPC_FDTOD;
-          opce = CO_IDTOFD;
-        } else { /* int64 to fp32 */
-          cop = OPC_FDTOS;
-          opce = CO_IDTOFS;
-        }
-      }
+      cop = (st == IRT_U32 || st == IRT_INT) ?
+        (irt_isnum(ir->t) ? OPC_FSTOD : OPC_FSTOS) :
+        (irt_isnum(ir->t) ? OPC_FDTOD : OPC_FDTOS);
+      opce = CO_ISTOFS; /* smae for all cop */
     }
     E2K_ALOPF2(as, 0, cop, opce, op1, op2, RES_ALS_0134);
   } else if (stfp) { /* FP to INT conversion */
-    NIY
+    if (irt_isguard(ir->t)) {
+      /* Checked conversions are only supported from NUM to INT */
+      lj_assertA(irt_isint(ir->t) && st == IRT_NUM,
+                 "bad type for checked CONV");
+      //asm_tointg(as, ir);
+      NIY
+    } else {
+      if (irt_isu64(ir->t)) { /* FP to U64 */
+        /* for inputs >= 2^63 add -2^64, convert again. */
+        NIY
+      } else if (irt_isu32(ir->t)) { /* FP to U32 */
+        NIY
+      } else {
+        cop = irt_is64(ir->t) ?
+          (st == IRT_NUM ? OPC_FDTOD : OPC_FSTOD) :
+          (st == IRT_NUM ? OPC_FDTOS : OPC_FSTOS);
+        opce = CO_FSTOISTR; /* same for all cop */
+        E2K_ALOPF2(as, 0, cop, opce, op1, op2, RES_ALS_0134);
+      }
+    }
   } else { /* INT to INT conversion */
     NIY
   }
@@ -169,35 +198,33 @@ static void asm_sload(ASMState *as, IRIns *ir)
 {
   int32_t ofs = 8*((int32_t)ir->op1-2);
   IRType1 t = ir->t;
-  E2kOperand op1, op2;
-  Reg dest = 0;
-  //Reg base;
+  E2kOperand op_dest, op_base, op_const;
+  int cop;
+  Reg dest = RID_NONE, base = RID_NONE;
   lj_assertA(!(ir->op2 & IRSLOAD_PARENT),
              "bad parent SLOAD");  /* Handled by asm_head_side(). */
   lj_assertA(irt_isguard(ir->t) || !(ir->op2 & IRSLOAD_TYPECHECK),
              "inconsistent SLOAD variant");
   if ((ir->op2 & IRSLOAD_CONVERT) && irt_isguard(t) && irt_isint(t)) {
     dest = ra_scratch(as, RSET_GPR);
-    NIY
-    // TODO asm_tointg(as, ir, dest);
+    asm_tointg(as, ir, dest);
+    base = ra_alloc1(as, REF_BASE, RSET_GPR);
+    E2K_REG(REG_R, dest, op_dest);
     t.irt = IRT_NUM; /* Continue with a regular number type check. */
   } else if (ra_used(ir)) {
     lj_assertA(irt_isnum(ir->t) || irt_isint(ir->t) || irt_isaddr(ir->t),
                "bad SLOAD type %d", irt_type(t));
-    //TODO alloc base ?
     dest = ra_dest(as, ir, RSET_GPR);
-    E2K_REG(REG_R, dest, op1);
-    op2 = op1;
-    //Reg base = ra_alloc1(as, REF_BASE, RSET_GPR); 
+    base = ra_alloc1(as, REF_BASE, RSET_GPR);
+    E2K_REG(REG_R, dest, op_dest);
     if (ir->op2 & IRSLOAD_CONVERT) {
       if (irt_isint(t)) {
-        // fp64 -> int32
-        //TODO double -> int32
-        NIY
+        E2K_ALOPF2(as, 0, OPC_FDTOS, CO_FDTOISTR, op_dest, op_dest, RES_ALS_0134);
+        as->mcp = emit_bundle_finalize(as, as->mcp);
         t.irt = IRT_NUM;
       } else {
-        // int32 -> fp64
-        E2K_ALOPF2(as, 0, OPC_FSTOD, CO_ISTOFD, op1, op2, RES_ALS_0134);
+        E2K_ALOPF2(as, 0, OPC_FSTOD, CO_ISTOFD, op_dest, op_dest, RES_ALS_0134);
+        as->mcp = emit_bundle_finalize(as, as->mcp);
         t.irt = IRT_INT;
       }
     } else if (irt_isaddr(t)) {
@@ -209,16 +236,47 @@ static void asm_sload(ASMState *as, IRIns *ir)
       // TODO SIGN EXTEND ??
       NIY
     }
-    // TODO skib base ??
-  }
-  // TODO aloc base ??z
-  Reg base = ra_alloc1(as, REF_BASE, RSET_GPR);
-  if (ir->op2 & IRSLOAD_TYPECHECK) {
-    NIY
   } else {
-    // TODO make load
-    NIY
+    if (!(ir->op2 & IRSLOAD_TYPECHECK))
+      return; /* No type check: avoid base alloc. */
+    base = ra_alloc1(as, REF_BASE, RSET_GPR);
   }
+  if (ir->op2 & IRSLOAD_TYPECHECK) {
+    Reg type = ra_scratch(as, rset_exclude(RSET_GPR, dest));
+    E2kOperand op_type;
+    E2K_REG(REG_R, type, op_type);
+    Reg pred = ra_pred(as, RSET_PRED);
+    if (irt_ispri(t)) {
+      NIY
+    } else if (ir->op2 & IRSLOAD_KEYINDEX) {
+      NIY
+    } else {
+      E2K_CONST(CONST_U32, (int32_t)irt_toitype(t), op_const);
+      asm_guard(as, pred, 1);
+      /*
+        ld(s/d) base, ofs, dest
+        --
+        sard   dest, 47, type
+        --
+        cmpesb type, LJ_TYPE, predN
+        disp ctprN, as->mctop
+        --
+        ct ctprN, ~predN
+      */
+      E2K_ALOPF7(as, 0, OPC_CMPSB, CMPI_EQ, op_type, op_const, pred, RES_ALS_0134);
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+      E2K_CONST(CONST_U16, 47, op_const);
+      E2K_ALOPF1(as, 0, OPC_SARD, op_dest, op_const, op_type, RES_ALS_012345);
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+    }
+    cop = OPC_LDD;
+  } else {
+    cop = irt_isint(t) ? OPC_LDW : OPC_LDD;
+  }
+  E2K_CONST(CONST_U32, ofs, op_const);
+  E2K_REG(REG_R, base, op_base);
+  E2K_ALOPF1(as, 0, cop, op_base, op_const, op_dest, RES_ALS_0235);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
 /* -- FP/int arithmetic and logic operations ------------------------------ */
@@ -359,8 +417,7 @@ static void asm_comp(ASMState *as, IRIns *ir)
     E2K_REG(REG_R, ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left)), op2);
   }
 
-  E2K_ALOPF7(as, 0, cop, opce, op1, op2, pred,
-             RES_ALS_0134);
+  E2K_ALOPF7(as, 0, cop, opce, op1, op2, pred, RES_ALS_0134);
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 

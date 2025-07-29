@@ -187,6 +187,7 @@ enum {
   RES_INIT    = RES_MASK,
   RES_NONE    = 0,
   RES_ALS_012345 = RES_ALS0 | RES_ALS1 | RES_ALS2 | RES_ALS3 | RES_ALS4 | RES_ALS5,
+  RES_ALS_0235   = RES_ALS0 | RES_ALS2 | RES_ALS3 | RES_ALS5,
   RES_ALS_0134   = RES_ALS0 | RES_ALS1 | RES_ALS3 | RES_ALS4,
   RES_ALS_03     = RES_ALS0 | RES_ALS3,
   RES_ALS_25     = RES_ALS2 | RES_ALS5,
@@ -345,6 +346,7 @@ typedef union {
 #define OPC_ADDD   0x11
 #define OPC_SUBS   0x12
 #define OPC_SUBD   0x13
+#define OPC_SARD   0x1d
 #define OPC_CMPSB  0x20
 #define OPC_CMPDB  0x21
 #define OPC_STW    0x26
@@ -356,6 +358,8 @@ typedef union {
 #define OPC_FDTOD  0x3d
 #define OPC_FSTOD  0x3e
 #define OPC_FDTOS  0x3f
+#define OPC_LDW    0x66
+#define OPC_LDD    0x67
 /* non-combined operations long */
 #define OPC_MULS   0x20
 #define OPC_MULD   0x21
@@ -378,12 +382,17 @@ typedef union {
 #define CMPF_NLE   0x6
 #define CMPF_OD    0x7
 /* convertation opc */
-#define CO_ISTOFS  0xc4
-#define CO_ISTOFD  0xc4
-#define CO_IDTOFS  0xc4
-#define CO_IDTOFD  0xc4
-#define CO_FSTOFD  0xc6
-#define CO_FDTOFS  0xc6
+#define CO_FSTOISTR 0xc2
+#define CO_FSTOIDTR 0xc2
+#define CO_FDTOISTR 0xc2
+#define CO_FDTOIDTR 0xc2
+#define CO_ISTOFS   0xc4
+#define CO_ISTOFD   0xc4
+#define CO_IDTOFS   0xc4
+#define CO_IDTOFD   0xc4
+#define CO_FSTOFD   0xc6
+#define CO_FDTOFS   0xc6
+
 
 /* -- static latency ------------------------------------------------------ */
 #define E2K_NOP_DISP_CT 4
