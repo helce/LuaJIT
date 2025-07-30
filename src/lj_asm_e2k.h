@@ -59,20 +59,16 @@ static void asm_exitstub_setup(ASMState *as)
 
   /* Register allocation is not started yet */
   MCode *mxp = as->mctop;
-  E2kOperand op1, op2, op3;
-
   emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
                 emit_src1(as, E2K_CONST, 0),
                 emit_src2(as, E2K_CONST, as->T->traceno),
                 emit_dst(as, E2K_REG, RID_TMP));
-
   E2K_CT(as, RID_CTPR1, 0, 0);
   mxp = emit_bundle_finalize(as, mxp);
-
-  E2K_REG(REG_G, RID_TMP, op3);
-  E2K_REG(REG_R, RID_SP, op1);
-  E2K_CONST(CONST_U16, E2K_STACK_TMP, op2);
-  E2K_ALOPF3(as, 0, OPC_STW, op1, op2, op3, RES_ALS_25);
+  emit_alopf3(as, 0, OPC_STW, RES_ALS_25,
+                emit_src1(as, E2K_REG, RID_SP),
+                emit_src2(as, E2K_CONST, E2K_STACK_TMP),
+                emit_src3(as, E2K_REG, RID_TMP));
   E2K_COPF2(as, OPC_DISP, RID_CTPR1,
             (ptrdiff_t)((void *)lj_vm_exit_handler - (void *)mxp));
   mxp = emit_bundle_finalize(as, mxp);
@@ -114,7 +110,6 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
 
 static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
 {
-  E2kOperand op_left, op_tmp;
   Reg pred = ra_pred(as, RSET_PRED);
   Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, left));
   Reg dest = ra_dest(as, ir, RSET_GPR);
@@ -129,14 +124,17 @@ static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
     --
     ct ctprN, ~predN
   */
-  E2K_REG(REG_R, left, op_left);
-  E2K_REG(REG_R, tmp, op_tmp);
-  E2K_ALOPF7(as, 0, OPC_FCMPDB, CMPF_EQ, op_left, op_tmp, pred, RES_ALS_0134);
+  emit_alopf7(as, 0, OPC_FCMPDB, CMPF_EQ, RES_ALS_0134,
+              emit_src1(as, E2K_REG, left),
+              emit_src2(as, E2K_REG, tmp),
+              emit_pdst(as, E2K_REG_PRED, pred));
   as->mcp = emit_bundle_finalize(as, as->mcp);
+
   emit_alopf2(as, 0, OPC_FSTOD, CO_ISTOFD, RES_ALS_0134,
               emit_src2(as, E2K_REG, dest),
               emit_dst(as, E2K_REG, tmp));
   as->mcp = emit_bundle_finalize(as, as->mcp);
+
   emit_alopf2(as, 0, OPC_FDTOS, CO_FDTOISTR, RES_ALS_0134,
               emit_src2(as, E2K_REG, left),
               emit_dst(as, E2K_REG, dest));
@@ -202,7 +200,6 @@ static void asm_sload(ASMState *as, IRIns *ir)
 {
   int32_t ofs = 8*((int32_t)ir->op1-2);
   IRType1 t = ir->t;
-  E2kOperand op_dest, op_const;
   int cop = 0, opce = 0;
   Reg dest = RID_NONE, base = RID_NONE;
   lj_assertA(!(ir->op2 & IRSLOAD_PARENT),
@@ -213,14 +210,12 @@ static void asm_sload(ASMState *as, IRIns *ir)
     dest = ra_scratch(as, RSET_GPR);
     asm_tointg(as, ir, dest);
     base = ra_alloc1(as, REF_BASE, RSET_GPR);
-    E2K_REG(REG_R, dest, op_dest);
     t.irt = IRT_NUM; /* Continue with a regular number type check. */
   } else if (ra_used(ir)) {
     lj_assertA(irt_isnum(ir->t) || irt_isint(ir->t) || irt_isaddr(ir->t),
                "bad SLOAD type %d", irt_type(t));
     dest = ra_dest(as, ir, RSET_GPR);
     base = ra_alloc1(as, REF_BASE, RSET_GPR);
-    E2K_REG(REG_R, dest, op_dest);
     if (ir->op2 & IRSLOAD_CONVERT) {
       cop = irt_isint(t) ? OPC_FDTOS : OPC_FSTOD;
       opce = irt_isint(t) ? CO_FDTOISTR : CO_ISTOFD;
@@ -245,15 +240,12 @@ static void asm_sload(ASMState *as, IRIns *ir)
   }
   if (ir->op2 & IRSLOAD_TYPECHECK) {
     Reg type = ra_scratch(as, rset_exclude(RSET_GPR, dest));
-    E2kOperand op_type;
-    E2K_REG(REG_R, type, op_type);
     Reg pred = ra_pred(as, RSET_PRED);
     if (irt_ispri(t)) {
       NIY
     } else if (ir->op2 & IRSLOAD_KEYINDEX) {
       NIY
     } else {
-      E2K_CONST(CONST_U32, (int32_t)irt_toitype(t), op_const);
       asm_guard(as, pred, 1);
       /*
         ld(s/d) base, ofs, dest
@@ -265,8 +257,12 @@ static void asm_sload(ASMState *as, IRIns *ir)
         --
         ct ctprN, ~predN
       */
-      E2K_ALOPF7(as, 0, OPC_CMPSB, CMPI_EQ, op_type, op_const, pred, RES_ALS_0134);
+      emit_alopf7(as, 0, OPC_CMPSB, CMPI_EQ, RES_ALS_0134,
+                  emit_src1(as, E2K_REG, type),
+                  emit_src2(as, E2K_CONST, (int32_t)irt_toitype(t)),
+                  emit_pdst(as, E2K_REG_PRED, pred));
       as->mcp = emit_bundle_finalize(as, as->mcp);
+
       emit_alopf1(as, 0, OPC_SARD, RES_ALS_012345,
                   emit_src1(as, E2K_REG, dest),
                   emit_src2(as, E2K_CONST, 47),
@@ -391,8 +387,6 @@ static const uint32_t asm_fpcompmap[IR_ABC+1] = {
 static void asm_comp(ASMState *as, IRIns *ir)
 {
   IROp op = ir->o;
-  RA_DBG_FLUSH();
-  E2kOperand op1, op2;
   int inverted = 0, cop = 0, opce = 0;
   /*
     disp ctprN, stub(patch) or to mctop
@@ -402,8 +396,6 @@ static void asm_comp(ASMState *as, IRIns *ir)
     ct ctprN, predN (inverted)
   */
   if (op == IR_ABC) op = IR_UGT;
-  Reg pred = ra_pred(as, RSET_PRED);
-
   if (irt_isnum(ir->t)) {
     inverted = (op == IR_NE) ? 1 : 0;
     cop = OPC_FCMPDB; // only doubles
@@ -413,20 +405,23 @@ static void asm_comp(ASMState *as, IRIns *ir)
     cop = irt_is64(ir->t) ? OPC_CMPDB : OPC_CMPSB;
     opce = asm_compmap[op];
   }
-
   asm_guard(as, pred, inverted);
-
   Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
-  E2K_REG(REG_R, left, op1);
+  Reg pred = ra_pred(as, RSET_PRED);
 
   if (irref_isk(ir->op2)) {
-    //op2 = get_kval(as, ir->op2);
-    NIY
+    intptr_t k = get_kval(as, ir->op2);
+    emit_alopf7(as, 0, cop, opce, RES_ALS_0134,
+                emit_src1(as, E2K_REG, left),
+                emit_src2(as, E2K_CONST, k),
+                emit_pdst(as, E2K_REG_PRED, pred));
   } else {
-    E2K_REG(REG_R, ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left)), op2);
+    Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
+    emit_alopf7(as, 0, cop, opce, RES_ALS_0134,
+                emit_src1(as, E2K_REG, left),
+                emit_src2(as, E2K_REG, right),
+                emit_pdst(as, E2K_REG_PRED, pred));
   }
-
-  E2K_ALOPF7(as, 0, cop, opce, op1, op2, pred, RES_ALS_0134);
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 

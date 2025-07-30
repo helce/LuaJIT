@@ -122,92 +122,6 @@ static E2kOp get_const_type(intptr_t val)
     return E2K_CONST64;
 }
 
-static uint32_t E2K_SRC1(ASMState *as, E2kOperand src1)
-{
-  switch (src1.type) {
-  case REG_B:
-    return src1.value.regn - RID_B0;
-  case REG_R:
-    return (src1.value.regn - RID_R0) | 0x80;
-  case REG_G:
-    return (src1.value.regn - (RID_G16 + 16)) | 0xe0;
-  case CONST_U4:
-    return src1.value.u4 | 0xc0;
-  case CONST_U5:
-    return src1.value.u5 | 0xc0;
-  default:
-    lj_assertA(0, "bad type for src1 (%d)", src1.type);
-    return 0;
-  }
-}
-
-static uint32_t E2K_SRC2(ASMState *as, E2kOperand src2)
-{
-  switch (src2.type) {
-  case REG_B:
-    return src2.value.regn - RID_B0;
-  case REG_R:
-    return (src2.value.regn - RID_R0) | 0x80;
-  case REG_G:
-    return (src2.value.regn - (RID_G16 + 16)) | 0xe0;
-  case CONST_U4:
-    return src2.value.u4 | 0xc0;
-  case CONST_U5:
-    src2.type = CONST_U16;
-    src2.value.u16 = src2.value.u5 & 0x1f;
-    // fall through
-  case CONST_U16:
-    return 0xd0 + E2K_add_lts(as, src2);
-  case CONST_U32:
-    return 0xd8 + E2K_add_lts(as, src2);
-  case CONST_U64:
-    return 0xdc + E2K_add_lts(as, src2);
-  default:
-    lj_assertA(0, "bad type for src2 (%d)", src2.type);
-    return 0;
-  }
-}
-
-static uint32_t E2K_SRC3(ASMState *as, E2kOperand src3)
-{
-  switch (src3.type) {
-  case REG_B:
-    return src3.value.regn - RID_B0;
-  case REG_R:
-    return (src3.value.regn - RID_R0) | 0x80;
-  case REG_G:
-    return (src3.value.regn - (RID_G16 + 16)) | 0xe0;
-  default:
-    lj_assertA(0, "bad type for src3 (%d)", src3.type);
-    return 0;
-  }
-}
-
-static uint32_t E2K_DST(ASMState *as, E2kOperand dst)
-{
-  switch (dst.type) {
-  case REG_B:
-    return dst.value.regn - RID_B0;
-  case REG_R:
-    return (dst.value.regn - RID_R0) | 0x80;
-  case REG_CTPR:
-    return (dst.value.regn - (RID_CTPR1 + 1)) | 0xd0;
-  case REG_G:
-    return (dst.value.regn - (RID_G16 + 16)) | 0xe0;
-  default:
-    lj_assertA(0, "bad type for dst (%d)", dst.type);
-    return 0;
-  }
-}
-
-static uint32_t E2K_PDST(ASMState *as, Reg pred)
-{
-  return pred - RID_PRED1 + 1;
-}
-
-#define E2K_NOP(as, nops) \
-  as->bundle.nop = nops
-
 static void E2K_CT(ASMState *as, Reg ctpr, Reg pred, int inverted)
 {
   // TODO it takes not a full syl
@@ -241,39 +155,6 @@ static void E2K_COPF2(ASMState *as, uint32_t opc, Reg ctpr, uintptr_t disp)
   syl.fields.ctpr = ctpr - RID_CTPR1 + 1;
 
   as->bundle.cs[0] = syl.i;
-  as->bundle.f1++;
-}
-
-static void E2K_ALOPF3(ASMState *as, uint32_t spec, uint32_t cop,
-                       E2kOperand src1, E2kOperand src2, E2kOperand src3, uint32_t als_mask)
-{
-  int als_idx = E2K_add_alu_op(as, als_mask);
-  E2kAlopf3 syl;
-  syl.i = 0;
-  syl.fields.src3  = E2K_SRC3(as, src3);
-  syl.fields.src2 = E2K_SRC2(as, src2);
-  syl.fields.src1 = E2K_SRC1(as, src1);
-  syl.fields.cop = cop;
-  syl.fields.spec = spec;
-
-  as->bundle.als[als_idx] = syl.i;
-  as->bundle.f1++;
-}
-
-static void E2K_ALOPF7(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
-                       E2kOperand src1, E2kOperand src2, Reg pred, uint32_t als_mask)
-{
-  int als_idx = E2K_add_alu_op(as, als_mask);
-  E2kAlopf7 syl;
-  syl.i = 0;
-  syl.fields.pdst = E2K_PDST(as, pred);
-  syl.fields.cmpopce = opce;
-  syl.fields.src2 = E2K_SRC2(as, src2);
-  syl.fields.src1 = E2K_SRC1(as, src1);
-  syl.fields.cop = cop;
-  syl.fields.spec = spec;
-
-  as->bundle.als[als_idx] = syl.i;
   as->bundle.f1++;
 }
 
@@ -445,8 +326,28 @@ static uint32_t emit_src2(ASMState *as, E2kOp type, intptr_t src2)
   }
 }
 
+static uint32_t emit_src3(ASMState *as, E2kOp type, intptr_t src3)
+{
+  UNUSED(as);
+  if (type == E2K_REG) {
+    switch (get_reg_type(src3)) {
+    case E2K_REG_B:
+      return src3 - RID_B0;
+    case E2K_REG_R:
+      return (src3  - RID_R0) | 0x80;
+    case E2K_REG_G:
+      return (src3 - RID_G16 + 16) | 0xe0;
+    default:
+      lj_assertA(0, "bad reg for src3 (%d)", dst);
+    }
+  } else {
+    lj_assertA(0, "bad type for src3 (%d)", type);
+  }
+}
+
 static uint32_t emit_dst(ASMState *as, E2kOp type, intptr_t dst)
 {
+  UNUSED(as);
   if (type == E2K_REG) {
     switch (get_reg_type(dst)) {
     case E2K_REG_B:
@@ -463,6 +364,50 @@ static uint32_t emit_dst(ASMState *as, E2kOp type, intptr_t dst)
   } else {
     lj_assertA(0, "bad type for dst (%d)", type);
   }
+}
+
+static uint32_t emit_pdst(ASMState *as, E2kOp type, intptr_t pred)
+{
+  UNUSED(as);
+  if (type == E2K_REG_PRED) {
+    return pred - RID_PRED1 + 1;
+  } else {
+    lj_assertA(0, "bad reg for pdst (%d)", pred);
+    return 0;
+  }
+}
+
+static void emit_alopf7(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
+                        uint32_t mask, uint32_t src1, uint32_t src2, uint32_t pred)
+{
+  int als_idx = E2K_add_alu_op(as, mask);
+  E2kAlopf7 syl;
+  syl.i = 0;
+  syl.fields.pdst = pred;
+  syl.fields.cmpopce = opce;
+  syl.fields.src2 = src2;
+  syl.fields.src1 = src1;
+  syl.fields.cop = cop;
+  syl.fields.spec = spec;
+
+  as->bundle.als[als_idx] = syl.i;
+  as->bundle.f1++;
+}
+
+static void emit_alopf3(ASMState *as, uint32_t spec, uint32_t cop, uint32_t mask,
+                        uint32_t src1, uint32_t src2, uint32_t src3)
+{
+  int als_idx = E2K_add_alu_op(as, mask);
+  E2kAlopf3 syl;
+  syl.i = 0;
+  syl.fields.src3  = src3;
+  syl.fields.src2 = src2;
+  syl.fields.src1 = src1;
+  syl.fields.cop = cop;
+  syl.fields.spec = spec;
+
+  as->bundle.als[als_idx] = syl.i;
+  as->bundle.f1++;
 }
 
 static void emit_alopf2(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
@@ -496,6 +441,9 @@ static void emit_alopf1(ASMState *as, uint32_t spec, uint32_t cop,
   as->bundle.als[als_idx] = syl.i;
   as->bundle.f1++;
 }
+
+#define emit_nop(as, nops) \
+  as->bundle.nop = nops
 
 /* -- Emit generic operations --------------------------------------------- */
 
