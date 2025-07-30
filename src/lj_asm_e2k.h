@@ -433,6 +433,22 @@ static void asm_loop_fixup(ASMState *as)
   p[-8] = tmp | (disp & 0xfffffff);
 }
 
+/* -- Head of trace ------------------------------------------------------- */
+
+/* Coalesce BASE register for a root trace. */
+static void asm_head_root_base(ASMState *as)
+{
+  IRIns *ir = IR(REF_BASE);
+  Reg r = ir->r;
+  if (ra_hasreg(r)) {
+    ra_free(as, r);
+    if (rset_test(as->modset, r) || irt_ismarked(ir->t))
+      ir->r = RID_INIT; /* No inheritance for modified BASE register. */
+    if (r != RID_BASE)
+      emit_movrr(as, r, RID_BASE);
+  }
+}
+
 /* -- Tail of trace ------------------------------------------------------- */
 
 /* Prepare tail of code. */
@@ -576,9 +592,6 @@ static void asm_strto(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_callx(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_head_root_base(ASMState *as)
 {  NIY }
 
 static Reg asm_head_side_base(ASMState *as, IRIns *irp)

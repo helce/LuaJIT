@@ -363,6 +363,15 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
 
 /* -- Emit basic instructions --------------------------------------------- */
 
+/* -- Emit generic operations --------------------------------------------- */
+
+/* Generic move between two regs. */
+static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
+{
+  UNUSED(ir);
+  NIY
+}
+
 static void emit_loadu64(ASMState *as, Reg r, uint64_t u64)
 {
   NIY
@@ -393,11 +402,6 @@ static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 }
 
 static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
-{
-  NIY
-}
-
-static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
 {
   NIY
 }
