@@ -407,14 +407,9 @@ static void emit_copf2(ASMState *as, uint32_t opc, Reg ctpr, uintptr_t disp)
 #define emit_nop(as, nops) \
   as->bundle.nop = nops
 
-/* -- Emit generic operations --------------------------------------------- */
+/* -- Emit loads/stores --------------------------------------------------- */
 
-/* Generic move between two regs. */
-static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
-{
-  UNUSED(ir);
-  NIY
-}
+#define emit_canremat(ref)  ((ref) <= REF_BASE)
 
 static void emit_loadu64(ASMState *as, Reg r, uint64_t u64)
 {
@@ -455,11 +450,25 @@ static void emit_jmp(ASMState *as,  MCode *target)
   NIY
 }
 
+/* -- Emit generic operations --------------------------------------------- */
+
+/* Generic move between two regs. */
+static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
+{
+  UNUSED(ir);
+  emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+              emit_src1(as, E2K_REG, src),
+              emit_src2(as, E2K_CONST, 0),
+              emit_dst(as, E2K_REG, dst));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
+/* Add offset to pointer. */
 static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
 {
-  NIY
+  if (ofs) {
+    NIY
+  }
 }
 
 #define emit_spsub(as, ofs) emit_addptr(as, 0, -(ofs))
-
-#define emit_canremat(ref)  ((ref) <= REF_BASE)

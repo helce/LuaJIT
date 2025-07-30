@@ -405,9 +405,9 @@ static void asm_comp(ASMState *as, IRIns *ir)
     cop = irt_is64(ir->t) ? OPC_CMPDB : OPC_CMPSB;
     opce = asm_compmap[op];
   }
-  asm_guard(as, pred, inverted);
-  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
   Reg pred = ra_pred(as, RSET_PRED);
+  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
+  asm_guard(as, pred, inverted);
 
   if (irref_isk(ir->op2)) {
     intptr_t k = get_kval(as, ir->op2);
@@ -432,9 +432,20 @@ static void asm_loop_fixup(ASMState *as)
   MCode *p = as->mctop;
   MCode *target = as->mcp;
   /* p[-10] - HS; p[-9] - ALS(cmp); p[-8] - CS0 */
-  uint32_t tmp = p[-8] & 0xf0000000;
-  uint32_t disp = (target - p + 8) >> 3;
-  p[-8] = tmp | (disp & 0xfffffff);
+  if (as->loopinv) { /* Inverted loop branch? */
+    /* asm_guard already inverted the cond branch. Only patch the target. */
+    uint32_t tmp = p[-8] & 0xf0000000;
+    uint32_t disp = (target - p + 8) >> 3;
+    p[-8] = tmp | (disp & 0xfffffff);
+  } else {
+    // TODO not sure about this case, need real example
+    NIY
+  }
+}
+
+static void asm_loop_tail_fixup(ASMState *as)
+{
+  UNUSED(as); /* Nothing to do. */
 }
 
 /* -- Head of trace ------------------------------------------------------- */
@@ -448,9 +459,8 @@ static void asm_head_root_base(ASMState *as)
     ra_free(as, r);
     if (rset_test(as->modset, r) || irt_ismarked(ir->t))
       ir->r = RID_INIT; /* No inheritance for modified BASE register. */
-    NIY
-    //if (r != RID_BASE)
-      //emit_movrr(as, r, RID_BASE);
+    if (r != RID_BASE)
+      emit_movrr(as, 0, r, RID_BASE);
   }
 }
 
@@ -616,9 +626,6 @@ static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
 { NIY }
 
 static void asm_tail_fixup(ASMState *as, TraceNo lnk)
-{ NIY }
-
-static void asm_loop_tail_fixup(ASMState *as)
 { NIY }
 
 static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
