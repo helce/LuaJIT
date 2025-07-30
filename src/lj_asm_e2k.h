@@ -63,13 +63,13 @@ static void asm_exitstub_setup(ASMState *as)
                 emit_src1(as, E2K_CONST, 0),
                 emit_src2(as, E2K_CONST, as->T->traceno),
                 emit_dst(as, E2K_REG, RID_TMP));
-  E2K_CT(as, RID_CTPR1, 0, 0);
+  emit_ct(as, RID_CTPR1, 0, 0);
   mxp = emit_bundle_finalize(as, mxp);
   emit_alopf3(as, 0, OPC_STW, RES_ALS_25,
                 emit_src1(as, E2K_REG, RID_SP),
                 emit_src2(as, E2K_CONST, E2K_STACK_TMP),
                 emit_src3(as, E2K_REG, RID_TMP));
-  E2K_COPF2(as, OPC_DISP, RID_CTPR1,
+  emit_copf2(as, OPC_DISP, RID_CTPR1,
             (ptrdiff_t)((void *)lj_vm_exit_handler - (void *)mxp));
   mxp = emit_bundle_finalize(as, mxp);
 
@@ -97,10 +97,10 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
                 emit_dst(as, E2K_REG, RID_TMP));
   p = emit_bundle_finalize(as, p);
 
-  E2K_CT(as, RID_CTPR1, pred, inverted);
+  emit_ct(as, RID_CTPR1, pred, inverted);
   p = emit_bundle_finalize(as, p);
 
-  E2K_COPF2(as, OPC_DISP, RID_CTPR1,
+  emit_copf2(as, OPC_DISP, RID_CTPR1,
             (ptrdiff_t)((void *)target - (void *)p));
   /* do not finalize here */
   as->mcp = p;
