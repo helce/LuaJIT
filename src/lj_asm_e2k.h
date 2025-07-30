@@ -114,7 +114,7 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
 
 static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
 {
-  E2kOperand op_left, op_tmp, op_dest;
+  E2kOperand op_left, op_tmp;
   Reg pred = ra_pred(as, RSET_PRED);
   Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, left));
   Reg dest = ra_dest(as, ir, RSET_GPR);
@@ -131,28 +131,28 @@ static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
   */
   E2K_REG(REG_R, left, op_left);
   E2K_REG(REG_R, tmp, op_tmp);
-  E2K_REG(REG_R, dest, op_dest);
   E2K_ALOPF7(as, 0, OPC_FCMPDB, CMPF_EQ, op_left, op_tmp, pred, RES_ALS_0134);
   as->mcp = emit_bundle_finalize(as, as->mcp);
-  E2K_ALOPF2(as, 0, OPC_FSTOD, CO_ISTOFD, op_dest, op_tmp, RES_ALS_0134);
+  emit_alopf2(as, 0, OPC_FSTOD, CO_ISTOFD, RES_ALS_0134,
+              emit_src2(as, E2K_REG, dest),
+              emit_dst(as, E2K_REG, tmp));
   as->mcp = emit_bundle_finalize(as, as->mcp);
-  E2K_ALOPF2(as, 0, OPC_FDTOS, CO_FDTOISTR, op_left, op_dest, RES_ALS_0134);
+  emit_alopf2(as, 0, OPC_FDTOS, CO_FDTOISTR, RES_ALS_0134,
+              emit_src2(as, E2K_REG, left),
+              emit_dst(as, E2K_REG, dest));
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+// TODO refactor after full implementation
 static void asm_conv(ASMState *as, IRIns *ir)
 {
   IRType st = (IRType)(ir->op2 & IRCONV_SRCMASK);
   int stfp = (st == IRT_NUM || st == IRT_FLOAT);
   int st64 = (st == IRT_I64 || st == IRT_U64 || st == IRT_P64);
   int cop = 0, opce = 0;
-
   lj_assertA(irt_type(ir->t) != st, "inconsistent types for CONV");
-  E2kOperand op1, op2;
   Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
-  E2K_REG(REG_R, left, op1);
-  E2K_REG(REG_R, dest, op2);
 
   if (irt_isfp(ir->t)) {
     if (stfp) { /* FP to FP conversion */
@@ -164,7 +164,9 @@ static void asm_conv(ASMState *as, IRIns *ir)
         (irt_isnum(ir->t) ? OPC_FDTOD : OPC_FDTOS);
       opce = CO_ISTOFS; /* smae for all cop */
     }
-    E2K_ALOPF2(as, 0, cop, opce, op1, op2, RES_ALS_0134);
+    emit_alopf2(as, 0, cop, opce, RES_ALS_0134,
+                emit_src2(as, E2K_REG, left),
+                emit_dst(as, E2K_REG, dest));
   } else if (stfp) { /* FP to INT conversion */
     if (irt_isguard(ir->t)) {
       /* Checked conversions are only supported from NUM to INT */
@@ -183,7 +185,9 @@ static void asm_conv(ASMState *as, IRIns *ir)
           (st == IRT_NUM ? OPC_FDTOD : OPC_FSTOD) :
           (st == IRT_NUM ? OPC_FDTOS : OPC_FSTOS);
         opce = CO_FSTOISTR; /* same for all cop */
-        E2K_ALOPF2(as, 0, cop, opce, op1, op2, RES_ALS_0134);
+        emit_alopf2(as, 0, cop, opce, RES_ALS_0134,
+                    emit_src2(as, E2K_REG, left),
+                    emit_dst(as, E2K_REG, dest));
       }
     }
   } else { /* INT to INT conversion */
@@ -199,7 +203,7 @@ static void asm_sload(ASMState *as, IRIns *ir)
   int32_t ofs = 8*((int32_t)ir->op1-2);
   IRType1 t = ir->t;
   E2kOperand op_dest, op_const;
-  int cop;
+  int cop = 0, opce = 0;
   Reg dest = RID_NONE, base = RID_NONE;
   lj_assertA(!(ir->op2 & IRSLOAD_PARENT),
              "bad parent SLOAD");  /* Handled by asm_head_side(). */
@@ -218,15 +222,13 @@ static void asm_sload(ASMState *as, IRIns *ir)
     base = ra_alloc1(as, REF_BASE, RSET_GPR);
     E2K_REG(REG_R, dest, op_dest);
     if (ir->op2 & IRSLOAD_CONVERT) {
-      if (irt_isint(t)) {
-        E2K_ALOPF2(as, 0, OPC_FDTOS, CO_FDTOISTR, op_dest, op_dest, RES_ALS_0134);
-        as->mcp = emit_bundle_finalize(as, as->mcp);
-        t.irt = IRT_NUM;
-      } else {
-        E2K_ALOPF2(as, 0, OPC_FSTOD, CO_ISTOFD, op_dest, op_dest, RES_ALS_0134);
-        as->mcp = emit_bundle_finalize(as, as->mcp);
-        t.irt = IRT_INT;
-      }
+      cop = irt_isint(t) ? OPC_FDTOS : OPC_FSTOD;
+      opce = irt_isint(t) ? CO_FDTOISTR : CO_ISTOFD;
+      t.irt = irt_isint(t) ? IRT_NUM : IRT_INT;
+      emit_alopf2(as, 0, OPC_FSTOD, CO_ISTOFD, RES_ALS_0134,
+                  emit_src2(as, E2K_REG, dest),
+                  emit_dst(as, E2K_REG, dest));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
     } else if (irt_isaddr(t)) {
       /* Clear type from pointers. */
       // TODO EXTRACT TYPE 

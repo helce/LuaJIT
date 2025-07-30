@@ -244,22 +244,6 @@ static void E2K_COPF2(ASMState *as, uint32_t opc, Reg ctpr, uintptr_t disp)
   as->bundle.f1++;
 }
 
-static void E2K_ALOPF2(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
-                       E2kOperand src2, E2kOperand dst, uint32_t als_mask)
-{
-  int als_idx = E2K_add_alu_op(as, als_mask);
-  E2kAlopf2 syl;
-  syl.i = 0;
-  syl.fields.dst  = E2K_DST(as, dst);
-  syl.fields.src2 = E2K_SRC2(as, src2);
-  syl.fields.opce = opce;
-  syl.fields.cop = cop;
-  syl.fields.spec = spec;
-
-  as->bundle.als[als_idx] = syl.i;
-  as->bundle.f1++;
-}
-
 static void E2K_ALOPF3(ASMState *as, uint32_t spec, uint32_t cop,
                        E2kOperand src1, E2kOperand src2, E2kOperand src3, uint32_t als_mask)
 {
@@ -481,7 +465,23 @@ static uint32_t emit_dst(ASMState *as, E2kOp type, intptr_t dst)
   }
 }
 
-static void emit_alopf1(ASMState *as, uintptr_t spec, uint32_t cop,
+static void emit_alopf2(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
+                        uint32_t mask, uint32_t src2, uint32_t dst)
+{
+  int als_idx = E2K_add_alu_op(as, mask);
+  E2kAlopf2 syl;
+  syl.i = 0;
+  syl.fields.dst  = dst;
+  syl.fields.src2 = src2;
+  syl.fields.opce = opce;
+  syl.fields.cop = cop;
+  syl.fields.spec = spec;
+
+  as->bundle.als[als_idx] = syl.i;
+  as->bundle.f1++;
+}
+
+static void emit_alopf1(ASMState *as, uint32_t spec, uint32_t cop,
                         uint32_t mask, uint32_t src1, uint32_t src2, uint32_t dst)
 {
   int als_idx = E2K_add_alu_op(as, mask);
