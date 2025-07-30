@@ -324,6 +324,22 @@ typedef union {
   } fields;
 } E2kCopf2;
 
+typedef enum {
+  E2K_CONST = 0,
+  E2K_CONST4 = 4,
+  E2K_CONST5 = 5,
+  E2K_CONST16 = 16,
+  E2K_CONST32 = 32,
+  E2K_CONST64 = 64,
+  E2K_REG = 128,
+  E2K_REG_R = 256,
+  E2K_REG_B = 512,
+  E2K_REG_G = 1024,
+  E2K_REG_PRED = 2048,
+  E2K_REG_CTPR = 4096,
+  E2K_REG_UNKNOWN = 8192
+} E2kOp;
+
 #define REG_R 1
 #define REG_B 2
 #define REG_G 3

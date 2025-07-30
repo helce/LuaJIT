@@ -61,14 +61,15 @@ static void asm_exitstub_setup(ASMState *as)
   MCode *mxp = as->mctop;
   E2kOperand op1, op2, op3;
 
-  E2K_CONST(CONST_U4, 0, op1);
-  E2K_CONST(CONST_U16, as->T->traceno, op2);
-  E2K_REG(REG_G, RID_TMP, op3);
-  E2K_ALOPF1(as, 0, OPC_ADDD, op1, op2, op3, RES_ALS_012345);
+  emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_CONST, 0),
+                emit_src2(as, E2K_CONST, as->T->traceno),
+                emit_dst(as, E2K_REG, RID_TMP));
+
   E2K_CT(as, RID_CTPR1, 0, 0);
   mxp = emit_bundle_finalize(as, mxp);
 
-
+  E2K_REG(REG_G, RID_TMP, op3);
   E2K_REG(REG_R, RID_SP, op1);
   E2K_CONST(CONST_U16, E2K_STACK_TMP, op2);
   E2K_ALOPF3(as, 0, OPC_STW, op1, op2, op3, RES_ALS_25);
@@ -94,11 +95,10 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
     inverted = inverted ? 0 : 1;
     target = p; /* Patch target later in asm_loop_fixup. */
   }
-  E2kOperand op1, op2, op3;
-  E2K_CONST(CONST_U4, 0, op1);
-  E2K_CONST(CONST_U32, as->snapno, op2);
-  E2K_REG(REG_G, RID_TMP, op3);
-  E2K_ALOPF1(as, 0, OPC_ADDD, op1, op2, op3, RES_ALS_012345);
+  emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_CONST, 0),
+                emit_src2(as, E2K_CONST, as->snapno),
+                emit_dst(as, E2K_REG, RID_TMP));
   p = emit_bundle_finalize(as, p);
 
   E2K_CT(as, RID_CTPR1, pred, inverted);
@@ -198,7 +198,7 @@ static void asm_sload(ASMState *as, IRIns *ir)
 {
   int32_t ofs = 8*((int32_t)ir->op1-2);
   IRType1 t = ir->t;
-  E2kOperand op_dest, op_base, op_const;
+  E2kOperand op_dest, op_const;
   int cop;
   Reg dest = RID_NONE, base = RID_NONE;
   lj_assertA(!(ir->op2 & IRSLOAD_PARENT),
@@ -265,17 +265,20 @@ static void asm_sload(ASMState *as, IRIns *ir)
       */
       E2K_ALOPF7(as, 0, OPC_CMPSB, CMPI_EQ, op_type, op_const, pred, RES_ALS_0134);
       as->mcp = emit_bundle_finalize(as, as->mcp);
-      E2K_CONST(CONST_U16, 47, op_const);
-      E2K_ALOPF1(as, 0, OPC_SARD, op_dest, op_const, op_type, RES_ALS_012345);
+      emit_alopf1(as, 0, OPC_SARD, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, dest),
+                  emit_src2(as, E2K_CONST, 47),
+                  emit_dst(as, E2K_REG, type));
       as->mcp = emit_bundle_finalize(as, as->mcp);
     }
     cop = OPC_LDD;
   } else {
     cop = irt_isint(t) ? OPC_LDW : OPC_LDD;
   }
-  E2K_CONST(CONST_U32, ofs, op_const);
-  E2K_REG(REG_R, base, op_base);
-  E2K_ALOPF1(as, 0, cop, op_base, op_const, op_dest, RES_ALS_0235);
+  emit_alopf1(as, 0, cop, RES_ALS_0235,
+              emit_src1(as, E2K_REG, base),
+              emit_src2(as, E2K_CONST, ofs),
+              emit_dst(as, E2K_REG, dest));
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
@@ -283,19 +286,22 @@ static void asm_sload(ASMState *as, IRIns *ir)
 
 static void asm_alopf1(ASMState *as, IRIns *ir, int cop, int mask)
 {
-  E2kOperand op1, op2, op3;
   Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg left = ra_hintalloc(as, ir->op1, dest, RSET_GPR);
-  E2K_REG(REG_R, left, op1);
   if (irref_isk(ir->op2)) {
-    op2 = get_kval(as, ir->op2);
+    intptr_t k = get_kval(as, ir->op2);
+    emit_alopf1(as, 0, cop, mask,
+                emit_src1(as, E2K_REG, left),
+                emit_src2(as, E2K_CONST, k),
+                emit_dst(as, E2K_REG, dest));
   } else {
-    E2K_REG(REG_R, ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left)), op2);
+    Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
+    emit_alopf1(as, 0, cop, mask,
+                emit_src1(as, E2K_REG, left),
+                emit_src2(as, E2K_REG, right),
+                emit_dst(as, E2K_REG, dest));
   }
-  E2K_REG(REG_R, dest, op3);
-  E2K_ALOPF1(as, 0, cop, op1, op2, op3, mask);
   as->mcp = emit_bundle_finalize(as, as->mcp);
-
 }
 
 static void asm_add(ASMState *as, IRIns *ir)
@@ -412,7 +418,8 @@ static void asm_comp(ASMState *as, IRIns *ir)
   E2K_REG(REG_R, left, op1);
 
   if (irref_isk(ir->op2)) {
-    op2 = get_kval(as, ir->op2);
+    //op2 = get_kval(as, ir->op2);
+    NIY
   } else {
     E2K_REG(REG_R, ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left)), op2);
   }
@@ -444,8 +451,9 @@ static void asm_head_root_base(ASMState *as)
     ra_free(as, r);
     if (rset_test(as->modset, r) || irt_ismarked(ir->t))
       ir->r = RID_INIT; /* No inheritance for modified BASE register. */
-    if (r != RID_BASE)
-      emit_movrr(as, r, RID_BASE);
+    NIY
+    //if (r != RID_BASE)
+      //emit_movrr(as, r, RID_BASE);
   }
 }
 
