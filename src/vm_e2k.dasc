@@ -8178,8 +8178,64 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         break;
 
-    case BC_JFORI: case BC_JFORL:
-        | // Unsupported
+    case BC_JFORI:
+        | do_fault
+        break;
+
+    case BC_JFORL:
+        |.if JIT
+        | // ins_AJ RA_E = base*8, RD_E = traceno*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_dispatch_load 3
+        | lddsm     2, DISPATCH, DISPATCH_J(trace), T0
+        | addd      4, BASE, RA_E, RA
+        | ldd       5, STACK, SAVE_L, T3
+        | --
+        | pipe_fetch 2
+        | ldd       3, RA, 0x10, RB
+        | ldd       5, RA, 0x0, S0
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_none 4
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load S0, 2
+        | wait_load T0, 3
+        | --
+        | lddsm     2, T0, RD_E, T1
+        | faddd     3, S0, RB, S0
+        | fcmpltdb  4, RB, 0x0, pred2
+        | ldd       5, RA, 0x8, S1
+        | --
+        | wait_load S1, 1
+        | wait_load T1, 1
+        | wait      S0, 1, 4
+        | --
+        | lddsm     2, T1, TRACE->mcode, T2
+        | fcmpltdb  3, S1, S0, pred0
+        | fcmpltdb  4, S0, S1, pred1        // Invert comparison if step is negative.
+        | wait      pred0, 0, 3
+        | wait_load T2, 0
+        | --
+        | movtdsm   0, T2, ctpr1
+        | std       2, RA, 0x0, S0
+        | std       5, RA, 0x18, S0
+        | pass      pred0, p0
+        | pass      pred2, p1
+        | pass      pred1, p2
+        | landp     ~p0, ~p1, p4
+        | landp     ~p2, p1, p5
+        | landp     ~p4, ~p5, p6
+        | pass      p6, pred0
+        | wait_pred pred0, 0
+        | --
+        | std       2, DISPATCH, DISPATCH_GL(jit_base), BASE, ~pred0
+        | std       5, DISPATCH, DISPATCH_GL(tmpbuf.L), T3, ~pred0
+        | ct        ctpr1, ~pred0
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
+        |.endif
         break;
 
     case BC_IFORL:
@@ -8360,8 +8416,25 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_JLOOP:
-        | // Unsupported
-        | do_fault
+        |.if JIT
+        | // ins_AD RA_E = src1*8 (ignored), RD_E = traceno*8
+        | ldd       2, DISPATCH, DISPATCH_J(trace), T0
+        | ldd       0, STACK, SAVE_L, T3
+        | wait_load T0, 0
+        | --
+        | ldd       0, T0, RD_E, T1
+        | wait_load T1, 0
+        | --
+        | ldd       0, T1, TRACE->mcode, T2
+        | wait_load T2, 0
+        | --
+        | movtd     0, T2, ctpr1
+        | std       2, DISPATCH, DISPATCH_GL(jit_base), BASE
+        | --
+        | std       2, DISPATCH, DISPATCH_GL(tmpbuf.L), T3
+        | ct        ctpr1
+        | --
+        |.endif
         break;
 
     case BC_JMP:
