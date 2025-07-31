@@ -246,6 +246,9 @@ static void asm_sload(ASMState *as, IRIns *ir)
     } else if (ir->op2 & IRSLOAD_KEYINDEX) {
       NIY
     } else {
+      intptr_t k = irt_isnum(t) ? (int32_t)LJ_TISNUM :
+                   (int32_t)irt_toitype(t);
+      opce = irt_isnum(t) ? CMPI_B : CMPI_EQ;
       asm_guard(as, pred, 1);
       /*
         ld(s/d) base, ofs, dest
@@ -257,9 +260,9 @@ static void asm_sload(ASMState *as, IRIns *ir)
         --
         ct ctprN, ~predN
       */
-      emit_alopf7(as, 0, OPC_CMPSB, CMPI_EQ, RES_ALS_0134,
+      emit_alopf7(as, 0, OPC_CMPSB, opce, RES_ALS_0134,
                   emit_src1(as, E2K_REG, type),
-                  emit_src2(as, E2K_CONST, (int32_t)irt_toitype(t)),
+                  emit_src2(as, E2K_CONST, k),
                   emit_pdst(as, E2K_REG_PRED, pred));
       as->mcp = emit_bundle_finalize(as, as->mcp);
 
