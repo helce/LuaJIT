@@ -220,7 +220,7 @@ static void asm_sload(ASMState *as, IRIns *ir)
       cop = irt_isint(t) ? OPC_FDTOS : OPC_FSTOD;
       opce = irt_isint(t) ? CO_FDTOISTR : CO_ISTOFD;
       t.irt = irt_isint(t) ? IRT_NUM : IRT_INT;
-      emit_alopf2(as, 0, OPC_FSTOD, CO_ISTOFD, RES_ALS_0134,
+      emit_alopf2(as, 0, cop, opce, RES_ALS_0134,
                   emit_src2(as, E2K_REG, dest),
                   emit_dst(as, E2K_REG, dest));
       as->mcp = emit_bundle_finalize(as, as->mcp);
