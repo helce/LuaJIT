@@ -356,32 +356,32 @@ static void asm_mul(ASMState *as, IRIns *ir)
 
 static const uint32_t asm_compmap[IR_ABC+1] = {
   /* op     opce  */
-  /* LT  */ CMPI_LT,
-  /* GE  */ CMPI_LT, /* inverted */
-  /* LE  */ CMPI_LE,
-  /* GT  */ CMPI_LE, /* inverted */
-  /* ULT */ CMPI_B,
-  /* UGE */ CMPI_B,  /* inverted */
-  /* ULE */ CMPI_BE,
-  /* UGT */ CMPI_BE, /* inverted */
-  /* EQ  */ CMPI_EQ,
-  /* NE  */ CMPI_EQ, /* inverted */
-  /* ABC */ CMPI_BE, /* inverted */  /* same as UGT */
+  /* LT  */ CMPI_LT, /* inverted */
+  /* GE  */ CMPI_LT,
+  /* LE  */ CMPI_LE, /* inverted */
+  /* GT  */ CMPI_LE,
+  /* ULT */ CMPI_B,  /* inverted */
+  /* UGE */ CMPI_B,
+  /* ULE */ CMPI_BE, /* inverted */
+  /* UGT */ CMPI_BE,
+  /* EQ  */ CMPI_EQ, /* inverted */
+  /* NE  */ CMPI_EQ,
+  /* ABC */ CMPI_BE, /* same as UGT */
 };
 
 static const uint32_t asm_fpcompmap[IR_ABC+1] = {
   /* op     opce */
-  /* LT  */ CMPF_LT,
-  /* GE  */ CMPF_NLT,
-  /* LE  */ CMPF_LE,
-  /* GT  */ CMPF_NLE,
-  /* ULT */ CMPF_LT,
-  /* UGE */ CMPF_NLT,
-  /* ULE */ CMPF_LE,
-  /* UGT */ CMPF_NLE,
-  /* EQ  */ CMPF_EQ,
-  /* NE  */ CMPF_EQ, /* inverted, should be ordered */
-  /* ABC */ CMPF_NLE, /* same as UGT */
+  /* LT  */ CMPF_LT,  /* inverted */
+  /* GE  */ CMPF_NLT, /* inverted */
+  /* LE  */ CMPF_LE,  /* inverted */
+  /* GT  */ CMPF_NLE, /* inverted */
+  /* ULT */ CMPF_LT,  /* inverted */
+  /* UGE */ CMPF_NLT, /* inverted */
+  /* ULE */ CMPF_LE,  /* inverted */
+  /* UGT */ CMPF_NLE, /* inverted */
+  /* EQ  */ CMPF_EQ,  /* inverted */
+  /* NE  */ CMPF_EQ,  /* should be ordered */
+  /* ABC */ CMPF_NLE, /* inverted */ /* same as UGT */
 };
 
 static void asm_comp(ASMState *as, IRIns *ir)
@@ -397,11 +397,11 @@ static void asm_comp(ASMState *as, IRIns *ir)
   */
   if (op == IR_ABC) op = IR_UGT;
   if (irt_isnum(ir->t)) {
-    inverted = (op == IR_NE) ? 1 : 0;
+    inverted = (op == IR_NE) ? 0 : 1;
     cop = OPC_FCMPDB; // only doubles
     opce = asm_fpcompmap[op];
   } else {
-    inverted = (op&1) ? 1 : 0;
+    inverted = (op&1) ? 0 : 1;
     cop = irt_is64(ir->t) ? OPC_CMPDB : OPC_CMPSB;
     opce = asm_compmap[op];
   }
