@@ -434,12 +434,12 @@ static void asm_loop_fixup(ASMState *as)
 {
   MCode *p = as->mctop;
   MCode *target = as->mcp;
-  /* p[-10] - HS; p[-9] - ALS(cmp); p[-8] - CS0 */
+  /* p[-8] - HS; p[-7] - ALS(cmp); p[-6] - CS0 */
   if (as->loopinv) { /* Inverted loop branch? */
     /* asm_guard already inverted the cond branch. Only patch the target. */
-    uint32_t tmp = p[-8] & 0xf0000000;
-    uint32_t disp = (target - p + 8) >> 3;
-    p[-8] = tmp | (disp & 0xfffffff);
+    uint32_t tmp = p[-6] & 0xf0000000;
+    uint32_t disp = (target - p + 6) >> 3;
+    p[-6] = tmp | (disp & 0xfffffff);
   } else {
     // TODO not sure about this case, need real example
     NIY
