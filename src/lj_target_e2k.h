@@ -74,6 +74,7 @@ enum {
   RID_BASE = RID_R4,  /* Interpreter BASE */
   RID_SP = RID_R6,  /* Interpreter stack pointer */
   RID_LPC = RID_R7, /* Interpreter PC */
+  RID_DISPATCH = RID_R8, /* Interpreter dispatch */
   /* Calling conventions */
   /* TODO check is it return from or return to, cos in e2k they are different */
   RID_RETLO = RID_R0,
@@ -86,6 +87,7 @@ enum {
   RID_MIN_FPR = 0,
   RID_MAX_FPR = RID_MIN_FPR,
 
+  RID_NUM_R   = RID_R31 + 1 - RID_R0,
   RID_NUM_GPR = RID_MAX_GPR - RID_MIN_GPR,
   RID_NUM_FPR = RID_MAX_FPR - RID_MIN_FPR
 };
@@ -94,7 +96,7 @@ enum {
 
 /* Make use of all registers, except SP */
 #define RSET_FIXED \
-    (RID2RSET(RID_SP))
+    (RID2RSET(RID_SP)|RID2RSET(RID_DISPATCH))
 /* bitset, can be only 63 regs here, TODO check how much do we really need and which types */
 #define RSET_GPR    (RSET_RANGE(RID_R0, RID_R31+1) - RSET_FIXED)
 #define RSET_PRED   (RSET_RANGE(RID_PRED0, RID_PRED3+1))
@@ -135,7 +137,7 @@ enum {
 
 /* This definition must match with the *.dasc file(s). */
 typedef struct {
-  intptr_t gpr[RID_NUM_GPR];
+  intptr_t gpr[RID_NUM_R];
   int32_t spill[256];
 } ExitState;
 
