@@ -438,7 +438,7 @@ static void asm_loop_fixup(ASMState *as)
   if (as->loopinv) { /* Inverted loop branch? */
     /* asm_guard already inverted the cond branch. Only patch the target. */
     uint32_t tmp = p[-6] & 0xf0000000;
-    uint32_t disp = (target - p + 6) >> 3;
+    uint32_t disp = (ptrdiff_t)((void *)target - (void *)p + 4*8) >> 3;
     p[-6] = tmp | (disp & 0xfffffff);
   } else {
     // TODO not sure about this case, need real example
