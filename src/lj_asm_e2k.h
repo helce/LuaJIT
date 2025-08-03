@@ -428,6 +428,100 @@ static void asm_comp(ASMState *as, IRIns *ir)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+/* -- Stack handling ------------------------------------------------------ */
+
+/* Restore Lua stack from on-trace state. */
+// TODO optimize???
+static void asm_stack_restore(ASMState *as, SnapShot *snap)
+{
+  SnapEntry *map = &as->T->snapmap[snap->mapofs];
+  MSize n, nent = snap->nent;
+  /* Store the value of all modified slots to the Lua stack. */
+  for (n = 0; n < nent; n++) {
+    SnapEntry sn = map[n];
+    BCReg s = snap_slot(sn);
+    int32_t ofs = 8*((int32_t)s-1-LJ_FR2);
+    IRRef ref = snap_ref(sn);
+    IRIns *ir = IR(ref);
+    if ((sn & SNAP_NORESTORE))
+      continue;
+    if ((sn & SNAP_KEYINDEX)) {
+      int64_t kki = (int64_t)LJ_KEYINDEX << 32;
+      if (irref_isk(ref)) {
+        kki = kki | (int64_t)(uint32_t)ir->i;
+        Reg rki = ra_allock(as, kki, RSET_GPR);
+        emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+                    emit_src1(as, E2K_REG, RID_BASE),
+                    emit_src2(as, E2K_CONST, ofs),
+                    emit_src3(as, E2K_REG, rki));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+      } else {
+        Reg src = ra_alloc1(as, ref, RSET_GPR);
+        Reg rki = ra_allock(as, kki, rset_exclude(RSET_GPR, src));
+        emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+                    emit_src1(as, E2K_REG, RID_BASE),
+                    emit_src2(as, E2K_CONST, ofs),
+                    emit_src3(as, E2K_REG, RID_TMP));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+        emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                    emit_src1(as, E2K_REG, src),
+                    emit_src2(as, E2K_REG, rki),
+                    emit_dst(as, E2K_REG, RID_TMP));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+      }
+    } else if (irt_isnum(ir->t)) {
+      Reg src = ra_alloc1(as, ref, RSET_GPR);
+      emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+                  emit_src1(as, E2K_REG, RID_BASE),
+                  emit_src2(as, E2K_CONST, ofs),
+                  emit_src3(as, E2K_REG, src));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+    } else {
+      lj_assertA(irt_ispri(ir->t) || irt_isaddr(ir->t) || irt_isinteger(ir->t),
+                 "store of IR type %d", irt_type(ir->t));
+      if (irref_isk(ref)) {
+        TValue k;
+        lj_ir_kvalue(as->J->L, &k, ir);
+        Reg rki = ra_allock(as, (int64_t)k.u64, RSET_GPR);
+        emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+                    emit_src1(as, E2K_REG, RID_BASE),
+                    emit_src2(as, E2K_CONST, ofs),
+                    emit_src3(as, E2K_REG, rki));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+      } else {
+        Reg src = ra_alloc1(as, ref, RSET_GPR);
+        Reg type = ra_allock(as, (int64_t)irt_toitype(ir->t) << 47,
+                             rset_exclude(RSET_GPR, src));
+        emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+                    emit_src1(as, E2K_REG, RID_BASE),
+                    emit_src2(as, E2K_CONST, ofs),
+                    emit_src3(as, E2K_REG, RID_TMP));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+        if (irt_isinteger(ir->t)) {
+          emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                      emit_src1(as, E2K_REG, RID_TMP),
+                      emit_src2(as, E2K_REG, type),
+                      emit_dst(as, E2K_REG, RID_TMP));
+          as->mcp = emit_bundle_finalize(as, as->mcp);
+          emit_alopf1(as, 0, OPC_SXT, RES_ALS_012345,
+                      emit_src1(as, E2K_CONST, SXT_WZ),
+                      emit_src2(as, E2K_REG, src),
+                      emit_dst(as, E2K_REG, RID_TMP));
+          as->mcp = emit_bundle_finalize(as, as->mcp);
+        } else {
+          emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                      emit_src1(as, E2K_REG, src),
+                      emit_src2(as, E2K_REG, type),
+                      emit_dst(as, E2K_REG, RID_TMP));
+          as->mcp = emit_bundle_finalize(as, as->mcp);
+        }
+      }
+    }
+    checkmclim(as);
+  }
+  lj_assertA(map + nent == flinks, "inconsistent frames in snapshot");
+}
+
 /* -- Loop handling ------------------------------------------------------- */
 
 static void asm_loop_fixup(ASMState *as)
@@ -617,9 +711,6 @@ static Reg asm_head_side_base(ASMState *as, IRIns *irp)
   NIY
   return 0;
 }
-
-static void asm_stack_restore(ASMState *as, SnapShot *snap)
-{  NIY }
 
 static void asm_stack_check(ASMState *as, BCReg topslot,
           IRIns *irp, RegSet allow, ExitNo exitno)

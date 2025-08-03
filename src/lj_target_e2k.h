@@ -92,6 +92,9 @@ enum {
   RID_NUM_FPR = RID_MAX_FPR - RID_MIN_FPR
 };
 
+#define RID_NUM_KREF		RID_NUM_R
+#define RID_MIN_KREF		RID_R0
+
 /* -- Register sets ------------------------------------------------------- */
 
 /* Make use of all registers, except SP */
@@ -360,6 +363,7 @@ typedef enum {
 /* control operations */
 #define OPC_DISP   0x0
 /* non-combined operations short */
+#define OPC_SXT    0x0c
 #define OPC_ADDS   0x10
 #define OPC_ADDD   0x11
 #define OPC_SUBS   0x12
@@ -368,6 +372,7 @@ typedef enum {
 #define OPC_CMPSB  0x20
 #define OPC_CMPDB  0x21
 #define OPC_STW    0x26
+#define OPC_STD    0x27
 #define OPC_FCMPDB 0x2f
 #define OPC_FADDD  0x31
 #define OPC_FSUBD  0x33
@@ -410,7 +415,13 @@ typedef enum {
 #define CO_IDTOFD   0xc4
 #define CO_FSTOFD   0xc6
 #define CO_FDTOFS   0xc6
-
+/* sxt codes */
+#define SXT_BS      0x0
+#define SXT_HS      0x1
+#define SXT_WS      0x2
+#define SXT_BZ      0x4
+#define SXT_HZ      0x5
+#define SXT_WZ      0x6
 
 /* -- static latency ------------------------------------------------------ */
 #define E2K_NOP_DISP_CT 4
