@@ -4544,9 +4544,188 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Trace exit handler -------------------------------------------------
     |//-----------------------------------------------------------------------
     |
-    |// TODO, description !!!
+    |// Called from an exit stub; trace number in T0, exit number in STACK_TMP
+    |// DISPATCH and STACK preserved on-trace
     |->vm_exit_handler:
     |.if JIT
+    | getsp     0, -256, T1
+    | ldd       2, DISPATCH, DISPATCH_GL(cur_L), T5
+    | disp      ctpr1, extern lj_trace_exit
+    | --
+    | ldd       0, DISPATCH, DISPATCH_GL(jit_base), T6
+    | addd      1, 0x0, 0x0, T8
+    | ldd       2, STACK, STACK_TMP, T7
+    | addd      3, 0x0, ~LJ_VMST_EXIT, T9
+    | --
+    | stdsm     2, T1, 0x0, r0
+    | stdsm     5, T1, 0x8, r1
+    | --
+    | stdsm     2, T1, 0x10, r2
+    | stdsm     5, T1, 0x18, r3
+    | --
+    | stdsm     2, T1, 0x20, r4
+    | stdsm     5, T1, 0x28, r5
+    | --
+    | stdsm     2, T1, 0x30, r6
+    | stdsm     5, T1, 0x38, r7
+    | --
+    | stdsm     2, T1, 0x40, r8
+    | stdsm     5, T1, 0x48, r9
+    | --
+    | stdsm     2, T1, 0x50, r10
+    | stdsm     5, T1, 0x58, r11
+    | --
+    | stdsm     2, T1, 0x60, r12
+    | stdsm     5, T1, 0x68, r13
+    | --
+    | stdsm     2, T1, 0x70, r14
+    | stdsm     5, T1, 0x78, r15
+    | --
+    | stdsm     2, T1, 0x80, r16
+    | stdsm     5, T1, 0x88, r17
+    | --
+    | stdsm     2, T1, 0x90, r18
+    | stdsm     5, T1, 0x98, r19
+    | --
+    | stdsm     2, T1, 0xa0, r20
+    | stdsm     5, T1, 0xa8, r21
+    | --
+    | stdsm     2, T1, 0xb0, r22
+    | stdsm     5, T1, 0xb8, r23
+    | --
+    | stdsm     2, T1, 0xc0, r24
+    | stdsm     5, T1, 0xc8, r25
+    | --
+    | stdsm     2, T1, 0xd0, r26
+    | stdsm     5, T1, 0xd8, r27
+    | --
+    | stdsm     2, T1, 0xe0, r28
+    | stdsm     5, T1, 0xe8, r29
+    | --
+    | stdsm     2, T1, 0xf0, r30
+    | stdsm     5, T1, 0xf8, r31
+    | --
+    | setwd_call
+    | addd      0, DISPATCH, GG_DISP2J, CARG1
+    | addd      1, T1, 0x0, CARG2
+    | stw       2, DISPATCH, DISPATCH_J(parent), T0 // Store trace number
+    | stw       5, DISPATCH, DISPATCH_GL(vmstate), T9
+    | --
+    | stw       2, DISPATCH, DISPATCH_J(exitno), T7 // Store exit number
+    | std       5, DISPATCH, DISPATCH_J(L), T5
+    | --
+    | addd      1, T5, 0x0, RB
+    | std       2, T5, L->base, T6
+    | std       5, DISPATCH, DISPATCH_GL(jit_base), T8
+    | call      ctpr1, wbs = 0x8            // lj_trace_exit(jit_State *J, ExitState *ex)
+    | --
+    | // MULTRES(unscaled) or negated error code returned
+    | getsp     0, 256, S0                     // Release stack
+    | cmpbsb    1, CRET1, -LUA_ERRERR, pred0   // Check for error from exit.
+    | ldd       2, RB, L->cframe, RA
+    | ldd       3, RB, L->base, BASE
+    | shld      4, CRET1, 3, T0
+    | --
+    | cmpesb    0, CRET1, -17, pred1
+    | disp      ctpr1, extern lj_err_trace
+    | --
+    | disp      ctpr2, >5
+    | wait_load RA, 2
+    | --
+    | andd      0, RA, CFRAME_RAWMASK, STACK
+    | addd      1, 0, 0, S1
+    | addd      2, 0x0, ~LJ_VMST_INTERP, S2
+    | --
+    | ldd       0, STACK, SAVE_PC, PC          // Get SAVE_PC.
+    | lddsm     3, BASE, -8, T2
+    | --
+    | subs      0, 0x0, CRET1, CARG2, ~pred0   // Rethrow error from the right C frame.
+    | addd      1, RB, 0x0, CARG1, ~pred0
+    | std       2, STACK, SAVE_L, RB           // Set SAVE_L (on-trace resume/yield).
+    | call      ctpr1, wbs = 0x8, ~pred0       // lj_err_trace (lua_State *L, int errcode)
+    | --
+    | setwd_pipe
+    | wait_load PC, 2
+    | wait_load T2, 2
+    | --
+    | ldb       0, PC, PC_OP, S0
+    | ldw       2, PC, 0, INSN_E
+    | ldd       3, BASE, -16, KBASE
+    | ldbsm     5, T2, -3,  T3
+    | --
+    | std       2, DISPATCH, DISPATCH_GL(jit_base), S1
+    | stw       5, DISPATCH, DISPATCH_GL(vmstate), S2
+    | --
+    | ldbsm     0, PC, 4, T1
+    | ldwsm     2, PC, 4, INSN_B
+    | ldwsm     3, PC, 8, INSN_L
+    | ldwsm     5, PC,12, INSN_D
+    | wait_load S0, 2
+    | wait_load KBASE, 2
+    | wait_load T3, 2
+    | --
+    | shld      0, S0, 3, S1
+    | extract_value 1, KBASE, KBASE
+    | stw       2, STACK, MULTRES, T0
+    | shldsm    3, T3, 3, T3
+    | --
+    | ldd       0, S1, DISPATCH, S1            // E: Load pointer to insn handler.
+    | cmpbsb    1, S0, BC_FUNCF, pred0         // Function header?
+    | ldd       2, KBASE, LFUNC->pc, KBASE
+    | cmpbsb    3, S0, BC_FUNCC+2, pred2
+    | cmpedbsm  4, T2, FRAME_TYPE, pred3       // Check frame below fast function
+    | subdsm    5, BASE, T3, T3
+    | --
+    | ldwsm     0, PC,16, INSN_S
+    | lddsm     3, T3, -32, T3
+    | wait_load KBASE, 1
+    | wait_load S1, 1
+    | --
+    | ldd       0, KBASE, PC2PROTO(k), KBASE
+    | shldsm    1, T1, 3, OP_B
+    | ct        ctpr2, pred1                   // Static dispatch?
+    | --
+    | movtd     0, S1, ctpr3                   // Prepare an insn handler for stage E.
+    | subd      1, 0, 1, BYPASS_W
+    | addd      2, S1, 0, DISPATCH_E
+    | addd      3, PC, 4, PC
+    | pass      pred0, p0
+    | pass      pred2, p1
+    | pass      pred3, p2
+    | landp     ~p0, ~p1, p4
+    | landp     p4, p2, p5
+    | pass      p5, pred1                      // Trace stitching continuation?
+    | --
+    | lddsm     0, OP_B, DISPATCH, DISPATCH_B
+    | shldsm    1, INSN_E, 3, OP_E
+    | getfdsm   3, T3, 0xbc0, T3               // extract_value spec
+    | --
+    | anddsm    0, OP_E, 0x7f8, OP_E
+    | shrd      1, INSN_E, 0x5, RA_E
+    | shrd      2, INSN_E, 0x15, RB_E
+    | shrd      3, INSN_E, 0xd, T8, pred0
+    | sxt       4, 0x2, T0, T8, ~pred0         // holds (nres + 1)*8.
+    | lddsm     5, T3, LFUNC->pc, T3
+    | --
+    | andd      1, RA_E, 0x7f8, RA_E
+    | andd      2, RB_E, 0x7f8, RB_E
+    | andd      3, T8, 0x7f8, RC_E
+    | andd      4, T8, 0x7fff8, RD_E
+    | shldsm    5, INSN_L, 3, OP_L
+    | --
+    | shldsm    0, INSN_D, 3, OP_D
+    | shrdsm    1, INSN_B, 0x5, RA_B
+    | shrdsm    2, INSN_B, 0x15, RB_B
+    | shrdsm    3, INSN_B, 0xd, RCD_B
+    | anddsm    5, OP_L, 0x7f8, OP_L
+    | --
+    | // Otherwise set KBASE for Lua function below fast function.
+    | ldd       3, T3, PC2PROTO(k), KBASE, pred1
+    | ct        ctpr3
+    | --
+    | // Dispatch to static entry of original ins replaced by BC_JLOOP.
+    |5:
+    | // TODO need some investigation, not sure i understand whats happens with PC
     | do_fault
     |.endif
     |
@@ -8418,6 +8597,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_JLOOP:
         |.if JIT
         | // ins_AD RA_E = src1*8 (ignored), RD_E = traceno*8
+        | do_fault
         | ldd       2, DISPATCH, DISPATCH_J(trace), T0
         | ldd       0, STACK, SAVE_L, T3
         | wait_load T0, 0
