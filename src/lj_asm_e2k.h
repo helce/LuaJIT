@@ -216,10 +216,9 @@ static void asm_conv(ASMState *as, IRIns *ir)
   int st64 = (st == IRT_I64 || st == IRT_U64 || st == IRT_P64);
   int cop = 0, opce = 0;
   lj_assertA(irt_type(ir->t) != st, "inconsistent types for CONV");
-  Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
-
   if (irt_isfp(ir->t)) {
+    Reg dest = ra_dest(as, ir, RSET_GPR);
     if (stfp) { /* FP to FP conversion */
       cop = (st == IRT_NUM ? OPC_FDTOS : OPC_FSTOD);
       opce = CO_FSTOFD; /* smae for both cop */
@@ -237,9 +236,9 @@ static void asm_conv(ASMState *as, IRIns *ir)
       /* Checked conversions are only supported from NUM to INT */
       lj_assertA(irt_isint(ir->t) && st == IRT_NUM,
                  "bad type for checked CONV");
-      //asm_tointg(as, ir);
-      NIY
+      asm_tointg(as, ir, left);
     } else {
+      Reg dest = ra_dest(as, ir, RSET_GPR);
       if (irt_isu64(ir->t)) { /* FP to U64 */
         /* for inputs >= 2^63 add -2^64, convert again. */
         NIY
