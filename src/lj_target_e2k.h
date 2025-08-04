@@ -371,6 +371,7 @@ typedef enum {
 #define OPC_SHLS   0x18
 #define OPC_SHLD   0x19
 #define OPC_SARD   0x1d
+#define OPC_GETFD  0x1f
 #define OPC_CMPSB  0x20
 #define OPC_CMPDB  0x21
 #define OPC_STW    0x26

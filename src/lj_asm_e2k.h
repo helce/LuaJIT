@@ -440,8 +440,11 @@ static void asm_sload(ASMState *as, IRIns *ir)
       as->mcp = emit_bundle_finalize(as, as->mcp);
     } else if (irt_isaddr(t)) {
       /* Clear type from pointers. */
-      // TODO EXTRACT TYPE 
-      NIY
+      emit_alopf1(as, 0, OPC_GETFD, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, dest),
+                  emit_src2(as, E2K_CONST, 0xbc0),
+                  emit_dst(as, E2K_REG, dest));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
     } else if (irt_isint(t) && (ir->op2 & IRSLOAD_TYPECHECK)) {
       /* Sign-extend integers. */
       // TODO SIGN EXTEND ??
@@ -783,6 +786,27 @@ static void asm_head_root_base(ASMState *as)
   }
 }
 
+static Reg asm_head_side_base(ASMState *as, IRIns *irp)
+{
+  IRIns *ir = IR(REF_BASE);
+  Reg r = ir->r;
+  if (ra_hasreg(r)) {
+    ra_free(as, r);
+    if (rset_test(as->modset, r) || irt_ismarked(ir->t))
+      ir->r = RID_INIT; /* No inheritance for modified BASE register. */
+    if (irp->r == r) {
+      return r;  /* Same BASE register already coalesced. */
+    } else if (ra_hasreg(irp->r) && rset_test(as->freeset, irp->r)) {
+      emit_movrr(as, 0, r, irp->r); /* Move from coalesced parent reg. */
+      return irp->r;
+    } else {
+      emit_getgl(as, r, jit_base);  /* Otherwise reload BASE. */
+    }
+  }
+  return RID_NONE;
+}
+
+
 /* -- Tail of trace ------------------------------------------------------- */
 
 /* Prepare tail of code. */
@@ -915,12 +939,6 @@ static void asm_strto(ASMState *as, IRIns *ir)
 
 static void asm_callx(ASMState *as, IRIns *ir)
 {  NIY }
-
-static Reg asm_head_side_base(ASMState *as, IRIns *irp)
-{
-  NIY
-  return 0;
-}
 
 static void asm_stack_check(ASMState *as, BCReg topslot,
           IRIns *irp, RegSet allow, ExitNo exitno)

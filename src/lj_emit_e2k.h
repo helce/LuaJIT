@@ -430,13 +430,31 @@ static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
   emit_loadu64(as, r, *k);
 }
 
-static void emit_opgl(ASMState *as, Reg r, void *p)
+static void emit_ldd(ASMState *as, Reg dest, void *addr)
 {
-  NIY
+  intptr_t ofs = dispofs(as, addr);
+  emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+              emit_src1(as, E2K_REG, RID_DISPATCH),
+              emit_src2(as, E2K_CONST, ofs),
+              emit_dst(as, E2K_REG, dest));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
-#define emit_getgl(as, r, field) emit_opgl(as, r, (void *)&J2G(as->J)->field)
-#define emit_setgl(as, r, field) emit_opgl(as, r, (void *)&J2G(as->J)->field)
+static void emit_std(ASMState *as, Reg src, void *addr)
+{
+  intptr_t ofs = dispofs(as, addr);
+  emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+              emit_src1(as, E2K_REG, RID_DISPATCH),
+              emit_src2(as, E2K_CONST, ofs),
+              emit_src3(as, E2K_REG, src));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
+/* Get/set global_State fields. */
+#define emit_getgl(as, r, field) emit_ldd(as, r, (void *)&J2G(as->J)->field)
+#define emit_setgl(as, r, field) emit_std(as, r, (void *)&J2G(as->J)->field)
+
+/* Trace number is determined from per-trace exit stubs. */
 #define emit_setvmstate(as, i) UNUSED(i)
 
 static void emit_loadi(ASMState *as, Reg r, uint64_t u64)
