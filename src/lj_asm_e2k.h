@@ -260,6 +260,43 @@ static void asm_conv(ASMState *as, IRIns *ir)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+/* -- Memory references --------------------------------------------------- */
+
+static void asm_aref(ASMState *as, IRIns *ir)
+{
+  RegSet allow = RSET_GPR;
+  Reg dest = ra_dest(as, ir, allow);
+  Reg idx, base, tmp;
+  if (irref_isk(ir->op2)) {
+    IRRef tab = IR(ir->op1)->op1;
+    int32_t ofs = asm_fuseabase(as, tab);
+    IRRef refa = ofs ? tab : ir->op1;
+    ofs += 8*IR(ir->op2)->i;
+    base = ra_alloc1(as, refa, allow);
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, base),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  } else {
+    base = ra_alloc1(as, ir->op1, allow);
+    allow = rset_exclude(allow, base);
+    idx = ra_alloc1(as, ir->op2, allow);
+    allow = rset_exclude(allow, idx);
+    tmp = ra_scratch(as, allow);
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, base),
+                emit_src2(as, E2K_REG, tmp),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_SHLD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, idx),
+                emit_src2(as, E2K_CONST, 3),
+                emit_dst(as, E2K_REG, tmp));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+}
+
 /* -- Loads and stores ---------------------------------------------------- */
 
 static uint32_t asm_loadins(ASMState *as, IRIns *ir, Reg dest)
@@ -827,9 +864,6 @@ static void asm_subov(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_mulov(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_aref(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_href(ASMState *as, IRIns *ir, IROp merge)
