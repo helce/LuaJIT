@@ -5,7 +5,7 @@
 
 #define NIY __builtin_trap();
 
-/* -- Bundling ------------------------------------------------------------ */
+/* -- Bundling helpers ---------------------------------------------------- */
 
 static uint32_t check_resource(ASMState *as, uint32_t mask)
 {
@@ -73,7 +73,7 @@ static E2kOp get_const_type(intptr_t val)
     return E2K_CONST64;
 }
 
-/* -- Bundle -------------------------------------------------------------- */
+/* -- Bundling ------------------------------------------------------------ */
 
 static void emit_bundle_setup(ASMState *as)
 {
@@ -409,16 +409,22 @@ static void emit_copf2(ASMState *as, uint32_t opc, Reg ctpr, uintptr_t disp)
 
 /* -- Emit loads/stores --------------------------------------------------- */
 
+/* Prefer rematerialization of BASE/L from global_State over spills. */
 #define emit_canremat(ref)  ((ref) <= REF_BASE)
 
 static void emit_loadu64(ASMState *as, Reg r, uint64_t u64)
 {
-  NIY
+  emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+              emit_src1(as, E2K_CONST, 0),
+              emit_src2(as, E2K_CONST, u64),
+              emit_dst(as, E2K_REG, r));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
 static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
 {
-  NIY
+  const uint64_t *k = &ir_k64(ir)->u64;
+  emit_loadu64(as, r, *k);
 }
 
 static void emit_opgl(ASMState *as, Reg r, void *p)
