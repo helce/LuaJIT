@@ -262,7 +262,59 @@ static void asm_conv(ASMState *as, IRIns *ir)
 
 /* -- Loads and stores ---------------------------------------------------- */
 
+static uint32_t asm_loadins(ASMState *as, IRIns *ir, Reg dest)
+{
+  UNUSED(as);
+  uint32_t sxt_cop = 0, need_sxt = 0, cop = 0;
+  switch (irt_type(ir->t)) {
+  case IRT_I8:
+    need_sxt = 1;
+    sxt_cop = SXT_BS;
+  case IRT_U8:
+    cop = OPC_LDB;
+    break;
+  case IRT_I16:
+    need_sxt = 1;
+    sxt_cop = SXT_HS;
+  case IRT_U16:
+    cop = OPC_LDH;
+    break;
+  default:
+    cop = irt_is64(ir->t) ? OPC_LDD : OPC_LDW;
+    break;
+  }
+  /* ldb and ldh unsigned, need sign extension */
+  if (need_sxt) {
+    emit_alopf1(as, 0, OPC_SXT, RES_ALS_012345,
+                emit_src1(as, E2K_CONST, sxt_cop),
+                emit_src2(as, E2K_REG, dest),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+  return cop;
+}
 
+static void asm_fload(ASMState *as, IRIns *ir)
+{
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg base = RID_NONE;
+  int32_t ofs = 0;
+  if (ir->op1 == REF_NIL) { /* FLOAD from GG_State with offset. */
+    ofs = (int32_t)(ir->op2 << 2) - GG_OFS(dispatch);
+    base = RID_DISPATCH;
+  } else {
+    ofs = field_ofs[ir->op2];
+    base = ra_alloc1(as, ir->op1, RSET_GPR);
+  }
+  uint32_t cop = asm_loadins(as, ir, dest);
+  emit_alopf1(as, 0, cop, RES_ALS_0235,
+              emit_src1(as, E2K_REG, base),
+              emit_src2(as, E2K_CONST, ofs),
+              emit_dst(as, E2K_REG, dest));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
+/* TODO refactore, remove RID_TMP simplify */
 static void asm_ahustore(ASMState *as, IRIns *ir)
 {
   RegSet allow = RSET_GPR;
@@ -551,6 +603,8 @@ static void asm_comp(ASMState *as, IRIns *ir)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+#define asm_equal(as, ir) asm_comp(as, ir)
+
 /* -- Stack handling ------------------------------------------------------ */
 
 /* Restore Lua stack from on-trace state. */
@@ -709,9 +763,6 @@ static void asm_setup_target(ASMState *as)
 static void asm_fpdiv(ASMState *as, IRIns *ir)
 {  NIY }
 
-static void asm_equal(ASMState *as, IRIns *ir)
-{  NIY }
-
 static void asm_neg(ASMState *as, IRIns *ir)
 {  NIY }
 
@@ -797,9 +848,6 @@ static void asm_strref(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_ahuvload(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_fload(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_xload(ASMState *as, IRIns *ir)

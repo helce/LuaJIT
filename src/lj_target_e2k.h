@@ -381,6 +381,8 @@ typedef enum {
 #define OPC_FDTOD  0x3d
 #define OPC_FSTOD  0x3e
 #define OPC_FDTOS  0x3f
+#define OPC_LDB    0x64
+#define OPC_LDH    0x65
 #define OPC_LDW    0x66
 #define OPC_LDD    0x67
 /* non-combined operations long */
