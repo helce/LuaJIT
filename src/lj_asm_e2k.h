@@ -159,13 +159,14 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
     } else if (ir->o == IR_UREFC) {
       if (irref_isk(ir->op1)) {
         GCfunc *fn = ir_kfunc(IR(ir->op1));
-        intptr_t ofs = (intptr_t)&gcref(fn->l.uvptr[(ir->op2 >> 8)])->uv.tv;
+        GCupval *uv = &gcref(fn->l.uvptr[(ir->op2 >> 8)])->uv;
+        intptr_t ofs = dispofs(as, &uv->tv);
         *ofsp = ofs;
-        return ra_allock(as, 0, allow);
+        return RID_DISPATCH;
       }
     } else if (ir->o == IR_TMPREF) {
-      *ofsp = (int32_t)(offsetof(global_State, tmptv));
-      return ra_allock(as, 0, allow);
+      *ofsp = (int32_t)dispofs(as, &J2G(as->J)->tmptv);
+      return RID_DISPATCH;
     }
   }
   *ofsp = 0;
@@ -351,37 +352,38 @@ static void asm_fload(ASMState *as, IRIns *ir)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
-/* TODO refactore, remove RID_TMP simplify */
 static void asm_ahustore(ASMState *as, IRIns *ir)
 {
   RegSet allow = RSET_GPR;
-  Reg idx, src = RID_NONE, type = RID_NONE;
+  Reg base, src = RID_NONE, type = RID_NONE;
   int32_t ofs = 0;
   if (ir->r == RID_SINK)
     return;
   if (irt_isnum(ir->t)) {
     src = ra_alloc1(as, ir->op2, allow);
     allow = rset_exclude(allow, src);
-    idx = asm_fuseahuref(as, ir->op1, &ofs, allow);
+    base = asm_fuseahuref(as, ir->op1, &ofs, allow);
     emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
-                emit_src1(as, E2K_REG, idx),
+                emit_src1(as, E2K_REG, base),
                 emit_src2(as, E2K_CONST, ofs),
                 emit_src3(as, E2K_REG, src));
     as->mcp = emit_bundle_finalize(as, as->mcp);
   } else {
-    Reg tmp = RID_TMP;
+    Reg tmp = RID_NONE;
     if (irt_ispri(ir->t)) {
       tmp = ra_allock(as, ~((int64_t)~irt_toitype(ir->t) << 47), allow);
       allow = rset_exclude(allow, tmp);
     } else {
+      tmp = ra_scratch(as, allow);
+      allow = rset_exclude(allow, tmp);
       src = ra_alloc1(as, ir->op2, allow);
       allow = rset_exclude(allow, src);
       type = ra_allock(as, (int64_t)irt_toitype(ir->t) << 47, allow);
       allow = rset_exclude(allow, type);
     }
-    idx = asm_fuseahuref(as, ir->op1, &ofs, allow);
+    base = asm_fuseahuref(as, ir->op1, &ofs, allow);
     emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
-                emit_src1(as, E2K_REG, idx),
+                emit_src1(as, E2K_REG, base),
                 emit_src2(as, E2K_CONST, ofs),
                 emit_src3(as, E2K_REG, tmp));
     as->mcp = emit_bundle_finalize(as, as->mcp);
@@ -648,6 +650,7 @@ static void asm_comp(ASMState *as, IRIns *ir)
 // TODO optimize???
 static void asm_stack_restore(ASMState *as, SnapShot *snap)
 {
+  RegSet allow = RSET_GPR;
   SnapEntry *map = &as->T->snapmap[snap->mapofs];
   MSize n, nent = snap->nent;
   /* Store the value of all modified slots to the Lua stack. */
@@ -663,28 +666,31 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
       int64_t kki = (int64_t)LJ_KEYINDEX << 32;
       if (irref_isk(ref)) {
         kki = kki | (int64_t)(uint32_t)ir->i;
-        Reg rki = ra_allock(as, kki, RSET_GPR);
+        Reg rki = ra_allock(as, kki, allow);
         emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
                     emit_src1(as, E2K_REG, RID_BASE),
                     emit_src2(as, E2K_CONST, ofs),
                     emit_src3(as, E2K_REG, rki));
         as->mcp = emit_bundle_finalize(as, as->mcp);
       } else {
-        Reg src = ra_alloc1(as, ref, RSET_GPR);
-        Reg rki = ra_allock(as, kki, rset_exclude(RSET_GPR, src));
+        Reg src = ra_alloc1(as, ref, allow);
+        allow = rset_exclude(allow, src);
+        Reg rki = ra_allock(as, kki, allow);
+        allow = rset_exclude(allow, rki);
+        Reg tmp = ra_scratch(as, allow);
         emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
                     emit_src1(as, E2K_REG, RID_BASE),
                     emit_src2(as, E2K_CONST, ofs),
-                    emit_src3(as, E2K_REG, RID_TMP));
+                    emit_src3(as, E2K_REG, tmp));
         as->mcp = emit_bundle_finalize(as, as->mcp);
         emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
                     emit_src1(as, E2K_REG, src),
                     emit_src2(as, E2K_REG, rki),
-                    emit_dst(as, E2K_REG, RID_TMP));
+                    emit_dst(as, E2K_REG, tmp));
         as->mcp = emit_bundle_finalize(as, as->mcp);
       }
     } else if (irt_isnum(ir->t)) {
-      Reg src = ra_alloc1(as, ref, RSET_GPR);
+      Reg src = ra_alloc1(as, ref, allow);
       emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
                   emit_src1(as, E2K_REG, RID_BASE),
                   emit_src2(as, E2K_CONST, ofs),
@@ -696,37 +702,39 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
       if (irref_isk(ref)) {
         TValue k;
         lj_ir_kvalue(as->J->L, &k, ir);
-        Reg rki = ra_allock(as, (int64_t)k.u64, RSET_GPR);
+        Reg rki = ra_allock(as, (int64_t)k.u64, allow);
         emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
                     emit_src1(as, E2K_REG, RID_BASE),
                     emit_src2(as, E2K_CONST, ofs),
                     emit_src3(as, E2K_REG, rki));
         as->mcp = emit_bundle_finalize(as, as->mcp);
       } else {
-        Reg src = ra_alloc1(as, ref, RSET_GPR);
-        Reg type = ra_allock(as, (int64_t)irt_toitype(ir->t) << 47,
-                             rset_exclude(RSET_GPR, src));
+        Reg src = ra_alloc1(as, ref, allow);
+        allow = rset_exclude(allow, src);
+        Reg type = ra_allock(as, (int64_t)irt_toitype(ir->t) << 47, allow);
+        allow = rset_exclude(allow, type);
+        Reg tmp = ra_scratch(as, allow);
         emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
                     emit_src1(as, E2K_REG, RID_BASE),
                     emit_src2(as, E2K_CONST, ofs),
-                    emit_src3(as, E2K_REG, RID_TMP));
+                    emit_src3(as, E2K_REG, tmp));
         as->mcp = emit_bundle_finalize(as, as->mcp);
         if (irt_isinteger(ir->t)) {
           emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
-                      emit_src1(as, E2K_REG, RID_TMP),
+                      emit_src1(as, E2K_REG, tmp),
                       emit_src2(as, E2K_REG, type),
-                      emit_dst(as, E2K_REG, RID_TMP));
+                      emit_dst(as, E2K_REG, tmp));
           as->mcp = emit_bundle_finalize(as, as->mcp);
           emit_alopf1(as, 0, OPC_SXT, RES_ALS_012345,
                       emit_src1(as, E2K_CONST, SXT_WZ),
                       emit_src2(as, E2K_REG, src),
-                      emit_dst(as, E2K_REG, RID_TMP));
+                      emit_dst(as, E2K_REG, tmp));
           as->mcp = emit_bundle_finalize(as, as->mcp);
         } else {
           emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
                       emit_src1(as, E2K_REG, src),
                       emit_src2(as, E2K_REG, type),
-                      emit_dst(as, E2K_REG, RID_TMP));
+                      emit_dst(as, E2K_REG, tmp));
           as->mcp = emit_bundle_finalize(as, as->mcp);
         }
       }

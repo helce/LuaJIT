@@ -409,6 +409,9 @@ static void emit_copf2(ASMState *as, uint32_t opc, Reg ctpr, uintptr_t disp)
 
 /* -- Emit loads/stores --------------------------------------------------- */
 
+#define dispofs(as, k) \
+  ((intptr_t)((uintptr_t)(k) - (uintptr_t)J2GG(as->J)->dispatch))
+
 /* Prefer rematerialization of BASE/L from global_State over spills. */
 #define emit_canremat(ref)  ((ref) <= REF_BASE)
 
