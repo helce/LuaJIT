@@ -231,6 +231,7 @@ static void asm_conv(ASMState *as, IRIns *ir)
     emit_alopf2(as, 0, cop, opce, RES_ALS_0134,
                 emit_src2(as, E2K_REG, left),
                 emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
   } else if (stfp) { /* FP to INT conversion */
     if (irt_isguard(ir->t)) {
       /* Checked conversions are only supported from NUM to INT */
@@ -252,12 +253,12 @@ static void asm_conv(ASMState *as, IRIns *ir)
         emit_alopf2(as, 0, cop, opce, RES_ALS_0134,
                     emit_src2(as, E2K_REG, left),
                     emit_dst(as, E2K_REG, dest));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
       }
     }
   } else { /* INT to INT conversion */
     NIY
   }
-  as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
 /* -- Memory references --------------------------------------------------- */
