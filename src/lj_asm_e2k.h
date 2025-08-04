@@ -106,6 +106,72 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
   as->mcp = p;
 }
 
+/* -- Operand fusion ------------------------------------------------------ */
+
+/* Limit linear search to this distance. Avoids O(n^2) behavior. */
+#define CONFLICT_SEARCH_LIM 31
+
+/* Check if there's no conflicting instruction between curins and ref. */
+static int noconflict(ASMState *as, IRRef ref, IROp conflict)
+{
+  IRIns *ir = as->ir;
+  IRRef i = as->curins;
+  if (i > ref + CONFLICT_SEARCH_LIM)
+    return 0; /* Give up, ref is too far away. */
+  while (--i > ref)
+    if (ir[i].o == conflict)
+      return 0; /* Conflict found. */
+  return 1;  /* Ok, no conflict. */
+}
+
+/* Fuse the array base of colocated arrays. */
+static int32_t asm_fuseabase(ASMState *as, IRRef ref)
+{
+  IRIns *ir = IR(ref);
+  if (ir->o == IR_TNEW && ir->op1 <= LJ_MAX_COLOSIZE &&
+      !neverfuse(as) && noconflict(as, ref, IR_NEWREF))
+    return (int32_t)sizeof(GCtab);
+  return 0;
+}
+
+/* Fuse array/hash/upvalue reference into register+offset operand. */
+static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
+{
+  IRIns *ir = IR(ref);
+  if (ra_noreg(ir->r)) {
+    if (ir->o == IR_AREF) {
+      if (mayfuse(as, ref)) {
+        if (irref_isk(ir->op2)) {
+          IRRef tab = IR(ir->op1)->op1;
+          int32_t ofs = asm_fuseabase(as, tab);
+          IRRef refa = ofs ? tab : ir->op1;
+          ofs += 8*IR(ir->op2)->i;
+          *ofsp = ofs;
+          return ra_alloc1(as, refa, allow);
+        }
+      }
+    } else if (ir->o == IR_HREFK) {
+      if (mayfuse(as, ref)) {
+        int32_t ofs = (int32_t)(IR(ir->op2)->op2 * sizeof(Node));
+        *ofsp = ofs;
+        return ra_alloc1(as, ir->op1, allow);
+      }
+    } else if (ir->o == IR_UREFC) {
+      if (irref_isk(ir->op1)) {
+        GCfunc *fn = ir_kfunc(IR(ir->op1));
+        intptr_t ofs = (intptr_t)&gcref(fn->l.uvptr[(ir->op2 >> 8)])->uv.tv;
+        *ofsp = ofs;
+        return ra_allock(as, 0, allow);
+      }
+    } else if (ir->o == IR_TMPREF) {
+      *ofsp = (int32_t)(offsetof(global_State, tmptv));
+      return ra_allock(as, 0, allow);
+    }
+  }
+  *ofsp = 0;
+  return ra_alloc1(as, ref, allow);
+}
+
 /* -- Type conversions ---------------------------------------------------- */
 
 static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
@@ -195,6 +261,63 @@ static void asm_conv(ASMState *as, IRIns *ir)
 }
 
 /* -- Loads and stores ---------------------------------------------------- */
+
+
+static void asm_ahustore(ASMState *as, IRIns *ir)
+{
+  RegSet allow = RSET_GPR;
+  Reg idx, src = RID_NONE, type = RID_NONE;
+  int32_t ofs = 0;
+  if (ir->r == RID_SINK)
+    return;
+  if (irt_isnum(ir->t)) {
+    src = ra_alloc1(as, ir->op2, allow);
+    allow = rset_exclude(allow, src);
+    idx = asm_fuseahuref(as, ir->op1, &ofs, allow);
+    emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+                emit_src1(as, E2K_REG, idx),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_src3(as, E2K_REG, src));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  } else {
+    Reg tmp = RID_TMP;
+    if (irt_ispri(ir->t)) {
+      tmp = ra_allock(as, ~((int64_t)~irt_toitype(ir->t) << 47), allow);
+      allow = rset_exclude(allow, tmp);
+    } else {
+      src = ra_alloc1(as, ir->op2, allow);
+      allow = rset_exclude(allow, src);
+      type = ra_allock(as, (int64_t)irt_toitype(ir->t) << 47, allow);
+      allow = rset_exclude(allow, type);
+    }
+    idx = asm_fuseahuref(as, ir->op1, &ofs, allow);
+    emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+                emit_src1(as, E2K_REG, idx),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_src3(as, E2K_REG, tmp));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    if (ra_hasreg(src)) {
+      if (irt_isinteger(ir->t)) {
+        emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                    emit_src1(as, E2K_REG, tmp),
+                    emit_src2(as, E2K_REG, type),
+                    emit_dst(as, E2K_REG, tmp));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+        emit_alopf1(as, 0, OPC_SXT, RES_ALS_012345,
+                    emit_src1(as, E2K_CONST, SXT_WZ),
+                    emit_src2(as, E2K_REG, src),
+                    emit_dst(as, E2K_REG, tmp));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+      } else {
+        emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                    emit_src1(as, E2K_REG, src),
+                    emit_src2(as, E2K_REG, type),
+                    emit_dst(as, E2K_REG, tmp));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+      }
+    }
+  }
+}
 
 static void asm_sload(ASMState *as, IRIns *ir)
 {
@@ -680,9 +803,6 @@ static void asm_fload(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_xload(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_ahustore(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_fstore(ASMState *as, IRIns *ir)
