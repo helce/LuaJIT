@@ -753,7 +753,8 @@ static void asm_loop_fixup(ASMState *as)
 {
   MCode *p = as->mctop;
   MCode *target = as->mcp;
-  /* p[-8] - HS; p[-7] - ALS(cmp); p[-6] - CS0 */
+  p = p - 8; /* skip nops */
+  /* p[-8] - HS; p[-7] - ALS(cmp); p[-6] - CS0 p[-5] - Align */
   if (as->loopinv) { /* Inverted loop branch? */
     /* asm_guard already inverted the cond branch. Only patch the target. */
     uint32_t tmp = p[-6] & 0xf0000000;
@@ -786,6 +787,7 @@ static void asm_head_root_base(ASMState *as)
   }
 }
 
+/* Coalesce BASE register for a side trace. */
 static Reg asm_head_side_base(ASMState *as, IRIns *irp)
 {
   IRIns *ir = IR(REF_BASE);
@@ -809,11 +811,39 @@ static Reg asm_head_side_base(ASMState *as, IRIns *irp)
 
 /* -- Tail of trace ------------------------------------------------------- */
 
+/* Fixup the tail code. */
+static void asm_tail_fixup(ASMState *as, TraceNo lnk)
+{
+  MCode *target = lnk ? traceref(as->J, lnk)->mcode : (MCode *)lj_vm_exit_interp;
+  MCode *p = as->mctop;
+  int32_t spadj = as->T->spadjust;
+  /*
+    disp ctpr1, lj_vm_exit_interp(lnk)
+    --
+    addd STACK, spadj, STACK (4 nop)
+    --
+    ct ctpr1
+  */
+  emit_ct(as, RID_CTPR1, 0, 0);
+  p = emit_bundle_finalize(as, p); /* 2(HS+SS) */
+  if (spadj) {
+    // TODO check about spadj if its needed write into a hole
+    // make a hole in asm_tail_prep
+    // addd RID_SP, adj, RID_SP
+    // check a hole in asm_loop_fixup
+    /* 4(HS+ALS+LTS?+ALIGN) */
+    NIY
+  } /* nops are just nulls, so dont do anything here */
+  emit_copf2(as, OPC_DISP, RID_CTPR1,
+            (ptrdiff_t)((void *)target - (void *)p));
+  p = emit_bundle_finalize(as, p); /* 2(HS+CS0) */
+}
+
 /* Prepare tail of code. */
 static void asm_tail_prep(ASMState *as)
 {
-  // TODO leave space for branch ??
-  // as->mcp =  as->mctop - N;
+  /* initialized by zero, it counts as nop */
+  as->mcp = as->mctop - 8;
   as->invmcp = as->loopref ? as->mcp : NULL;
 }
 
@@ -945,9 +975,6 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
 { NIY }
 
 static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
-{ NIY }
-
-static void asm_tail_fixup(ASMState *as, TraceNo lnk)
 { NIY }
 
 static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
