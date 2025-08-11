@@ -4620,33 +4620,41 @@ static void build_subroutines(BuildCtx *ctx)
     | call      ctpr1, wbs = 0x8            // lj_trace_exit(jit_State *J, ExitState *ex)
     | --
     | // MULTRES(unscaled) or negated error code returned
-    | getsp     0, 256, S0                     // Release stack
-    | cmpbsb    1, CRET1, -LUA_ERRERR, pred0   // Check for error from exit.
+    | getsp     0, 256, S0                     // Release spill stack
     | ldd       2, RB, L->cframe, RA
     | ldd       3, RB, L->base, BASE
+    | wait_load RA, 0
+    | --
+    | andd      0, RA, CFRAME_RAWMASK, STACK
+    | --
+    | ldd       0, STACK, SAVE_PC, PC          // Get SAVE_PC.
+    | --
+    | std       2, STACK, SAVE_L, RB           // Set SAVE_L (on-trace resume/yield).
+    | --
+    | // Fall through
+    |.endif
+    |->vm_exit_interp:
+    |.if JIT
+    | //  CRET1 = MULTRES(unscaled) or negated error code, BASE, PC and DISPATCH set.
+    | setwd_call                               // Reset window for cal
+    | ldd       0, STACK, SAVE_L, RB           // Reload, need it only for vm_exit_interp
+    | disp      ctpr1, extern lj_err_trace
+    | --
+    | cmpbsb    1, CRET1, -LUA_ERRERR, pred0   // Check for error from exit.
+    | lddsm     3, BASE, -8, T2
     | shld      4, CRET1, 3, T0
     | --
     | cmpesb    0, CRET1, -17, pred1
-    | disp      ctpr1, extern lj_err_trace
-    | --
     | disp      ctpr2, >5
-    | wait_load RA, 2
     | --
-    | andd      0, RA, CFRAME_RAWMASK, STACK
     | addd      1, 0, 0, S1
     | addd      2, 0x0, ~LJ_VMST_INTERP, S2
     | --
-    | ldd       0, STACK, SAVE_PC, PC          // Get SAVE_PC.
-    | lddsm     3, BASE, -8, T2
-    | --
     | subs      0, 0x0, CRET1, CARG2, ~pred0   // Rethrow error from the right C frame.
     | addd      1, RB, 0x0, CARG1, ~pred0
-    | std       2, STACK, SAVE_L, RB           // Set SAVE_L (on-trace resume/yield).
     | call      ctpr1, wbs = 0x8, ~pred0       // lj_err_trace (lua_State *L, int errcode)
     | --
     | setwd_pipe
-    | wait_load PC, 2
-    | wait_load T2, 2
     | --
     | ldb       0, PC, PC_OP, S0
     | ldw       2, PC, 0, INSN_E
