@@ -514,6 +514,7 @@ local map_op = {
   ldbsm_4 = "ALU2_ALOPF1_1_0x2d_0x64",
   ldbsm_5 = "ALU2PR_ALOPF1_1_0x2d_0x64",
   ldh_4 = "ALU2_ALOPF1_0_0x2d_0x65",
+  ldhsm_4 = "ALU2_ALOPF1_1_0x2d_0x65",
   ldw_4 = "ALU2_ALOPF1_0_0x2d_0x66",
   ldwsm_4 = "ALU2_ALOPF1_1_0x2d_0x66",
   ldw_5 = "ALU2PR_ALOPF1_0_0x2d_0x66",

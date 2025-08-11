@@ -8366,7 +8366,76 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_JFORI:
-        | do_fault
+        |.if JIT
+        | // ins_AJ RA_E = base*8, RD_E = target*8
+        | lddsm     0, DISPATCH, DISPATCH_J(trace), T3
+        | addd      1, BASE, RA_E, RA
+        | ldd       2, STACK, SAVE_L, T4
+        | shrd      3, RD_E, 1, T2          // RD*4
+        | addd      4, BASE, RA_E, T0
+        | subd      5, PC, BCBIAS_J*4, T1
+        | disp      ctpr2, ->vmeta_for
+        | --
+        | ldb       0, T1, T2, RARG1        // Branch target insn opcode for fast restart.
+        | addd      1, T1, T2, PC           // Set PC to branch target
+        | ldd       2, RA, 0x10, RB
+        | ldd       3, T0, 0x0, S0
+        | ldd       5, T0, 0x8, S1
+        | disp      ctpr1, ->vm_restart_pipeline_fast
+        | --
+        | ldhsm     0, PC, PREV_PC_RD, RD
+        | wait_load RD, 0
+        | --
+        | shldsm    0, RD, 0x3, RD          // traceno*8
+        | --
+        | lddsm     0, T3, RD, T3
+        | --
+        | sard      1, RB, 47, S2
+        | sard      3, S0, 47, T0
+        | sard      4, S1, 47, T1
+        | --
+        | cmplsb    0, S2, LJ_TISNUM, pred3
+        | shld      2, RARG1, 3, RARG1
+        | cmpbsb    1, S2, LJ_TISNUM, pred0
+        | cmpbsb    3, T0, LJ_TISNUM, pred1
+        | cmpbsb    4, T1, LJ_TISNUM, pred2
+        | wait_load T3, 2
+        | --
+        | ldd       0, RARG1, DISPATCH, RARG1   // Dispatch for branch target.
+        | lddsm     2, T3, TRACE->mcode, T3
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | pass      pred2, p2
+        | landp     p0, p1, p4
+        | landp     p4, p2, p5
+        | pass      p4, pred0               // FIXME: unused?
+        | pass      p5, pred2
+        | --
+        | fcmpltdb  3, S1, S0, pred0
+        | fcmpltdb  4, S0, S1, pred1        // Invert comparison if step is negative.
+        | wait_pred_ct pred2, 1
+        | wait_load T3, 1
+        | --
+        | movtdsm   0, T3, ctpr3
+        | std       5, RA, 0x18, S0, pred2
+        | ct        ctpr2, ~pred2           // vmeta_for(RA)
+        | --
+        | pass      pred0, p0
+        | pass      pred3, p1
+        | pass      pred1, p2
+        | landp     ~p0, ~p1, p4
+        | landp     ~p2, p1, p5
+        | landp     ~p4, ~p5, p6
+        | pass      p6, pred0
+        | wait_pred_ct pred0, 0
+        | --
+        | ct        ctpr1, pred0            // vm_restart_pipeline_fast(RARG1)
+        | --
+        | std       2, DISPATCH, DISPATCH_GL(jit_base), BASE
+        | std       5, DISPATCH, DISPATCH_GL(tmpbuf.L), T4
+        | ct        ctpr3
+        | --
+        |.endif
         break;
 
     case BC_JFORL:
