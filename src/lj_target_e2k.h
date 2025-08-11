@@ -144,12 +144,14 @@ typedef struct {
   int32_t spill[256];
 } ExitState;
 
-
+/* Return the address of a per-trace exit stub. */
 static LJ_AINLINE uint32_t *exitstub_trace_addr_(uint32_t *p, uint32_t exitno)
 {
-  __builtin_trap();
+  while (*p == 0) p++; /* Skip NOP */
+  return p;
 }
 
+/* Avoid dependence on lj_jit.h if only including lj_target.h. */
 #define exitstub_trace_addr(T, exitno) \
   exitstub_trace_addr_((MCode *)((char *)(T)->mcode + (T)->szmcode), (exitno))
 

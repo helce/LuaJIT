@@ -59,11 +59,13 @@ static void asm_exitstub_setup(ASMState *as)
 
   /* Register allocation is not started yet */
   MCode *mxp = as->mctop;
+  emit_ct(as, RID_CTPR1, 0, 0);
+  mxp = emit_bundle_finalize(as, mxp);
+  /* Should be in separate bundle for patchexit */
   emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
                 emit_src1(as, E2K_CONST, 0),
                 emit_src2(as, E2K_CONST, as->T->traceno),
                 emit_dst(as, E2K_REG, RID_TMP));
-  emit_ct(as, RID_CTPR1, 0, 0);
   mxp = emit_bundle_finalize(as, mxp);
   emit_alopf3(as, 0, OPC_STW, RES_ALS_25,
                 emit_src1(as, E2K_REG, RID_SP),
@@ -858,6 +860,41 @@ static void asm_setup_target(ASMState *as)
 
 /* -- Trace patching ------------------------------------------------------ */
 
+/* Patch exit jumps of existing machine code to a new target. */
+void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
+{
+  MCode *p = T->mcode;
+  MCode *pe = (MCode *)((char *)p + T->szmcode);
+  MCode *px = exitstub_trace_addr(T, exitno);
+  MCode *mcarea = lj_mcode_patch(J, p, 0);
+  /* Look for addd  0, exitno, TMP0 */
+  MCode exitload = 0x11c000f0;
+  MCode exitload_lts = 0;
+  uint32_t src2 = 0;
+  switch (get_const_type(exitno)) {
+  case E2K_CONST4: src2 = 0xc0 + exitno; break;
+  case E2K_CONST5: case E2K_CONST16:
+    src2 = 0xd0;
+    exitload_lts = 1;
+    break;
+  case E2K_CONST32:
+    src2 = 0xd8;
+    exitload_lts = 1;
+    break;
+  }
+  exitload |= src2 << 8;
+  for (p++; p < pe; p++) {
+    if (*p == exitload) { /* Look for load of exit number. */
+      if (exitload_lts && p[1] != exitno) continue;
+      /* p[1] - HS, p[-1] lts if any, p[-2] - align if lts */
+      /* Look for exitstub branch. */
+      NIY
+    }
+  }
+  lj_mcode_sync(T->mcode, T->mcode + T->szmcode);
+  lj_mcode_patch(J, mcarea, 1);
+}
+
 // TODO
 static void asm_fpdiv(ASMState *as, IRIns *ir)
 {  NIY }
@@ -990,7 +1027,4 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
 { NIY }
 
 static void asm_bufhdr_write(ASMState *as, Reg sb)
-{ NIY }
-
-void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 { NIY }
