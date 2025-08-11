@@ -656,7 +656,7 @@ static void asm_comp(ASMState *as, IRIns *ir)
 // TODO optimize???
 static void asm_stack_restore(ASMState *as, SnapShot *snap)
 {
-  RegSet allow = RSET_GPR;
+  RegSet allow = rset_exclude(RSET_GPR, RID_BASE);
   SnapEntry *map = &as->T->snapmap[snap->mapofs];
   MSize n, nent = snap->nent;
   /* Store the value of all modified slots to the Lua stack. */
