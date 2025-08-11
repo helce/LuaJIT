@@ -866,19 +866,35 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   MCode *p = T->mcode;
   MCode *pe = (MCode *)((char *)p + T->szmcode);
   MCode *px = exitstub_trace_addr(T, exitno);
+  MCode *cstart = NULL, *cstop = NULL;
   MCode *mcarea = lj_mcode_patch(J, p, 0);
-  /* Look for addd  0, exitno, TMP0 */
-  /* it is always set as _lts32 */
+  /* Look for addd  0, exitno(lts32), TMP0, (predN) */
   MCode exitload = 0x11c0d8f0;
   for (p++; p < pe; p++) {
     if (*p == exitload) { /* Look for load of exit number. */
       if (p[1] != exitno) continue;
-      /* p[1] - HS, p[-1] lts if any, p[-2] - align if lts */
+      /* p[-1] - HS; p[0] - ALS; p[1] LTS if any; p[2] - PDS or Align. */
+      /* p[3] - HS; p[4] - SS; p[5] - CS0; p[6] - Align. */
       /* Look for exitstub branch. */
-      NIY
+      // TODO not sure here
+      uint32_t disp = (ptrdiff_t)((void *)px - (void *)p - 3*4) >> 3;
+      if ((p[5] ^ (disp & 0xfffffff)) == 0) {
+        disp = (ptrdiff_t)((void *)target - (void *)p - 3*4) >> 3;
+        p[5] = disp & 0xfffffff;
+        /* Replace the load of the exit number. */
+        p[-1] = E2K_NOP; p[0] = E2K_NOP; p[1] = E2K_NOP; p[2] = E2K_NOP;
+        cstop = p + 3;
+        if (!cstart) cstart = p - 1;
+      } else if (p+3 == pe) {
+        /* Patch NOP after code for inverted loop branch. Use of J is ok. */
+        lj_assertJ(p[3] == E2K_NOP, "expected NOP");
+        NIY
+        // TODO insert jump and replace the load of the exit number
+        // cstart cstop
+      }
     }
   }
-  lj_mcode_sync(T->mcode, T->mcode + T->szmcode);
+  if (cstart) lj_mcode_sync(cstart, cstop);
   lj_mcode_patch(J, mcarea, 1);
 }
 
