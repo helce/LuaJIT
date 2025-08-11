@@ -7,16 +7,25 @@
 
 /* -- Bundling helpers ---------------------------------------------------- */
 
-static uint32_t check_resource(ASMState *as, uint32_t mask)
+static uint64_t check_resource(ASMState *as, uint64_t mask)
 {
-  uint32_t res = as->bundle.res & mask;
+  uint64_t res = as->bundle.res & mask;
   if (!res) {
-    // TODO need to finalize first or just error.
-    NIY
+    lj_assertA(0, "no available resources");
   }
   res = res & (-res);
   as->bundle.res &= ~res;
   return res;
+}
+
+static int get_sylidx(ASMState *as, uint64_t mask, uint64_t shift)
+{
+  uint64_t syl = check_resource(as, mask);
+  syl = syl >> shift;
+  int idx = 0;
+  while(syl >>= 1)
+    idx++;
+  return idx;
 }
 
 #define UT(t) u##t
@@ -84,11 +93,17 @@ static void emit_bundle_setup(ASMState *as)
 
 static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
 {
+  uint32_t hs_x_s_sw = (as->bundle.res & RES_SS) ? 0 : 0x2;
+  uint32_t hs_c = (~as->bundle.res & RES_CS_ALL) >> RES_CS_SHIFT;
+  uint32_t hs_cds = (as->bundle.hs_cds + 1) & -2;
+  uint32_t hs_ales = (~as->bundle.res & RES_ALES_ALL) >> RES_ALES_SHIFT;
+  uint32_t hs_als = ~as->bundle.res & RES_ALS_ALL;
+
   uint8_t f1 = as->bundle.f1;
   uint8_t f2 = as->bundle.f2;
   int half_pad = as->bundle.f3 & 0x1;
   uint8_t f3 = (as->bundle.f3 >> 1) + half_pad;
-  uint8_t f4 = as->bundle.f4;
+  uint8_t f4 = as->bundle.f4 + (hs_cds >> 1);
   uint8_t lng = f1 + f2 + f3 + f4;
   uint8_t hs_lng = (lng + 1) & -2;
 
@@ -98,44 +113,60 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
   hs.fields.lng = (uint32_t)(hs_lng >> 1) - 1;
   hs.fields.nop = (uint32_t)as->bundle.nop;
 //  hs.fields.lm = (uint32_t)as->bundle.loop;
-  uint32_t hs_x_s_sw = (as->bundle.res & RES_SS) ? 0 : 0x2;
   hs.fields.x_s_sw = hs_x_s_sw;
-  uint32_t hs_c = (~as->bundle.res & RES_CS_ALL) >> RES_CS_SHIFT;
   hs.fields.c = hs_c;
-//  hs.fields.cds = (uint32_t)as->bundle.hs_cds;
+  hs.fields.cds = hs_cds >> 1;
 //  hs.fields.pls = (uint32_t)as->bundle.hs_pls;
-  uint32_t hs_ales = (~as->bundle.res & RES_ALES_ALL) >> RES_ALES_SHIFT;
   hs.fields.ales = hs_ales;
-  uint32_t hs_als = ~as->bundle.res & RES_ALS_ALL;
   hs.fields.als = hs_als;
 
-  // cds, 16-bit halfsyls, not used 
+  // cds, 16-bit syls
+  uint16_t *hmxp = (uint16_t *)mxp;
+  if (hs_cds > 4) {
+    *--hmxp = as->bundle.cds[4];
+    *--hmxp = as->bundle.cds[5];
+  }
+  if (hs_cds > 2) {
+    *--hmxp = as->bundle.cds[2];
+    *--hmxp = as->bundle.cds[3];
+  }
+  if (hs_cds > 0) {
+    *--hmxp = as->bundle.cds[0];
+    *--hmxp = as->bundle.cds[1];
+  }
+  mxp = (MCode *)hmxp;
   // pls, 32-bit syls, not used
-  int used_lts = ((~as->bundle.res & RES_LTS_ALL) >> RES_LTS_SHIFT);
+  // lts, can be 16-bit, but only 32-bit used here
+  int used_lts = ((~as->bundle.res & RES_LTS_ALL)  >> RES_LTS_SHIFT);
   for (int i = 0; i < 4; i++) {
     if (used_lts & (1 << i)) {
       *--mxp = as->bundle.lts[i];
     }
   }
+  // aligning
   if (hs_lng != lng) {
     *--mxp = 0;
   }
   // aas, 16-bit syls, not used
-  uint16_t *hmxp = (uint16_t *)mxp;
+  // ales 16-bit syls
+  hmxp = (uint16_t *)mxp;
   if (half_pad) *--hmxp = 0;
   if (hs_ales & 0x10) *--hmxp = as->bundle.ales[4];
   if (hs_ales & 0x08) *--hmxp = as->bundle.ales[3];
   if (hs_ales & 0x02) *--hmxp = as->bundle.ales[1];
   if (hs_ales & 0x01) *--hmxp = as->bundle.ales[0];
+  // cs, 32-bit syls
   mxp = (MCode *)hmxp;
   if (hs_c & 0x02) *--mxp = as->bundle.cs[1];
   if (hs_c & 0x01) *--mxp = (as->bundle.cs[0] + (hs_lng >> 1));
+  // als, 32-bit syls
   if (hs_als & 0x20) *--mxp = as->bundle.als[5];
   if (hs_als & 0x10) *--mxp = as->bundle.als[4];
   if (hs_als & 0x08) *--mxp = as->bundle.als[3];
   if (hs_als & 0x04) *--mxp = as->bundle.als[2];
   if (hs_als & 0x02) *--mxp = as->bundle.als[1];
   if (hs_als & 0x01) *--mxp = as->bundle.als[0];
+  // ss and hs
   if (hs_x_s_sw) *--mxp = as->bundle.ss;
   *--mxp = hs.i; 
 
@@ -145,21 +176,10 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
 
 /* -- Emit basic instructions --------------------------------------------- */
 
-static int emit_als(ASMState *as, uint32_t als_mask)
-{
-  uint32_t als = check_resource(as, als_mask);
-  // convert to index
-  int als_idx = 0;
-  while (als >>= 1) {
-    als_idx++;
-  }
-  return als_idx;
-}
-
 //TODO refactor
 static uint32_t emit_lts(ASMState *as, E2kOp type, uint64_t val)
 {
-  uint32_t mask = 0;
+  uint64_t mask = 0;
   if (type == E2K_CONST16) {
     mask = RES_LTS1|RES_LTS0;
   } else if (type == E2K_CONST32) {
@@ -168,7 +188,7 @@ static uint32_t emit_lts(ASMState *as, E2kOp type, uint64_t val)
     mask = RES_LTS2|RES_LTS1|RES_LTS0;
   }
   // TODO, manage halfsyls, now just lo part.
-  uint32_t lts = check_resource(as, mask);
+  uint64_t lts = check_resource(as, mask);
   // takes two lts
   if (type == E2K_CONST64) {
     check_resource(as, lts << 1);
@@ -193,6 +213,31 @@ static uint32_t emit_lts(ASMState *as, E2kOp type, uint64_t val)
   }
   as->bundle.f4++;
   return lts_idx;
+}
+
+static void emit_alu_cond(ASMState *as, int als, Reg pred, int inverted)
+{
+  int cds_idx = get_sylidx(as, RES_CDS_ALL, RES_CDS_SHIFT);
+  E2kCDS syl;
+  syl.i = 0;
+  syl.fields.pred = (pred - RID_PRED0)|0x60;
+  switch (1 << als) {
+  case 0x1: case 0x8:
+     if (inverted) syl.fields.neg = 1;
+     syl.fields.mask = 1;
+     break;
+  case 0x2: case 0x10:
+     if (inverted) syl.fields.neg = 2;
+     syl.fields.mask = 2;
+     break;
+  case 0x4: case 0x20:
+     if (inverted) syl.fields.neg = 4;
+     syl.fields.mask = 4;
+     break;
+  }
+  if (als >= 3) syl.fields.opc = 1;
+  as->bundle.cds[cds_idx] = syl.i;
+  as->bundle.hs_cds++;
 }
 
 static uint32_t emit_src1(ASMState *as, E2kOp type, intptr_t src1)
@@ -303,10 +348,10 @@ static uint32_t emit_pdst(ASMState *as, E2kOp type, intptr_t pred)
   }
 }
 
-static void emit_alopf7(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
-                        uint32_t mask, uint32_t src1, uint32_t src2, uint32_t pred)
+static int emit_alopf7(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
+                        uint64_t mask, uint32_t src1, uint32_t src2, uint32_t pred)
 {
-  int als_idx = emit_als(as, mask);
+  int als_idx = get_sylidx(as, mask, RES_ALS_SHIFT);
   E2kAlopf7 syl;
   syl.i = 0;
   syl.fields.pdst = pred;
@@ -318,12 +363,13 @@ static void emit_alopf7(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce
 
   as->bundle.als[als_idx] = syl.i;
   as->bundle.f1++;
+  return als_idx;
 }
 
-static void emit_alopf3(ASMState *as, uint32_t spec, uint32_t cop, uint32_t mask,
-                        uint32_t src1, uint32_t src2, uint32_t src3)
+static int emit_alopf3(ASMState *as, uint32_t spec, uint32_t cop, uint32_t mask,
+                        uint64_t src1, uint32_t src2, uint32_t src3)
 {
-  int als_idx = emit_als(as, mask);
+  int als_idx = get_sylidx(as, mask, RES_ALS_SHIFT);
   E2kAlopf3 syl;
   syl.i = 0;
   syl.fields.src3  = src3;
@@ -334,12 +380,13 @@ static void emit_alopf3(ASMState *as, uint32_t spec, uint32_t cop, uint32_t mask
 
   as->bundle.als[als_idx] = syl.i;
   as->bundle.f1++;
+  return als_idx;
 }
 
-static void emit_alopf2(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
-                        uint32_t mask, uint32_t src2, uint32_t dst)
+static int emit_alopf2(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
+                        uint64_t mask, uint32_t src2, uint32_t dst)
 {
-  int als_idx = emit_als(as, mask);
+  int als_idx = get_sylidx(as, mask, RES_ALS_SHIFT);
   E2kAlopf2 syl;
   syl.i = 0;
   syl.fields.dst  = dst;
@@ -350,12 +397,13 @@ static void emit_alopf2(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce
 
   as->bundle.als[als_idx] = syl.i;
   as->bundle.f1++;
+  return als_idx;
 }
 
-static void emit_alopf1(ASMState *as, uint32_t spec, uint32_t cop,
-                        uint32_t mask, uint32_t src1, uint32_t src2, uint32_t dst)
+static int emit_alopf1(ASMState *as, uint32_t spec, uint32_t cop,
+                        uint64_t mask, uint32_t src1, uint32_t src2, uint32_t dst)
 {
-  int als_idx = emit_als(as, mask);
+  int als_idx = get_sylidx(as, mask, RES_ALS_SHIFT);
   E2kAlopf1 syl;
   syl.i = 0;
   syl.fields.dst  = dst;
@@ -366,6 +414,7 @@ static void emit_alopf1(ASMState *as, uint32_t spec, uint32_t cop,
 
   as->bundle.als[als_idx] = syl.i;
   as->bundle.f1++;
+  return als_idx;
 }
 
 static void emit_ct(ASMState *as, Reg ctpr, Reg pred, int inverted)
@@ -384,7 +433,8 @@ static void emit_ct(ASMState *as, Reg ctpr, Reg pred, int inverted)
   } else {
     syl.fields.ctcond = 0x20; // unconditional
   }
-  syl.fields.ctop = ctpr - RID_CTPR1 + 1;
+  if (ctpr)  /* RID_CTPRX is nonnull */
+    syl.fields.ctop = ctpr - RID_CTPR1 + 1;
   syl.fields.ipd = 3;
 
   as->bundle.ss = syl.i;
@@ -398,10 +448,17 @@ static void emit_copf2(ASMState *as, uint32_t opc, Reg ctpr, uintptr_t disp)
   syl.i = 0;
   syl.fields.disp = disp >> 3;
   syl.fields.opc = opc;
-  syl.fields.ctpr = ctpr - RID_CTPR1 + 1;
+  if (ctpr) /* RID_CTPRX is nonnull */
+    syl.fields.ctpr = ctpr - RID_CTPR1 + 1;
 
   as->bundle.cs[0] = syl.i;
   as->bundle.f1++;
+}
+
+static void emit_ibranch(ASMState *as, uintptr_t disp, Reg pred, int inverted)
+{
+  emit_ct(as, 0, pred, inverted);
+  emit_copf2(as, OPC_IBRANCH, 0, disp);
 }
 
 #define emit_nop(as, nops) \

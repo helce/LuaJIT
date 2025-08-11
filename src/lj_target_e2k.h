@@ -180,17 +180,20 @@ enum {
   RES_PLS0    = 0x40000,
   RES_PLS1    = 0x80000,
   RES_PLS2    = 0x100000,
-  RES_CDS0    = 0x200000,
-  RES_CDS1    = 0x400000,
-  RES_CDS2    = 0x800000,
-  RES_ALES0   = 0x1000000,
-  RES_ALES1   = 0x2000000,
-  RES_ALES2   = 0x4000000,
-  RES_ALES3   = 0x8000000,
-  RES_ALES4   = 0x10000000,
-  RES_ALES5   = 0x20000000,
-  RES_SS      = 0x40000000,
-  RES_MASK    = 0x7fffffff,
+  RES_ALES0   = 0x200000,
+  RES_ALES1   = 0x400000,
+  RES_ALES2   = 0x800000,
+  RES_ALES3   = 0x1000000,
+  RES_ALES4   = 0x2000000,
+  RES_ALES5   = 0x4000000,
+  RES_SS      = 0x8000000,
+  RES_CDS00   = 0x10000000,
+  RES_CDS01   = 0x20000000,
+  RES_CDS10   = 0x40000000,
+  RES_CDS11   = 0x80000000,
+  RES_CDS20   = 0x100000000,
+  RES_CDS21   = 0x200000000,
+  RES_MASK    = 0x3ffffffff,
   RES_INIT    = RES_MASK,
   RES_NONE    = 0,
   RES_ALS_012345 = RES_ALS0 | RES_ALS1 | RES_ALS2 | RES_ALS3 | RES_ALS4 | RES_ALS5,
@@ -202,9 +205,15 @@ enum {
   RES_ALES_ALL   = RES_ALES0 | RES_ALES1 | RES_ALES2 | RES_ALES3 | RES_ALES4 | RES_ALES5,
   RES_CS_ALL     = RES_CS0 | RES_CS1,
   RES_LTS_ALL    = RES_LTS0 | RES_LTS1 | RES_LTS2| RES_LTS3,
-  RES_ALES_SHIFT = 24,
+  RES_CDS_ALL    = RES_CDS00 | RES_CDS01 | RES_CDS10 | RES_CDS11 | RES_CDS20 | RES_CDS21,
+  RES_CDS0       = RES_CDS00 | RES_CDS01,
+  RES_CDS1       = RES_CDS10 | RES_CDS11,
+  RES_CDS2       = RES_CDS20 | RES_CDS21,
+  RES_ALS_SHIFT  = 0,
   RES_CS_SHIFT   = 6,
-  RES_LTS_SHIFT  = 14
+  RES_LTS_SHIFT  = 14,
+  RES_ALES_SHIFT = 21,
+  RES_CDS_SHIFT  = 28,
 };
 
 typedef struct {
@@ -213,9 +222,9 @@ typedef struct {
   uint8_t f3;
   uint8_t f4;
 //  uint8_t hs_pls;
-//  uint8_t hs_cds;
+  uint8_t hs_cds;
   uint32_t nop;
-  uint32_t res;
+  uint64_t res;
   uint32_t ss;
   uint32_t als[6];
   uint32_t cs[2];
@@ -223,7 +232,7 @@ typedef struct {
 //  uint16_t aas[6];
   uint32_t lts[4];
 //  uint32_t pls[3];
-//  uint32_t cds[3];
+  uint16_t cds[6];
 } E2kBundle;
 
 typedef struct {
@@ -331,6 +340,16 @@ typedef union {
   } fields;
 } E2kCopf2;
 
+typedef union {
+  uint16_t i;
+  struct {
+    uint16_t pred    : 7;
+    uint16_t neg     : 3;
+    uint16_t mask    : 4;
+    uint16_t opc     : 2;
+  } fields;
+} E2kCDS;
+
 typedef enum {
   E2K_CONST = 0,
   E2K_CONST4 = 4,
@@ -363,7 +382,8 @@ typedef enum {
 /* -- Opcodes ------------------------------------------------------------- */
 
 /* control operations */
-#define OPC_DISP   0x0
+#define OPC_DISP    0x0
+#define OPC_IBRANCH 0x0
 /* non-combined operations short */
 #define OPC_SXT    0x0c
 #define OPC_ADDS   0x10
@@ -429,9 +449,7 @@ typedef enum {
 #define SXT_BZ      0x4
 #define SXT_HZ      0x5
 #define SXT_WZ      0x6
-
-/* -- static latency ------------------------------------------------------ */
-#define E2K_NOP_DISP_CT 4
-#define E2K_NOP_OUT4F   3
+/* nop */
+#define E2K_NOP     0x0
 
 #endif

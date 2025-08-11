@@ -49,30 +49,28 @@ static Reg ra_hintalloc(ASMState *as, IRRef ref, Reg hint, RegSet allow)
 static void asm_exitstub_setup(ASMState *as)
 {
   /*
-    disp ctpr1, ->lj_vm_exit_handler
     stw STACK, STACK_TMP, TMP0
     --
     addd  0, as->T->traceno, TMP0
-    ct ctpr1
+    --
+    ibranch ->lj_vm_exit_handler
     --
   */
 
   /* Register allocation is not started yet */
   MCode *mxp = as->mctop;
-  emit_ct(as, RID_CTPR1, 0, 0);
-  mxp = emit_bundle_finalize(as, mxp);
   /* Should be in separate bundle for patchexit */
+  emit_ibranch(as, (ptrdiff_t)((void *)lj_vm_exit_handler - (void *)mxp), 0, 0);
+  mxp = emit_bundle_finalize(as, mxp);
   emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
                 emit_src1(as, E2K_CONST, 0),
-                emit_src2(as, E2K_CONST, as->T->traceno),
+                emit_lts(as, E2K_CONST32, as->T->traceno) | 0xd8,
                 emit_dst(as, E2K_REG, RID_TMP));
   mxp = emit_bundle_finalize(as, mxp);
   emit_alopf3(as, 0, OPC_STW, RES_ALS_25,
                 emit_src1(as, E2K_REG, RID_SP),
                 emit_src2(as, E2K_CONST, E2K_STACK_TMP),
                 emit_src3(as, E2K_REG, RID_TMP));
-  emit_copf2(as, OPC_DISP, RID_CTPR1,
-            (ptrdiff_t)((void *)lj_vm_exit_handler - (void *)mxp));
   mxp = emit_bundle_finalize(as, mxp);
 
   as->mctop = mxp;
@@ -89,23 +87,24 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
   if (LJ_UNLIKELY(p == as->invmcp)) {
     as->invmcp = NULL;
     as->loopinv = 1;
-    as->mcp = p + 1;
+    as->mcp = p + 4;
     inverted = inverted ? 0 : 1;
     target = p; /* Patch target later in asm_loop_fixup. */
   }
-  emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
-                emit_src1(as, E2K_CONST, 0),
-                emit_src2(as, E2K_CONST, as->snapno),
-                emit_dst(as, E2K_REG, RID_TMP));
-  p = emit_bundle_finalize(as, p);
-
-  emit_ct(as, RID_CTPR1, pred, inverted);
-  p = emit_bundle_finalize(as, p);
-
-  emit_copf2(as, OPC_DISP, RID_CTPR1,
-            (ptrdiff_t)((void *)target - (void *)p));
-  /* do not finalize here */
-  as->mcp = p;
+  /*
+    addd 0, snapno(32), TMP0, pred
+    --
+    ibranch target, pred
+    --
+  */
+  emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), pred, inverted);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  int als = emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                        emit_src1(as, E2K_CONST, 0),
+                        emit_lts(as, E2K_CONST32, as->snapno) | 0xd8,
+                        emit_dst(as, E2K_REG, RID_TMP));
+  emit_alu_cond(as, als, pred, inverted);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
 /* -- Operand fusion ------------------------------------------------------ */
@@ -189,9 +188,11 @@ static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
     istofd dest, tmp
     --
     fcmpeqdb left, tmp, predN
-    disp ctprN, as->mctop
     --
-    ct ctprN, ~predN
+    addd 0, snapno, TMP0, ~predN
+    --
+    ibranch as->mctop, ~predN
+    --
   */
   emit_alopf7(as, 0, OPC_FCMPDB, CMPF_EQ, RES_ALS_0134,
               emit_src1(as, E2K_REG, left),
@@ -755,13 +756,14 @@ static void asm_loop_fixup(ASMState *as)
 {
   MCode *p = as->mctop;
   MCode *target = as->mcp;
-  p = p - 8; /* skip nops */
-  /* p[-8] - HS; p[-7] - ALS(cmp); p[-6] - CS0 p[-5] - Align */
+  p[-1] = E2K_NOP; p[-2] = E2K_NOP; p[-3] = E2K_NOP; p[-4] = E2K_NOP;
+  p = p - 4; /* skip nops */
+  /* p[-4] - HS; p[-3] - SS; p[-2] - CS0; p[-1] - Align */
   if (as->loopinv) { /* Inverted loop branch? */
     /* asm_guard already inverted the cond branch. Only patch the target. */
-    uint32_t tmp = p[-6] & 0xf0000000;
-    uint32_t disp = (ptrdiff_t)((void *)target - (void *)p + 4*8) >> 3;
-    p[-6] = tmp | (disp & 0xfffffff);
+    uint32_t tmp = p[-2] & 0xf0000000;
+    uint32_t disp = (ptrdiff_t)((void *)target - (void *)p + 4*4) >> 3;
+    p[-2] = tmp | (disp & 0xfffffff);
   } else {
     // TODO not sure about this case, need real example
     NIY
@@ -770,7 +772,7 @@ static void asm_loop_fixup(ASMState *as)
 
 static void asm_loop_tail_fixup(ASMState *as)
 {
-  UNUSED(as); /* Nothing to do. */
+  if (as->loopinv) as->mctop -= 4;
 }
 
 /* -- Head of trace ------------------------------------------------------- */
@@ -820,14 +822,13 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
   MCode *p = as->mctop;
   int32_t spadj = as->T->spadjust;
   /*
-    disp ctpr1, lj_vm_exit_interp(lnk)
+    addd STACK, spadj, STACK (2 nop)
     --
-    addd STACK, spadj, STACK (4 nop)
+    ibranch lj_vm_exit_interp(lnk)
     --
-    ct ctpr1
   */
-  emit_ct(as, RID_CTPR1, 0, 0);
-  p = emit_bundle_finalize(as, p); /* 2(HS+SS) */
+  emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), 0, 0);
+  p = emit_bundle_finalize(as, p); /* 4(HS+SS+CS0+Align) */
   if (spadj) {
     // TODO check about spadj if its needed write into a hole
     // make a hole in asm_tail_prep
@@ -835,17 +836,16 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
     // check a hole in asm_loop_fixup
     /* 4(HS+ALS+LTS?+ALIGN) */
     NIY
-  } /* nops are just nulls, so dont do anything here */
-  emit_copf2(as, OPC_DISP, RID_CTPR1,
-            (ptrdiff_t)((void *)target - (void *)p));
-  p = emit_bundle_finalize(as, p); /* 2(HS+CS0) */
+  } else {
+    p[-1] = E2K_NOP; p[-2] = E2K_NOP; p[-3] = E2K_NOP; p[-4] = E2K_NOP;
+  }
 }
 
 /* Prepare tail of code. */
 static void asm_tail_prep(ASMState *as)
 {
   /* initialized by zero, it counts as nop */
-  as->mcp = as->mctop - 8;
+  as->mcp = as->mctop - 8; // TODO
   as->invmcp = as->loopref ? as->mcp : NULL;
 }
 
@@ -868,24 +868,11 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   MCode *px = exitstub_trace_addr(T, exitno);
   MCode *mcarea = lj_mcode_patch(J, p, 0);
   /* Look for addd  0, exitno, TMP0 */
-  MCode exitload = 0x11c000f0;
-  MCode exitload_lts = 0;
-  uint32_t src2 = 0;
-  switch (get_const_type(exitno)) {
-  case E2K_CONST4: src2 = 0xc0 + exitno; break;
-  case E2K_CONST5: case E2K_CONST16:
-    src2 = 0xd0;
-    exitload_lts = 1;
-    break;
-  case E2K_CONST32:
-    src2 = 0xd8;
-    exitload_lts = 1;
-    break;
-  }
-  exitload |= src2 << 8;
+  /* it is always set as _lts32 */
+  MCode exitload = 0x11c0d8f0;
   for (p++; p < pe; p++) {
     if (*p == exitload) { /* Look for load of exit number. */
-      if (exitload_lts && p[1] != exitno) continue;
+      if (p[1] != exitno) continue;
       /* p[1] - HS, p[-1] lts if any, p[-2] - align if lts */
       /* Look for exitstub branch. */
       NIY
