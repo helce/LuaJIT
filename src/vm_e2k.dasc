@@ -4552,7 +4552,7 @@ static void build_subroutines(BuildCtx *ctx)
     | ldd       2, DISPATCH, DISPATCH_GL(cur_L), T5
     | disp      ctpr1, extern lj_trace_exit
     | --
-    | ldd       0, DISPATCH, DISPATCH_GL(jit_base), T6
+    | ldd       0, DISPATCH, DISPATCH_GL(jit_base), BASE
     | addd      1, 0x0, 0x0, T8
     | ldd       2, STACK, STACK_TMP, T7
     | addd      3, 0x0, ~LJ_VMST_EXIT, T9
@@ -4615,7 +4615,7 @@ static void build_subroutines(BuildCtx *ctx)
     | std       5, DISPATCH, DISPATCH_J(L), T5
     | --
     | addd      1, T5, 0x0, RB
-    | std       2, T5, L->base, T6
+    | std       2, T5, L->base, BASE
     | std       5, DISPATCH, DISPATCH_GL(jit_base), T8
     | call      ctpr1, wbs = 0x8            // lj_trace_exit(jit_State *J, ExitState *ex)
     | --
