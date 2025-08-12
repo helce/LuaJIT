@@ -771,6 +771,7 @@ LJ_NOINLINE void LJ_FASTCALL lj_err_throw(lua_State *L, int errcode)
   lj_trace_abort(g);
   L->status = LUA_OK;
 #if LJ_UNWIND_EXT
+  setmref(g->jit_base, NULL);
   err_raise_ext(g, errcode);
   /*
   ** A return from this function signals a corrupt C stack that cannot be

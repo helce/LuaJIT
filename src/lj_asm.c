@@ -245,7 +245,7 @@ static Reg rset_pickrandom(ASMState *as, RegSet rs)
 
 /* -- Register allocator debugging ---------------------------------------- */
 
-#define LUAJIT_DEBUG_RA
+//#define LUAJIT_DEBUG_RA
 
 #ifdef LUAJIT_DEBUG_RA
 
