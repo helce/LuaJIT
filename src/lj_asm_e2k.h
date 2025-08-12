@@ -507,21 +507,52 @@ static void asm_sload(ASMState *as, IRIns *ir)
 
 static void asm_alopf1(ASMState *as, IRIns *ir, int cop, int mask)
 {
-  Reg dest = ra_dest(as, ir, RSET_GPR);
-  Reg left = ra_hintalloc(as, ir->op1, dest, RSET_GPR);
+  RegSet allow = RSET_GPR;
+  Reg dest = ra_dest(as, ir, allow);
+  Reg left = ra_hintalloc(as, ir->op1, dest, allow);
+  allow = rset_exclude(allow, left);
+  uint32_t right_src2 = 0;
   if (irref_isk(ir->op2)) {
     intptr_t k = get_kval(as, ir->op2);
-    emit_alopf1(as, 0, cop, mask,
-                emit_src1(as, E2K_REG, left),
-                emit_src2(as, E2K_CONST, k),
-                emit_dst(as, E2K_REG, dest));
+    right_src2 = emit_src2(as, E2K_CONST, k);
   } else {
-    Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
-    emit_alopf1(as, 0, cop, mask,
-                emit_src1(as, E2K_REG, left),
-                emit_src2(as, E2K_REG, right),
-                emit_dst(as, E2K_REG, dest));
+    Reg right = ra_alloc1(as, ir->op2, allow);
+    allow = rset_exclude(allow, right);
+    right_src2 = emit_src2(as, E2K_REG, right);
   }
+
+  if (irt_isguard(ir->t)) { /* For IR_ADDOV etc. */
+    lj_assertA(!irt_is64(ir->t), "bad usage");
+    Reg tmp1 = ra_scratch(as, allow);
+    Reg tmp2 = ra_scratch(as, rset_exclude(allow, tmp1));
+    Reg pred = ra_pred(as, RSET_PRED);
+    asm_guard(as, pred, 0);
+    /* ((dest^left) & (dest^(~)right)) < 0 */
+    emit_alopf7(as, 0, OPC_CMPSB, CMPI_LT, RES_ALS_0134,
+                emit_src1(as, E2K_REG, tmp1),
+                emit_src2(as, E2K_CONST, 0),
+                emit_pdst(as, E2K_REG_PRED, pred));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_ANDS, RES_ALS_012345,
+                emit_src1(as, E2K_REG, tmp1),
+                emit_src2(as, E2K_REG, tmp2),
+                emit_dst(as, E2K_REG, tmp1));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_XORS, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, dest),
+                  emit_src2(as, E2K_REG, left),
+                  emit_dst(as, E2K_REG, tmp1));
+    emit_alopf1(as, 0, ir->o == IR_ADDOV ? OPC_XORS : OPC_XORNS,
+                  RES_ALS_012345,
+                  emit_src1(as, E2K_REG, dest),
+                  right_src2,
+                  emit_dst(as, E2K_REG, tmp2));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+
+  emit_alopf1(as, 0, cop, mask,
+              emit_src1(as, E2K_REG, left), right_src2,
+              emit_dst(as, E2K_REG, dest));
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
@@ -530,31 +561,21 @@ static void asm_add(ASMState *as, IRIns *ir)
   /*
     (f)add(s/d) rN, src2, rN
   */
-  int cop = 0, mask = 0;
-  if (irt_isnum(ir->t)) {
-    cop = OPC_FADDD; // only doubles
-    mask = RES_ALS_0134;
-  } else {
-    cop = irt_is64(ir->t) ? OPC_ADDD : OPC_ADDS;
-    mask = RES_ALS_012345;
-  }
-  asm_alopf1(as, ir, cop, mask);
+  asm_alopf1(as, ir,
+             irt_isnum(ir->t) ? OPC_FADDD :
+             (irt_is64(ir->t) ? OPC_ADDD : OPC_ADDS),
+             irt_isnum(ir->t) ? RES_ALS_0134 : RES_ALS_012345);
 }
 
 static void asm_sub(ASMState *as, IRIns *ir)
 {
   /*
-    (f)add(s/d) rN, src2, rN
+    (f)sub(s/d) rN, src2, rN
   */
-  int cop = 0, mask = 0;
-  if (irt_isnum(ir->t)) {
-    cop = OPC_FSUBD; // only doubles
-    mask = RES_ALS_0134;
-  } else {
-    cop = irt_is64(ir->t) ? OPC_SUBD : OPC_SUBS;
-    mask = RES_ALS_012345;
-  }
-  asm_alopf1(as, ir, cop, mask);
+  asm_alopf1(as, ir,
+             irt_isnum(ir->t) ? OPC_FSUBD :
+             (irt_is64(ir->t) ? OPC_SUBD : OPC_SUBS),
+             irt_isnum(ir->t) ? RES_ALS_0134 : RES_ALS_012345);
 }
 
 static void asm_mul(ASMState *as, IRIns *ir)
@@ -564,9 +585,7 @@ static void asm_mul(ASMState *as, IRIns *ir)
     (f)mul(s/d) rN, src2, rN
   */
   if (irt_isnum(ir->t)) {
-    cop = OPC_FMULD; // only doubles
-    mask = RES_ALS_0134;
-    asm_alopf1(as, ir, cop, mask);
+    asm_alopf1(as, ir, OPC_FMULD, RES_ALS_0134);
   } else {
     cop = irt_is64(ir->t) ? OPC_MULD : OPC_MULS;
     mask = RES_ALS_03;
@@ -574,6 +593,9 @@ static void asm_mul(ASMState *as, IRIns *ir)
     //asm_alopf11(as, ir, cop, opce);
   }
 }
+
+#define asm_addov(as, ir) asm_alopf1(as, ir, OPC_ADDS, RES_ALS_012345)
+#define asm_subov(as, ir) asm_alopf1(as, ir, OPC_SUBS, RES_ALS_012345)
 
 /* -- Comparisons --------------------------------------------------------- */
 
@@ -957,12 +979,6 @@ static void asm_min(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_max(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_addov(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_subov(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_mulov(ASMState *as, IRIns *ir)

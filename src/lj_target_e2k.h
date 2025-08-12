@@ -385,6 +385,14 @@ typedef enum {
 #define OPC_DISP    0x0
 #define OPC_IBRANCH 0x0
 /* non-combined operations short */
+#define OPC_ANDS   0x00
+#define OPC_ANDD   0x01
+#define OPC_ANDNS  0x02
+#define OPC_ANDND  0x03
+#define OPC_XORS   0x08
+#define OPC_XORD   0x09
+#define OPC_XORNS  0x0a
+#define OPC_XORND  0x0b
 #define OPC_SXT    0x0c
 #define OPC_ADDS   0x10
 #define OPC_ADDD   0x11
