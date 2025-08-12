@@ -4248,6 +4248,7 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, RB, 0, CARG1, pred0
     | addd      1, PC, 0x0, CARG2, pred0
     | stw       2, DISPATCH, DISPATCH_GL(hookcount), T0, pred1
+    | addd      3, RA_E, 0, RA, ~pred0
     | shld      4, T1, 0x3, RA, pred0
     | std       5, RB, L->base, BASE, pred0
     | call      ctpr1, wbs = 0x8, pred0      // lj_dispatch_ins(lua_State *L, const BCIns *pc)
