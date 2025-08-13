@@ -551,7 +551,11 @@ static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
 static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
 {
   if (ofs) {
-    NIY
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, r),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_dst(as, E2K_REG, r));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
   }
 }
 
