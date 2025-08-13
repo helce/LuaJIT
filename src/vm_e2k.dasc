@@ -4255,7 +4255,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | // PC, RA, restart pipeline static
     | setwd_pipe
-    | ldd       0, RB, L->base, BASE
+    | ldd       0, RB, L->base, BASE, pred0
     | subd      1, PC, 4, PC                // Current PC.
     | --
     | ldw       0, PC, 0, INSN_E            // Load insns.
@@ -8785,6 +8785,65 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     */
 
     case BC_FUNCF:
+        | // ins_AD BASE = new_base*8, RA_E = framesize*8, RD_E = (nargs+1)*8
+        | --
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
+        | pipe_dispatch_load 2
+        | ldd       3, PC, PC2PROTO(k)-4, KBASE
+        | shrd      4, PC, 1, T0
+        | ldd       5, STACK, SAVE_L, RB
+        | disp      ctpr1, ->vm_growstack_f
+        | --
+        | pipe_scale 0, 1, 2, 4
+        | andd      3, T0, HOTCOUNT_PCMASK, T0
+        | pipe_fetch 5
+        | disp      ctpr2, ->vm_hotcall
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | addd      5, T0, GG_DISP2HOT, T0
+        | wait_load RB, 2
+        | --
+        | addd      0, RD_E, 0, RD
+        | ldd       3, RB, L->maxstack, S0
+        | addd      4, BASE, RA_E, RA       // Top of frame.
+        | ldh       5, DISPATCH, T0, T1
+        | wait_load T1, 0
+        | --
+        | ldbsm     3, PC, PC2PROTO(numparams)-4, T6
+        | subd      4, T1, HOTCOUNT_CALL, T1
+        | --
+        | cmpbedb   3, RA, S0, pred0
+        | cmpandedb 4, T1, 0x8000, pred1
+        | sth       5, DISPATCH, T0, T1
+        | wait_pred_ct pred1, 0
+        | --
+        | ct        ctpr2, ~pred1
+        | --
+        | shld      3, T6, 0x3, RA, pred0
+        | ct        ctpr1, ~pred0           // vm_growstack_f(BASE, RD, RB, PC)
+        | --
+        | cmpbedb   3, RD, RA, pred1        // Check for missing parameters.
+        | disp      ctpr2, >1
+        | wait_pred_ct pred1, 0
+        | --
+        | addd      1, 0x0, LJ_TNIL, S1, pred1
+        | pipe_dispatch_if 0, ctpr3, ~pred1
+        | --
+        |1: // Clear missing parameters.
+        | subd      3, RD, 0x8, S0
+        | addd      4, RD, 0x8, RD
+        | --
+        | cmpbedb   3, RD, RA, pred0
+        | wait_pred_ct pred0, 0
+        | --
+        | std       5, BASE, S0, S1
+        | ct        ctpr2, pred0            // <1
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
+        break;
+
     case BC_FUNCV: /* NYI: compiled vararg functions. */
         | // Fall through. Assumes BC_IFUNCF/BC_IFUNCV follow and ins_AD is a no-op.
         break;
