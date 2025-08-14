@@ -903,16 +903,23 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
       if ((p[5] ^ (disp & 0xfffffff)) == 0) {
         disp = (ptrdiff_t)((void *)target - (void *)p - 3*4) >> 3;
         p[5] = disp & 0xfffffff;
-        /* Replace the load of the exit number. */
+        /* Replace the load of the exit number with nops. */
         p[-1] = E2K_NOP; p[0] = E2K_NOP; p[1] = E2K_NOP; p[2] = E2K_NOP;
-        cstop = p + 3;
+        cstop = p + 7;
         if (!cstart) cstart = p - 1;
-      } else if (p+3 == pe) {
+      } else if (p+7 == pe) {
         /* Patch NOP after code for inverted loop branch. Use of J is ok. */
-        lj_assertJ(p[3] == E2K_NOP, "expected NOP");
-        NIY
-        // TODO insert jump and replace the load of the exit number
-        // cstart cstop
+        lj_assertJ(p[7] == E2K_NOP, "expected NOP");
+        /* Replace the load of the exit number with nops. */
+        p[-1] = E2K_NOP; p[0] = E2K_NOP; p[1] = E2K_NOP; p[2] = E2K_NOP;
+        disp = (ptrdiff_t)((void *)target - (void *)p - 7*4) >> 3;
+        /* ibranch target */
+        p[7] = 0x5012; /* HS */
+        p[8] = 0xc0000020; /* SS */
+        p[9] = disp & 0xfffffff; /* CS0 */
+        p[10] = 0; /* Align */
+        cstop = p + 11;
+        if (!cstart) cstart = p - 1;
       }
     }
   }
