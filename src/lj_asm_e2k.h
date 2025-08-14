@@ -298,6 +298,14 @@ static void asm_aref(ASMState *as, IRIns *ir)
                 emit_src2(as, E2K_CONST, 3),
                 emit_dst(as, E2K_REG, tmp));
     as->mcp = emit_bundle_finalize(as, as->mcp);
+    /* if its integer extend first */
+    if (irt_isinteger(IR(ir->op2)->t)) {
+      emit_alopf1(as, 0, OPC_SXT, RES_ALS_012345,
+                  emit_src1(as, E2K_CONST, SXT_WS),
+                  emit_src2(as, E2K_REG, idx),
+                  emit_dst(as, E2K_REG, idx));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+    }
   }
 }
 
@@ -476,9 +484,10 @@ static void asm_sload(ASMState *as, IRIns *ir)
         sard   dest, 47, type
         --
         cmpesb type, LJ_TYPE, predN
-        disp ctprN, as->mctop
         --
-        ct ctprN, ~predN
+        addd 0, snapno, TMP0, ~predN
+        --
+        ibranch as->mctop, ~predN
       */
       emit_alopf7(as, 0, OPC_CMPSB, opce, RES_ALS_0134,
                   emit_src1(as, E2K_REG, type),
@@ -634,11 +643,11 @@ static void asm_comp(ASMState *as, IRIns *ir)
   IROp op = ir->o;
   int inverted = 0, cop = 0, opce = 0;
   /*
-    disp ctprN, stub(patch) or to mctop
     cmp src1, src2, predN
     --
-    addd  0, as->snapno, TMP0
-    ct ctprN, predN (inverted)
+    addd  0, as->snapno, TMP0, predN (inverted)
+    --
+    ibranch ctprN, predN (inverted)
   */
   if (op == IR_ABC) op = IR_UGT;
   if (irt_isnum(ir->t)) {
