@@ -4644,29 +4644,29 @@ static void build_subroutines(BuildCtx *ctx)
     | stdsm     2, T1, 0x70, r14
     | stdsm     5, T1, 0x78, r15
     | --
-    | stdsm     2, T1, 0x80, r16
-    | stdsm     5, T1, 0x88, r17
+    | stdsm     2, T1, 0x80, b0
+    | stdsm     5, T1, 0x88, b1
     | --
-    | stdsm     2, T1, 0x90, r18
-    | stdsm     5, T1, 0x98, r19
+    | stdsm     2, T1, 0x90, b2
+    | stdsm     5, T1, 0x98, b3
     | --
-    | stdsm     2, T1, 0xa0, r20
-    | stdsm     5, T1, 0xa8, r21
+    | stdsm     2, T1, 0xa0, b4
+    | stdsm     5, T1, 0xa8, b5
     | --
-    | stdsm     2, T1, 0xb0, r22
-    | stdsm     5, T1, 0xb8, r23
+    | stdsm     2, T1, 0xb0, b6
+    | stdsm     5, T1, 0xb8, b7
     | --
-    | stdsm     2, T1, 0xc0, r24
-    | stdsm     5, T1, 0xc8, r25
+    | stdsm     2, T1, 0xc0, b8
+    | stdsm     5, T1, 0xc8, b9
     | --
-    | stdsm     2, T1, 0xd0, r26
-    | stdsm     5, T1, 0xd8, r27
+    | stdsm     2, T1, 0xd0, b10
+    | stdsm     5, T1, 0xd8, b11
     | --
-    | stdsm     2, T1, 0xe0, r28
-    | stdsm     5, T1, 0xe8, r29
+    | stdsm     2, T1, 0xe0, b12
+    | stdsm     5, T1, 0xe8, b13
     | --
-    | stdsm     2, T1, 0xf0, r30
-    | stdsm     5, T1, 0xf8, r31
+    | stdsm     2, T1, 0xf0, b14
+    | stdsm     5, T1, 0xf8, b15
     | --
     | setwd_call
     | stw       2, DISPATCH, DISPATCH_J(parent), T0 // Store trace number
@@ -4699,7 +4699,7 @@ static void build_subroutines(BuildCtx *ctx)
     |->vm_exit_interp:
     |.if JIT
     | //  CRET1 = MULTRES(unscaled) or negated error code, BASE, PC and DISPATCH set.
-    | setwd_call                               // Reset window for cal
+    | --
     | ldd       0, STACK, SAVE_L, RB           // Reload, need it only for vm_exit_interp
     | disp      ctpr1, extern lj_err_trace
     | --
@@ -4710,6 +4710,7 @@ static void build_subroutines(BuildCtx *ctx)
     | cmpesb    0, CRET1, -17, pred1
     | disp      ctpr2, >5
     | --
+    | setwd_call
     | addd      1, 0, 0, S1
     | addd      2, 0x0, ~LJ_VMST_INTERP, S2
     | --

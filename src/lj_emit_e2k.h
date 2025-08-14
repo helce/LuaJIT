@@ -43,20 +43,20 @@ static int get_sylidx(ASMState *as, uint64_t mask, uint64_t shift)
 static intptr_t get_kval(ASMState *as, IRRef ref)
 {
   IRIns *ir = IR(ref);
-  if (irt_is64(ir->t)) {
-    return (intptr_t)ir_k64(ir)->u64;
-  } else {
+  if (ir->o == IR_KNULL || !irt_is64(ir->t)) {
     lj_assertA(ir->o == IR_KINT || ir->o == IR_KNULL,
                "bad 64 bit const IR op %d", ir->o);
     return ir->i; /* Sign-extended. */
+  } else {
+    return (intptr_t)ir_k64(ir)->u64;
   }
 }
 
 static E2kOp get_reg_type(intptr_t val)
 {
-  if (val <= RID_R31)
+  if (val <= RID_R15)
     return E2K_REG_R;
-  else if (val <= RID_B7)
+  else if (val <= RID_B15)
     return E2K_REG_B;
   else if (val <= RID_G31)
     return E2K_REG_G;
