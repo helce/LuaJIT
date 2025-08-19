@@ -313,7 +313,7 @@ static void asm_hrefk(ASMState *as, IRIns *ir)
   Reg key = ra_scratch(as, allow);
   lj_assertA(ofs % sizeof(Node) == 0, "unaligned HREFK slot");
   if (irt_ispri(irkey->t)) {
-    lj_assertA(!irt_isnil(irkey->ti), "bad HREFK key type");
+    lj_assertA(!irt_isnil(irkey->t), "bad HREFK key type");
     k = ~((int64_t)~irt_toitype(irkey->t) << 47);
   } else if (irt_isnum(irkey->t)) {
     k = (int64_t)ir_knum(irkey)->u64;
@@ -916,7 +916,6 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
     }
     checkmclim(as);
   }
-  lj_assertA(map + nent == flinks, "inconsistent frames in snapshot");
 }
 
 /* -- Loop handling ------------------------------------------------------- */

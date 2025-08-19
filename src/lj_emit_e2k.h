@@ -52,8 +52,9 @@ static intptr_t get_kval(ASMState *as, IRRef ref)
   }
 }
 
-static E2kOp get_reg_type(intptr_t val)
+static E2kOp get_reg_type(ASMState *as, intptr_t val)
 {
+  UNUSED(as);
   if (val <= RID_R15)
     return E2K_REG_R;
   else if (val <= RID_B15)
@@ -65,7 +66,8 @@ static E2kOp get_reg_type(intptr_t val)
   else if (val <= RID_CTPR3)
     return E2K_REG_CTPR;
   else
-    return E2K_REG_UNKNOWN;
+    lj_assertA(0, "bad register (%d)", val);
+  return 0;
 }
 
 static E2kOp get_const_type(intptr_t val)
@@ -244,7 +246,7 @@ static uint32_t emit_src1(ASMState *as, E2kOp type, intptr_t src1)
 {
   UNUSED(as);
   if (type == E2K_REG) {
-    switch (get_reg_type(src1)) {
+    switch (get_reg_type(as, src1)) {
     case E2K_REG_B:
       return src1 - RID_B0;
     case E2K_REG_R:
@@ -269,7 +271,7 @@ static uint32_t emit_src1(ASMState *as, E2kOp type, intptr_t src1)
 static uint32_t emit_src2(ASMState *as, E2kOp type, intptr_t src2)
 {
   if (type == E2K_REG) {
-    switch (get_reg_type(src2)) {
+    switch (get_reg_type(as, src2)) {
     case E2K_REG_B:
       return src2 - RID_B0;
     case E2K_REG_R:
@@ -301,7 +303,7 @@ static uint32_t emit_src3(ASMState *as, E2kOp type, intptr_t src3)
 {
   UNUSED(as);
   if (type == E2K_REG) {
-    switch (get_reg_type(src3)) {
+    switch (get_reg_type(as, src3)) {
     case E2K_REG_B:
       return src3 - RID_B0;
     case E2K_REG_R:
@@ -309,7 +311,7 @@ static uint32_t emit_src3(ASMState *as, E2kOp type, intptr_t src3)
     case E2K_REG_G:
       return (src3 - RID_G16 + 16) | 0xe0;
     default:
-      lj_assertA(0, "bad reg for src3 (%d)", dst);
+      lj_assertA(0, "bad reg for src3 (%d)", src3);
     }
   } else {
     lj_assertA(0, "bad type for src3 (%d)", type);
@@ -320,7 +322,7 @@ static uint32_t emit_dst(ASMState *as, E2kOp type, intptr_t dst)
 {
   UNUSED(as);
   if (type == E2K_REG) {
-    switch (get_reg_type(dst)) {
+    switch (get_reg_type(as, dst)) {
     case E2K_REG_B:
       return dst - RID_B0;
     case E2K_REG_R:
