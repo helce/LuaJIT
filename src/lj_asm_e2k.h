@@ -50,11 +50,8 @@ static void asm_exitstub_setup(ASMState *as)
 {
   /*
     stw STACK, STACK_TMP, TMP0
-    --
     addd  0, as->T->traceno, TMP0
-    --
     ibranch ->lj_vm_exit_handler
-    --
   */
 
   /* Register allocation is not started yet */
@@ -92,10 +89,8 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
     target = p; /* Patch target later in asm_loop_fixup. */
   }
   /*
-    addd 0, snapno(32), TMP0, pred
-    --
+    addd snapno(32), TMP0, pred
     ibranch target, pred
-    --
   */
   emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), pred, inverted);
   as->mcp = emit_bundle_finalize(as, as->mcp);
@@ -184,15 +179,9 @@ static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
   asm_guard(as, pred, 1);
   /*
     fdtoistr left, dest
-    --
     istofd dest, tmp
-    --
     fcmpeqdb left, tmp, predN
-    --
-    addd 0, snapno, TMP0, ~predN
-    --
-    ibranch as->mctop, ~predN
-    --
+    asm_guard(inverted)
   */
   emit_alopf7(as, 0, OPC_FCMPDB, CMPF_EQ, RES_ALS_0134,
               emit_src1(as, E2K_REG, left),
@@ -309,6 +298,55 @@ static void asm_aref(ASMState *as, IRIns *ir)
   }
 }
 
+static void asm_hrefk(ASMState *as, IRIns *ir)
+{
+  IRIns *kslot = IR(ir->op2);
+  IRIns *irkey = IR(kslot->op1);
+  int32_t ofs = (int32_t)(kslot->op2 * sizeof(Node));
+  int32_t kofs = ofs + (int32_t)offsetof(Node, key);
+  intptr_t k = 0;
+  RegSet allow = RSET_GPR;
+  Reg dest = ra_used(ir) ? ra_dest(as, ir, allow) : RID_NONE;
+  allow = rset_exclude(allow, dest);
+  Reg node = ra_alloc1(as, ir->op1, RSET_GPR);
+  allow = rset_exclude(allow, node);
+  Reg key = ra_scratch(as, allow);
+  lj_assertA(ofs % sizeof(Node) == 0, "unaligned HREFK slot");
+  if (irt_ispri(irkey->t)) {
+    lj_assertA(!irt_isnil(irkey->ti), "bad HREFK key type");
+    k = ~((int64_t)~irt_toitype(irkey->t) << 47);
+  } else if (irt_isnum(irkey->t)) {
+    k = (int64_t)ir_knum(irkey)->u64;
+  } else {
+    k = ((int64_t)irt_toitype(irkey->t) << 47) | (int64_t)ir_kgc(irkey);
+  }
+  /*
+    ldd node, kofs, key
+    cmpedb key, k, predN
+    asm_guard(inverted)
+    addd node, ofs, dest (if needed)
+  */
+  Reg pred = ra_pred(as, RSET_PRED);
+  if (ra_hasreg(dest)) {
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, node),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+  asm_guard(as, pred, 1);
+  emit_alopf7(as, 0, OPC_CMPDB, CMPI_EQ, RES_ALS_0134,
+              emit_src1(as, E2K_REG, key),
+              emit_src2(as, E2K_CONST, k),
+              emit_pdst(as, E2K_REG_PRED, pred));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+              emit_src1(as, E2K_REG, node),
+              emit_src2(as, E2K_CONST, kofs),
+              emit_dst(as, E2K_REG, key));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
 /* -- Loads and stores ---------------------------------------------------- */
 
 static uint32_t asm_loadins(ASMState *as, IRIns *ir, Reg dest)
@@ -394,13 +432,9 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
   if (ir->o == IR_VLOAD) ofs += 8 * ir->op2;
   /*
     ldd base, ofs, dest
-    --
     sard   dest, 47, type
-    --
     cmpesb type, LJ_TYPE, predN
-    --
     asm_guard(inverted)
-    --
     sxt/getfd dest
   */
   type = ra_scratch(as, allow);
@@ -538,11 +572,8 @@ static void asm_sload(ASMState *as, IRIns *ir)
     } else {
       /*
         ldd base, ofs, dest
-        --
         sard   dest, 47, type
-        --
         cmpesb type, LJ_TYPE, predN
-        --
         asm_guard(inverted);
       */
       intptr_t k = irt_isnum(t) ? (int32_t)LJ_TISNUM :
@@ -705,10 +736,7 @@ static void asm_comp(ASMState *as, IRIns *ir)
   int inverted = 0, cop = 0, opce = 0;
   /*
     cmp src1, src2, predN
-    --
-    addd  0, as->snapno, TMP0, predN (inverted)
-    --
-    ibranch ctprN, predN (inverted)
+    asm_guard(?inverted)
   */
   if (op == IR_ABC) op = IR_UGT;
   if (irt_isnum(ir->t)) {
@@ -915,9 +943,7 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
   int32_t spadj = as->T->spadjust;
   /*
     addd STACK, spadj, STACK (2 nop)
-    --
     ibranch lj_vm_exit_interp(lnk)
-    --
   */
   emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), 0, 0);
   p = emit_bundle_finalize(as, p); /* 4(HS+SS+CS0+Align) */
@@ -1065,9 +1091,6 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
 {  NIY }
 
 static void asm_uref(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_hrefk(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_fref(ASMState *as, IRIns *ir)
