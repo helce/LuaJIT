@@ -8675,15 +8675,49 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         break;
 
+    case BC_JITERL:
+        |.if JIT
+        | // ins_AJ RA_E = base*8, RD_E = target*8
+        | pipe_dispatch_prep 0, ctpr3
+        | lddsm     2, DISPATCH, DISPATCH_J(trace), T0
+        | pipe_dispatch_load 3
+        | addd      4, BASE, RA_E, RA
+        | ldd       5, BASE, RA_E, RB
+        | disp      ctpr1, ->vm_restart_pipeline_fast
+        | wait_load T0, 0
+        | --
+        | lddsm     0, T0, RD_E, T1
+        | pipe_scale 1, 2, 3, 4
+        | pipe_fetch 5
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load T1, 1
+        | --
+        | lddsm     0, T1, TRACE->mcode, T2
+        | ldd       2, STACK, SAVE_L, T3
+        | wait_load T2, 0
+        | --
+        | movtdsm     0, T2, ctpr2
+        | pipe_bypass_none 1
+        | cmpedb    3, RB, LJ_TNIL, pred0
+        | wait_pred pred0, 0
+        | --
+        | std       2, DISPATCH, DISPATCH_GL(jit_base), BASE, ~pred0
+        | std       5, RA, -8, RB, ~pred0
+        | --
+        | std       2, DISPATCH, DISPATCH_GL(tmpbuf.L), T3, ~pred0
+        | ct        ctpr2, ~pred0
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
+        |.endif
+        break;
+
     case BC_ITERL:
         |.if JIT
         | hotloop
         |.endif
         | // Fall through. Assumes BC_IITERL follows and ins_AJ is a no-op.
-        break;
-
-    case BC_JITERL:
-        | // Unsupported
         break;
 
     case BC_IITERL:
