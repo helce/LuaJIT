@@ -514,6 +514,14 @@ static void emit_std(ASMState *as, Reg src, void *addr)
 /* Trace number is determined from per-trace exit stubs. */
 #define emit_setvmstate(as, i) UNUSED(i)
 
+/* -- Emit control-flow instructions -------------------------------------- */
+
+/* Label for internal jumps. */
+typedef MCode *MCLabel;
+
+/* Return label pointing to current PC. */
+#define emit_label(as)    ((as)->mcp)
+
 static void emit_loadi(ASMState *as, Reg r, uint64_t u64)
 {
   NIY

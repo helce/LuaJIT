@@ -604,6 +604,55 @@ static void asm_sload(ASMState *as, IRIns *ir)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+/* -- Write barriers ------------------------------------------------------ */
+
+static void asm_tbar(ASMState *as, IRIns *ir)
+{
+  RegSet allow = RSET_GPR;
+  Reg tab = ra_alloc1(as, ir->op1, allow);
+  allow = rset_exclude(allow, tab);
+  Reg mark = ra_scratch(as, allow);
+  Reg link = ra_scratch(as, rset_exclude(allow, mark));
+  Reg tmp = link;
+  MCLabel l_end = emit_label(as);
+  emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+              emit_src1(as, E2K_REG, tab),
+              emit_src2(as, E2K_CONST, offsetof(GCtab, gclist)),
+              emit_src3(as, E2K_REG, link));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf3(as, 0, OPC_STB, RES_ALS_25,
+              emit_src1(as, E2K_REG, tab),
+              emit_src2(as, E2K_CONST, offsetof(GCtab, marked)),
+              emit_src3(as, E2K_REG, mark));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_setgl(as, tab, gc.grayagain);
+  emit_getgl(as, link, gc.grayagain);
+  /* Clear black bit. */
+  emit_alopf1(as, 0, OPC_XORD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, tmp),
+                emit_src2(as, E2K_REG, mark),
+                emit_dst(as, E2K_REG, mark));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  Reg pred = ra_pred(as, RSET_PRED);
+  emit_ibranch(as, (ptrdiff_t)((void *)l_end - (void *)as->mcp), pred, 0);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf7(as, 0, OPC_CMPDB, CMPI_EQ, RES_ALS_0134,
+              emit_src1(as, E2K_REG, tmp),
+              emit_src2(as, E2K_CONST, 0),
+              emit_pdst(as, E2K_REG_PRED, pred));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf1(as, 0, OPC_ANDD, RES_ALS_012345,
+              emit_src1(as, E2K_REG, mark),
+              emit_src2(as, E2K_CONST, LJ_GC_BLACK),
+              emit_dst(as, E2K_REG, tmp));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf1(as, 0, OPC_LDB, RES_ALS_0235,
+              emit_src1(as, E2K_REG, tab),
+              emit_src2(as, E2K_CONST, offsetof(GCtab, marked)),
+              emit_dst(as, E2K_REG, mark));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
 /* -- FP/int arithmetic and logic operations ------------------------------ */
 
 static void asm_alopf1(ASMState *as, IRIns *ir, int cop, int mask)
@@ -1109,9 +1158,6 @@ static void asm_xstore(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_cnew(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_tbar(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_obar(ASMState *as, IRIns *ir)

@@ -401,6 +401,8 @@ typedef enum {
 #define OPC_GETFD  0x1f
 #define OPC_CMPSB  0x20
 #define OPC_CMPDB  0x21
+#define OPC_STB    0x24
+#define OPC_STH    0x25
 #define OPC_STW    0x26
 #define OPC_STD    0x27
 #define OPC_FCMPDB 0x2f
