@@ -447,6 +447,7 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
               emit_src2(as, E2K_CONST, k),
               emit_pdst(as, E2K_REG_PRED, pred));
   as->mcp = emit_bundle_finalize(as, as->mcp);
+  if (!ra_hasreg(dest)) dest = type;
   emit_alopf1(as, 0, OPC_SARD, RES_ALS_012345,
               emit_src1(as, E2K_REG, dest),
               emit_src2(as, E2K_CONST, 47),
