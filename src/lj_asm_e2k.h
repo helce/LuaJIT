@@ -363,6 +363,68 @@ static void asm_fload(ASMState *as, IRIns *ir)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+static void asm_ahuvload(ASMState *as, IRIns *ir)
+{
+  RegSet allow = RSET_GPR;
+  Reg base, dest = RID_NONE, type = RID_NONE;
+  Reg pred = ra_pred(as, RSET_PRED);
+  IRType1 t = ir->t;
+  int32_t ofs = 0;
+  lj_assertA(irt_isnum(t) || irt_ispri(t) || irt_isaddr(t) ||
+             irt_isint(t), "bad load type %d", irt_type(t));
+  if (ra_used(ir)) {
+    dest = ra_dest(as, ir, allow);
+    allow = rset_exclude(allow, dest);
+    if (irt_isaddr(t)) {
+      emit_alopf1(as, 0, OPC_GETFD, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, dest),
+                  emit_src2(as, E2K_CONST, 0xbc0),
+                  emit_dst(as, E2K_REG, dest));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+    } else if (irt_isint(t)) {
+      emit_alopf1(as, 0, OPC_SXT, RES_ALS_012345,
+                  emit_src1(as, E2K_CONST, SXT_WZ),
+                  emit_src2(as, E2K_REG, dest),
+                  emit_dst(as, E2K_REG, dest));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+    }
+  }
+  base = asm_fuseahuref(as, ir->op1, &ofs, allow);
+  allow = rset_exclude(allow, base);
+  if (ir->o == IR_VLOAD) ofs += 8 * ir->op2;
+  /*
+    ldd base, ofs, dest
+    --
+    sard   dest, 47, type
+    --
+    cmpesb type, LJ_TYPE, predN
+    --
+    asm_guard(inverted)
+    --
+    sxt/getfd dest
+  */
+  type = ra_scratch(as, allow);
+  intptr_t k = irt_isnum(t) ? (int32_t)LJ_TISNUM :
+               (int32_t)irt_toitype(t);
+  int opce = irt_isnum(t) ? CMPI_B : CMPI_EQ;
+  asm_guard(as, pred, 1);
+  emit_alopf7(as, 0, OPC_CMPSB, opce, RES_ALS_0134,
+              emit_src1(as, E2K_REG, type),
+              emit_src2(as, E2K_CONST, k),
+              emit_pdst(as, E2K_REG_PRED, pred));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf1(as, 0, OPC_SARD, RES_ALS_012345,
+              emit_src1(as, E2K_REG, dest),
+              emit_src2(as, E2K_CONST, 47),
+              emit_dst(as, E2K_REG, type));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+              emit_src1(as, E2K_REG, base),
+              emit_src2(as, E2K_CONST, ofs),
+              emit_dst(as, E2K_REG, dest));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
 static void asm_ahustore(ASMState *as, IRIns *ir)
 {
   RegSet allow = RSET_GPR;
@@ -474,21 +536,20 @@ static void asm_sload(ASMState *as, IRIns *ir)
     } else if (ir->op2 & IRSLOAD_KEYINDEX) {
       NIY
     } else {
-      intptr_t k = irt_isnum(t) ? (int32_t)LJ_TISNUM :
-                   (int32_t)irt_toitype(t);
-      opce = irt_isnum(t) ? CMPI_B : CMPI_EQ;
-      asm_guard(as, pred, 1);
       /*
-        ld(s/d) base, ofs, dest
+        ldd base, ofs, dest
         --
         sard   dest, 47, type
         --
         cmpesb type, LJ_TYPE, predN
         --
-        addd 0, snapno, TMP0, ~predN
-        --
-        ibranch as->mctop, ~predN
+        asm_guard(inverted);
       */
+      intptr_t k = irt_isnum(t) ? (int32_t)LJ_TISNUM :
+                   (int32_t)irt_toitype(t);
+      opce = irt_isnum(t) ? CMPI_B : CMPI_EQ;
+      asm_guard(as, pred, 1);
+
       emit_alopf7(as, 0, OPC_CMPSB, opce, RES_ALS_0134,
                   emit_src1(as, E2K_REG, type),
                   emit_src2(as, E2K_CONST, k),
@@ -1013,9 +1074,6 @@ static void asm_fref(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_strref(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_ahuvload(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_xload(ASMState *as, IRIns *ir)
