@@ -57,9 +57,11 @@ static E2kOp get_reg_type(ASMState *as, intptr_t val)
   UNUSED(as);
   if (val <= RID_R15)
     return E2K_REG_R;
+  else if (val <= RID_R59)
+    return E2K_REG_RARG;
   else if (val <= RID_B15)
     return E2K_REG_B;
-  else if (val <= RID_G31)
+  else if (val <= RID_G19)
     return E2K_REG_G;
   else if (val <= RID_PRED3)
     return E2K_REG_PRED;
@@ -251,6 +253,8 @@ static uint32_t emit_src1(ASMState *as, E2kOp type, intptr_t src1)
       return src1 - RID_B0;
     case E2K_REG_R:
       return (src1 - RID_R0) | 0x80;
+    case E2K_REG_RARG:
+      return (src1 - RID_R52 + 52) | 0x80;
     case E2K_REG_G:
       return (src1 - RID_G16 + 16) | 0xe0;
     default:
@@ -276,6 +280,8 @@ static uint32_t emit_src2(ASMState *as, E2kOp type, intptr_t src2)
       return src2 - RID_B0;
     case E2K_REG_R:
       return (src2 - RID_R0) | 0x80;
+    case E2K_REG_RARG:
+      return (src2 - RID_R52 + 52) | 0x80;
     case E2K_REG_G:
       return (src2 - RID_G16 + 16) | 0xe0;
     default:
@@ -307,7 +313,9 @@ static uint32_t emit_src3(ASMState *as, E2kOp type, intptr_t src3)
     case E2K_REG_B:
       return src3 - RID_B0;
     case E2K_REG_R:
-      return (src3  - RID_R0) | 0x80;
+      return (src3 - RID_R0) | 0x80;
+    case E2K_REG_RARG:
+      return (src3 - RID_R52 + 52) | 0x80;
     case E2K_REG_G:
       return (src3 - RID_G16 + 16) | 0xe0;
     default:
@@ -327,6 +335,8 @@ static uint32_t emit_dst(ASMState *as, E2kOp type, intptr_t dst)
       return dst - RID_B0;
     case E2K_REG_R:
       return (dst - RID_R0) | 0x80;
+    case E2K_REG_RARG:
+      return (dst - RID_R52 + 52) | 0x80;
     case E2K_REG_CTPR:
       return (dst - RID_CTPR1 + 1) | 0xd0;
     case E2K_REG_G:

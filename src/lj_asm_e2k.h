@@ -169,6 +169,28 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
   return ra_alloc1(as, ref, allow);
 }
 
+/* -- Calls --------------------------------------------------------------- */
+
+/* Setup result reg/sp for call. Evict scratch regs. */
+static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
+{
+  RegSet drop = RSET_SCRATCH;
+  int hiop = ((ir+1)->o == IR_HIOP && !irt_isnil((ir+1)->t));
+
+  if (ra_hasreg(ir->r))
+    rset_clear(drop, ir->r); /* Dest reg handled below. */
+  if (hiop && ra_hasreg((ir+1)->r))
+    rset_clear(drop, (ir+1)->r);  /* Dest reg handled below. */
+  ra_evictset(as, drop);  /* Evictions must be performed first. */
+  if (ra_used(ir)) {
+    lj_assertA(!irt_ispri(ir->t), "PRI dest");
+    if (hiop)
+      ra_destpair(as, ir);
+    else
+      ra_destreg(as, ir, RID_RET);
+  }
+}
+
 /* -- Type conversions ---------------------------------------------------- */
 
 static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
@@ -1177,9 +1199,6 @@ static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
 { NIY }
 
 static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
-{ NIY }
-
-static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
 { NIY }
 
 static void asm_gc_check(ASMState *as)
