@@ -319,6 +319,75 @@ static void asm_conv(ASMState *as, IRIns *ir)
 
 /* -- Memory references --------------------------------------------------- */
 
+/* Store tagged value for ref at base+ofs. */
+static void asm_tvstore64(ASMState *as, Reg base, int32_t ofs, IRRef ref)
+{
+  RegSet allow = rset_exclude(RSET_GPR, base);
+  IRIns *ir = IR(ref);
+  lj_assertA(irt_ispri(ir->t) || irt_isaddr(ir->t) || irt_isinteger(ir->t),
+             "store of IR type %d", irt_type(ir->t));
+  if (irref_isk(ref)) {
+    TValue k;
+    lj_ir_kvalue(as->J->L, &k, ir);
+    Reg tmp = ra_allock(as, (int64_t)k.u64, allow);
+    emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+                emit_src1(as, E2K_REG, base),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_src3(as, E2K_REG, tmp));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  } else {
+    Reg src = ra_alloc1(as, ref, allow);
+    allow = rset_exclude(allow, src);
+    Reg type = ra_allock(as, (int64_t)irt_toitype(ir->t) << 47, allow);
+    Reg tmp = ra_scratch(as, allow);
+    emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+                emit_src1(as, E2K_REG, base),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_src3(as, E2K_REG, tmp));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    if (irt_isinteger(ir->t)) {
+      emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, tmp),
+                  emit_src2(as, E2K_REG, type),
+                  emit_dst(as, E2K_REG, tmp));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+      emit_alopf1(as, 0, OPC_SXT, RES_ALS_012345,
+                  emit_src1(as, E2K_CONST, SXT_WZ),
+                  emit_src2(as, E2K_REG, src),
+                  emit_dst(as, E2K_REG, tmp));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+    } else {
+       emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, src),
+                  emit_src2(as, E2K_REG, type),
+                  emit_dst(as, E2K_REG, tmp));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+    }
+  }
+}
+
+/* Get pointer to TValue. */
+static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
+{
+  if ((mode & IRTMPREF_IN1)) {
+    IRIns *ir = IR(ref);
+    if (irt_isnum(ir->t)) {
+      if (irref_isk(ref) && !(mode & IRTMPREF_OUT1)) {
+        /* Use the number constant itself as a TValue. */
+        ra_allockreg(as, igcptr(ir_knum(ir)), dest);
+      } else {
+        emit_movrr(as, ir, dest, ra_alloc1(as, ref, RSET_GPR));
+      }
+    } else {
+      /* Otherwise use g->tmptv to hold the TValue. */
+      asm_tvstore64(as, dest, 0, ref);
+      emit_loada(as, dest, &J2G(as->J)->tmptv);
+    }
+  } else {
+    emit_loada(as, dest, &J2G(as->J)->tmptv);
+  }
+}
+
 static void asm_aref(ASMState *as, IRIns *ir)
 {
   RegSet allow = RSET_GPR;
@@ -1241,9 +1310,6 @@ static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
 { NIY }
 
 static void asm_gc_check(ASMState *as)
-{ NIY }
-
-static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
 { NIY }
 
 static void asm_bufhdr_write(ASMState *as, Reg sb)

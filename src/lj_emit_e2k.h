@@ -475,6 +475,8 @@ static void emit_std(ASMState *as, Reg src, void *addr)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+#define emit_loada(as, r, addr)   emit_loadu64(as, (r), u64ptr((addr)))
+
 /* Get/set global_State fields. */
 #define emit_getgl(as, r, field) emit_ldd(as, r, (void *)&J2G(as->J)->field)
 #define emit_setgl(as, r, field) emit_std(as, r, (void *)&J2G(as->J)->field)
@@ -547,7 +549,7 @@ static void emit_prepcall(ASMState *as, Reg ctpr, ASMFunction target) {
     emit_copf2(as, OPC_DISP, ctpr, disp);
   } else { /* Target out of range; need indirect call. */
     emit_alopf2(as, 0, OPC_MOVTD, MOVT_MV, RES_ALS0,
-                emit_src2(as, E2K_CONST, target),
+                emit_src2(as, E2K_CONST, (intptr_t)target),
                 emit_dst(as, E2K_REG, ctpr));
   }
 }
@@ -588,7 +590,7 @@ static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
   }
 }
 
-static void emit_loadi(ASMState *as, Reg r, uint64_t u64)
+static void emit_loadi(ASMState *as, Reg r, int32_t i)
 {
   NIY
 }
