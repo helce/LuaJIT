@@ -429,50 +429,6 @@ static int emit_alopf1(ASMState *as, uint32_t spec, uint32_t cop,
   return als_idx;
 }
 
-static void emit_ct(ASMState *as, Reg ctpr, Reg pred, int inverted)
-{
-  // TODO it takes not a full syl
-  check_resource(as, RES_SS);
-  E2kSS syl;
-  syl.i = 0;
-  if (pred) { /* RID_PREDX is nonnull  */
-    // do not check loop_end and so on right now
-    if (inverted) {
-      syl.fields.ctcond = 0x60 + (pred - RID_PRED0);
-    } else {
-      syl.fields.ctcond = 0x40 + (pred - RID_PRED0);
-    }
-  } else {
-    syl.fields.ctcond = 0x20; // unconditional
-  }
-  if (ctpr)  /* RID_CTPRX is nonnull */
-    syl.fields.ctop = ctpr - RID_CTPR1 + 1;
-  syl.fields.ipd = 3;
-
-  as->bundle.ss = syl.i;
-  as->bundle.f1++;
-}
-
-static void emit_copf2(ASMState *as, uint32_t opc, Reg ctpr, uintptr_t disp)
-{
-  check_resource(as, RES_CS0);
-  E2kCopf2 syl;
-  syl.i = 0;
-  syl.fields.disp = disp >> 3;
-  syl.fields.opc = opc;
-  if (ctpr) /* RID_CTPRX is nonnull */
-    syl.fields.ctpr = ctpr - RID_CTPR1 + 1;
-
-  as->bundle.cs[0] = syl.i;
-  as->bundle.f1++;
-}
-
-static void emit_ibranch(ASMState *as, uintptr_t disp, Reg pred, int inverted)
-{
-  emit_ct(as, 0, pred, inverted);
-  emit_copf2(as, OPC_IBRANCH, 0, disp);
-}
-
 #define emit_nop(as, nops) \
   as->bundle.nop = nops
 
@@ -534,19 +490,72 @@ typedef MCode *MCLabel;
 /* Return label pointing to current PC. */
 #define emit_label(as)    ((as)->mcp)
 
-static void emit_loadi(ASMState *as, Reg r, uint64_t u64)
+static void emit_ct(ASMState *as, Reg ctpr, Reg pred, int inverted)
 {
-  NIY
+  // TODO it takes not a full syl
+  check_resource(as, RES_SS);
+  E2kSS syl;
+  syl.i = 0;
+  if (pred) { /* RID_PREDX is nonnull  */
+    // do not check loop_end and so on right now
+    if (inverted) {
+      syl.fields.ctcond = 0x60 + (pred - RID_PRED0);
+    } else {
+      syl.fields.ctcond = 0x40 + (pred - RID_PRED0);
+    }
+  } else {
+    syl.fields.ctcond = 0x20; // unconditional
+  }
+  if (ctpr)  /* RID_CTPRX is nonnull */
+    syl.fields.ctop = ctpr - RID_CTPR1 + 1;
+  syl.fields.ipd = 3;
+
+  as->bundle.ss = syl.i;
+  as->bundle.f1++;
 }
 
-static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
+static void emit_call(ASMState *as, Reg ctpr, Reg pred, int inverted, int wbs)
 {
-  NIY
+  emit_ct(as, ctpr, pred, inverted);
+  check_resource(as, RES_CS1);
+  E2kC1f1 syl;
+  syl.i = 0;
+  syl.fields.opc = OPC_CALL;
+  syl.fields.params = wbs;
+  as->bundle.cs[1] = syl.i;
+  as->bundle.f2++;
 }
 
-static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
+static void emit_copf2(ASMState *as, uint32_t opc, Reg ctpr, uintptr_t disp)
 {
-  NIY
+  check_resource(as, RES_CS0);
+  E2kCopf2 syl;
+  syl.i = 0;
+  syl.fields.disp = disp >> 3;
+  syl.fields.opc = opc;
+  if (ctpr) /* RID_CTPRX is nonnull */
+    syl.fields.ctpr = ctpr - RID_CTPR1 + 1;
+
+  as->bundle.cs[0] = syl.i;
+  as->bundle.f1++;
+}
+
+static void emit_prepcall(ASMState *as, Reg ctpr, ASMFunction target) {
+  /* check 28 bit disp */
+  if (((((uintptr_t)target ^ (uintptr_t)as->mcp) >> 3) >> 28) == 0) {
+    ptrdiff_t disp = (ptrdiff_t)((void *) target - (void *)as->mcp);
+    emit_copf2(as, OPC_DISP, ctpr, disp);
+  } else { /* Target out of range; need indirect call. */
+    emit_alopf2(as, 0, OPC_MOVTD, MOVT_MV, RES_ALS0,
+                emit_src2(as, E2K_CONST, target),
+                emit_dst(as, E2K_REG, ctpr));
+  }
+}
+
+static void emit_ibranch(ASMState *as, uintptr_t disp, Reg pred, int inverted)
+{
+  emit_ct(as, 0, pred, inverted);
+  emit_copf2(as, OPC_IBRANCH, 0, disp);
 }
 
 static void emit_jmp(ASMState *as,  MCode *target)
@@ -577,6 +586,21 @@ static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
                 emit_dst(as, E2K_REG, r));
     as->mcp = emit_bundle_finalize(as, as->mcp);
   }
+}
+
+static void emit_loadi(ASMState *as, Reg r, uint64_t u64)
+{
+  NIY
+}
+
+static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
+{
+  NIY
+}
+
+static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
+{
+  NIY
 }
 
 #define emit_spsub(as, ofs) emit_addptr(as, 0, -(ofs))

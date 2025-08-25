@@ -9,6 +9,7 @@
 
 static Reg ra_pred(ASMState *as, RegSet allow)
 {
+  lj_assertA((allow & RSET_PRED) == allow, "RegSet should include only pred");
   Reg r = ra_pick(as, allow);
   ra_modified(as, r);
   RA_DBGX((as, "assign predicate    $r", r));
@@ -17,17 +18,10 @@ static Reg ra_pred(ASMState *as, RegSet allow)
 
 static Reg ra_ctpr(ASMState *as, RegSet allow)
 {
+  lj_assertA((allow & RSET_CTPR) == allow, "RegSet should include only ctpr");
   Reg r = ra_pick(as, allow);
   ra_modified(as, r);
   RA_DBGX((as, "assign ctpr         $r", r));
-  return r;
-}
-
-static Reg ra_gpr(ASMState *as, RegSet allow)
-{
-  Reg r = ra_pick(as, allow);
-  ra_modified(as, r);
-  RA_DBGX((as, "assign gpr          $r",  r));
   return r;
 }
 
@@ -170,6 +164,54 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
 }
 
 /* -- Calls --------------------------------------------------------------- */
+
+/* Generate a call to a C function. */
+static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
+{
+  uint32_t n, nargs = CCI_XNARGS(ci);
+  int32_t ofs = ci->flags & CCI_VARARG ? 0 : STACKARG_OFS;
+  Reg gpr = RID_NONE;
+  Reg ctpr = ra_ctpr(as, RSET_CTPR);
+  if (ci->func) {
+    emit_call(as, ctpr, 0, 0, PIPE_WBS);
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+  for (gpr = REGARG_FIRSTGPR; gpr <= REGARG_LASTGPR; gpr++)
+    as->cost[gpr] = REGCOST(~0u, ASMREF_L);
+  gpr = REGARG_FIRSTGPR;
+  for (n = 0; n < nargs; n++) { /* Setup args. */
+    IRRef ref = args[n];
+    if (ref) {
+      //IRIns *ir = IR(ref);
+      if (gpr <= REGARG_LASTGPR) {
+        lj_assertA(rset_test(as->freeset, gpr),
+                   "arg%d not free", gpr-REGARG_FIRSTGPR); /*  Already evicted. */
+        ra_leftov(as, gpr, ref);
+        if (ci->flags & CCI_VARARG) {
+          NIY
+        }
+        gpr++;
+      } else {
+        NIY
+        /* Reg r = ra_alloc1(as, ref, RSET_GPR);
+        emit_spstore(as, ir, r, ofs);
+        ofs += 8; */
+      }
+    } else {
+      NIY
+      if (gpr <= REGARG_LASTGPR) {
+        gpr++;
+      } else {
+        ofs += 8;
+      }
+    }
+    checkmclim(as);
+  }
+  if (ci->func) {
+    emit_prepcall(as, ctpr, ci->func);
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+}
 
 /* Setup result reg/sp for call. Evict scratch regs. */
 static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
@@ -1196,9 +1238,6 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
 { NIY }
 
 static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
-{ NIY }
-
-static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
 { NIY }
 
 static void asm_gc_check(ASMState *as)

@@ -84,8 +84,12 @@ enum {
 #define RSET_SCRATCH_GPR  (RSET_RANGE(RID_R52, RID_R59))
 #define RSET_SCRATCH    (RSET_SCRATCH_GPR|RSET_SCRATCH_FPR)
 
-/* TODO wtf is regarg??? */
+#define REGARG_FIRSTGPR RID_R52
+#define REGARG_LASTGPR  RID_R59
 #define REGARG_NUMGPR   8
+#define STACKARG_OFS (8*8)
+/* wbs for pipe_call */
+#define PIPE_WBS     0x1a
 
 /* -- Spill slots --------------------------------------------------------- */
 
@@ -311,6 +315,14 @@ typedef union {
 } E2kCopf2;
 
 typedef union {
+  uint32_t i;
+  struct {
+    uint32_t params  : 28;
+    uint32_t opc     : 4;
+  } fields;
+} E2kC1f1;
+
+typedef union {
   uint16_t i;
   struct {
     uint16_t pred    : 7;
@@ -354,6 +366,7 @@ typedef enum {
 /* control operations */
 #define OPC_DISP    0x0
 #define OPC_IBRANCH 0x0
+#define OPC_CALL    0x5
 /* non-combined operations short */
 #define OPC_ANDS   0x00
 #define OPC_ANDD   0x01
@@ -386,6 +399,7 @@ typedef enum {
 #define OPC_FDTOD  0x3d
 #define OPC_FSTOD  0x3e
 #define OPC_FDTOS  0x3f
+#define OPC_MOVTD  0x61
 #define OPC_LDB    0x64
 #define OPC_LDH    0x65
 #define OPC_LDW    0x66
@@ -411,6 +425,11 @@ typedef enum {
 #define CMPF_NLT   0x5
 #define CMPF_NLE   0x6
 #define CMPF_OD    0x7
+/* movt specificator opce */
+#define MOVT_MV    0xc0
+#define MOVT_MVC   0xc1
+#define MOVT_MVR   0xc2
+#define MOVT_MVRC  0xc3
 /* convertation opc */
 #define CO_FSTOISTR 0xc2
 #define CO_FSTOIDTR 0xc2
