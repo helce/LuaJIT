@@ -4521,25 +4521,22 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      1, BASE, RD_E, RD
     | disp ctpr1, extern lj_dispatch_call
     | --
-    | ord       0, PC, 1, PC                // Marker for hot call.
+    | ord       0, PC, 1, PARG2             // Marker for hot call.
     | std       2, STACK, SAVE_PC, PC
     | --
-    | setwd_call
     | subd      0, RD, 8, RD
     | wait_load RB, 2
     | --
-    | addd      0, RB, 0, CARG1
-    | addd      1, PC, 0, CARG2
+    | addd      0, RB, 0, PARG1
     | addd      3, 0, 0, S0
     | --
     | std       2, RB, L->base, BASE
     | std       5, RB, L->top, RD
-    | call      ctpr1, wbs = 0x8            // lj_dispatch_call(lua_State *L, const BCIns *pc)
+    | pipe_call ctpr1                       // lj_dispatch_call(lua_State *L, const BCIns *pc)
     | --
     | // ASMFunction returned.
-    | setwd_pipe
-    | movtd     0, CRET1, ctpr3             // Prepare an insn handler for stage E.
-    | addd      1, CRET1, 0x0, T0
+    | movtd     0, PRET1, ctpr3             // Prepare an insn handler for stage E.
+    | addd      1, PRET1, 0x0, T0
     | ldd       2, RB, L->base, BASE
     | ldd       3, RB, L->top, RD
     | std       5, STACK, SAVE_PC, S0       // Invalidate for subsequent line hook.
