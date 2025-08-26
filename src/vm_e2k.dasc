@@ -8885,13 +8885,61 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         break;
 
-    case BC_FUNCV: /* NYI: compiled vararg functions. */
-        | // Fall through. Assumes BC_IFUNCF/BC_IFUNCV follow and ins_AD is a no-op.
+    case BC_JFUNCF:
+        |.if JIT
+        | // ins_AD BASE = new_base*8, RA_E = framesize*8, RD_E = (nargs+1)*8
+        | ldhsm     0, PC, PREV_PC_RD, T4
+        | lddsm     2, DISPATCH, DISPATCH_J(trace), T0
+        | ldd       3, PC, PC2PROTO(k)-4, KBASE
+        | addd      4, BASE, RA_E, RA       // Top of frame.
+        | ldd       5, STACK, SAVE_L, RB
+        | disp      ctpr1, ->vm_growstack_f
+        | wait_load T4, 0
+        | --
+        | shldsm    0, T4, 0x3, T4          // traceno*8
+        | addd      1, RD_E, 0, RD
+        | --
+        | lddsm     0, T0, T4, T1
+        | ldbsm     3, PC, PC2PROTO(numparams)-4, T3
+        | disp      ctpr2, >1
+        | wait_load T1, 0
+        | --
+        | lddsm     0, T1, TRACE->mcode, T2
+        | ldd       3, RB, L->maxstack, S0
+        | wait_load T2, 0
+        | --
+        | movtdsm   0, T2, ctpr3
+        | cmpbedb   3, RA, S0, pred0
+        | wait_pred_ct pred0, 0
+        | --
+        | shld      3, T3, 0x3, RA, pred0
+        | ct        ctpr1, ~pred0           // vm_growstack_f(BASE, RD, RB, PC)
+        | --
+        | cmpbedb   3, RD, RA, pred1        // Check for missing parameters.
+        | wait_pred_ct pred1, 0
+        | --
+        | addd      0, 0x0, LJ_TNIL, S1
+        | std       2, DISPATCH, DISPATCH_GL(tmpbuf.L), RB
+        | std       5, DISPATCH, DISPATCH_GL(jit_base), BASE
+        | ct        ctpr3, ~pred1
+        | --
+        |1: // Clear missing parameters.
+        | subd      3, RD, 0x8, S0
+        | addd      4, RD, 0x8, RD
+        | --
+        | cmpbedb   3, RD, RA, pred0
+        | wait_pred_ct pred0, 0
+        | --
+        | std       5, BASE, S0, S1
+        | ct        ctpr2, pred0            // <1
+        | --
+        | ct        ctpr3
+        | --
+        |.endif
         break;
 
-    case BC_JFUNCF:
-        | // Unsupported
-        | do_fault
+    case BC_FUNCV: /* NYI: compiled vararg functions. */
+        | // Fall through. Assumes BC_IFUNCF/BC_IFUNCV follow and ins_AD is a no-op.
         break;
 
     case BC_IFUNCF:
