@@ -1091,7 +1091,7 @@ static void asm_gc_check(ASMState *as)
   tmp2 = ra_releasetmp(as, ASMREF_TMP2);
   emit_loadi(as, tmp2, as->gcsteps);
   /* Jump around GC step if GC total < GC threshold. */
-  emit_ibranch(as, (ptrdiff_t)((void *)l_end - (void *)as->mcp), pred, 1);
+  emit_ibranch(as, (ptrdiff_t)((void *)l_end - (void *)as->mcp), pred, 0);
   as->mcp = emit_bundle_finalize(as, as->mcp);
   emit_alopf7(as, 0, OPC_CMPDB, CMPI_B, RES_ALS_0134,
               emit_src1(as, E2K_REG, tmp1),
