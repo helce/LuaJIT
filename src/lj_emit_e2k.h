@@ -440,6 +440,7 @@ static int emit_alopf1(ASMState *as, uint32_t spec, uint32_t cop,
 /* Prefer rematerialization of BASE/L from global_State over spills. */
 #define emit_canremat(ref)  ((ref) <= REF_BASE)
 
+/* Load a 64 bit constant into a GPR. */
 static void emit_loadu64(ASMState *as, Reg r, uint64_t u64)
 {
   emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
@@ -475,7 +476,10 @@ static void emit_std(ASMState *as, Reg src, void *addr)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+/* Load a constant address into a GPR. */
 #define emit_loada(as, r, addr)   emit_loadu64(as, (r), u64ptr((addr)))
+/* Load a 32 bit constant into a GPR. */
+#define emit_loadi(as, r, i)      emit_loadu64(as, (r), (intptr_t)i)
 
 /* Get/set global_State fields. */
 #define emit_getgl(as, r, field) emit_ldd(as, r, (void *)&J2G(as->J)->field)
@@ -588,11 +592,6 @@ static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
                 emit_dst(as, E2K_REG, r));
     as->mcp = emit_bundle_finalize(as, as->mcp);
   }
-}
-
-static void emit_loadi(ASMState *as, Reg r, int32_t i)
-{
-  NIY
 }
 
 static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
