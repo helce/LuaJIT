@@ -1052,6 +1052,58 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
   }
 }
 
+/* -- GC handling --------------------------------------------------------- */
+
+/* Marker to prevent patching the GC check exit. */
+/* ord 0x0, 0x0, empty.hi */
+#define E2K_NOPATCH_GC_CHECK_HS 0x4000001
+#define E2K_NOPATCH_GC_CHECK    0x5c0c0df
+
+/* Check GC threshold and do one or more GC steps. */
+static void asm_gc_check(ASMState *as)
+{
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc_step_jit];
+  IRRef args[2];
+  MCLabel l_end;
+  Reg tmp1, tmp2;
+  ra_evictset(as, RSET_SCRATCH);
+  l_end = emit_label(as);
+  /* Exit trace if in GCSatomic or GCSfinalize. Avoids syncing GC objects. */
+  /* Assumes asm_snap_prep() already done. */
+  Reg pred = ra_pred(as, RSET_PRED);
+  asm_guard(as, pred, 1);
+  *--as->mcp = E2K_NOPATCH_GC_CHECK;
+  *--as->mcp = E2K_NOPATCH_GC_CHECK_HS;
+  emit_alopf7(as, 0, OPC_CMPDB, CMPI_EQ, RES_ALS_0134,
+              emit_src1(as, E2K_REG, RID_RET),
+              emit_src2(as, E2K_CONST, 0),
+              emit_pdst(as, E2K_REG_PRED, pred));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  args[0] = ASMREF_TMP1;  /* global_State *g */
+  args[1] = ASMREF_TMP2;  /* MSize steps     */
+  asm_gencall(as, ci, args);
+  tmp1 = ra_releasetmp(as, ASMREF_TMP1);
+  emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+              emit_src1(as, E2K_REG, RID_DISPATCH),
+              emit_src2(as, E2K_CONST, GG_DISP2G),
+              emit_dst(as, E2K_REG, tmp1));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  tmp2 = ra_releasetmp(as, ASMREF_TMP2);
+  emit_loadi(as, tmp2, as->gcsteps);
+  /* Jump around GC step if GC total < GC threshold. */
+  emit_ibranch(as, (ptrdiff_t)((void *)l_end - (void *)as->mcp), pred, 1);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf7(as, 0, OPC_CMPDB, CMPI_B, RES_ALS_0134,
+              emit_src1(as, E2K_REG, tmp1),
+              emit_src2(as, E2K_REG, tmp2),
+              emit_pdst(as, E2K_REG_PRED, pred));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_getgl(as, tmp1, gc.total);
+  emit_getgl(as, tmp2, gc.threshold);
+  as->gcsteps = 0;
+  checkmclim(as);
+}
+
 /* -- Loop handling ------------------------------------------------------- */
 
 static void asm_loop_fixup(ASMState *as)
@@ -1173,12 +1225,12 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   for (p++; p < pe; p++) {
     if (*p == exitload) { /* Look for load of exit number. */
       if (p[1] != exitno) continue;
-      /* p[-1] - HS; p[0] - ALS; p[1] LTS if any; p[2] - PDS or Align. */
+      /* p[-3] - E2K_NOPATCH_GC_CHECK_HS; p[-2] - E2K_NOPATCH_GC_CHECK. */
+      /* p[-1] - HS; p[0] - ALS; p[1] LTS; p[2] - PDS or Align. */
       /* p[3] - HS; p[4] - SS; p[5] - CS0; p[6] - Align. */
       /* Look for exitstub branch. */
-      // TODO not sure here
       uint32_t disp = (ptrdiff_t)((void *)px - (void *)p - 3*4) >> 3;
-      if ((p[5] ^ (disp & 0xfffffff)) == 0) {
+      if ((p[5] ^ (disp & 0xfffffff)) == 0 && p[-2] != E2K_NOPATCH_GC_CHECK) {
         disp = (ptrdiff_t)((void *)target - (void *)p - 3*4) >> 3;
         p[5] = disp & 0xfffffff;
         /* Replace the load of the exit number with nops. */
@@ -1307,9 +1359,6 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
 { NIY }
 
 static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
-{ NIY }
-
-static void asm_gc_check(ASMState *as)
 { NIY }
 
 static void asm_bufhdr_write(ASMState *as, Reg sb)
