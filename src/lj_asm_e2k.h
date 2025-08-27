@@ -955,6 +955,40 @@ static void asm_comp(ASMState *as, IRIns *ir)
 
 /* -- Stack handling ------------------------------------------------------ */
 
+/* Check Lua stack size for overflow. Use exit handler as fallback. */
+static void asm_stack_check(ASMState *as, BCReg topslot,
+                            IRIns *irp, RegSet allow, ExitNo exitno)
+{
+  /* Try to get an unused temp register, otherwise use RID_TMP*. */
+  Reg pbase = irp ? (ra_hasreg(irp->r) ? irp->r : RID_TMP2) : RID_BASE;
+  ExitNo oldsnap = as->snapno;
+  allow = rset_exclude(allow, pbase);
+  Reg tmp = allow ? rset_pickbot(allow) : RID_TMP3;
+  Reg pred = ra_pred(as, RSET_PRED);
+  as->snapno = exitno;
+  asm_guard(as, pred, 0);
+  as->snapno = oldsnap;
+  emit_alopf7(as, 0, OPC_CMPDB, CMPI_B, RES_ALS_0134,
+              emit_src1(as, E2K_REG, tmp),
+              emit_src2(as, E2K_CONST, (intptr_t)(8*topslot)),
+              emit_pdst(as, E2K_REG_PRED, pred));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  if (allow != RSET_EMPTY) ra_modified(as, tmp);
+  emit_alopf1(as, 0, OPC_SUBD, RES_ALS_012345,
+              emit_src1(as, E2K_REG, tmp),
+              emit_src2(as, E2K_REG, pbase),
+              emit_dst(as, E2K_REG, tmp));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+              emit_src1(as, E2K_REG, tmp),
+              emit_src2(as, E2K_CONST, offsetof(lua_State, maxstack)),
+              emit_dst(as, E2K_REG, tmp));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  if (pbase == RID_TMP2)
+    emit_getgl(as, RID_TMP2, jit_base);
+  emit_getgl(as, tmp, cur_L);
+}
+
 /* Restore Lua stack from on-trace state. */
 // TODO optimize???
 static void asm_stack_restore(ASMState *as, SnapShot *snap)
@@ -1353,10 +1387,6 @@ static void asm_strto(ASMState *as, IRIns *ir)
 
 static void asm_callx(ASMState *as, IRIns *ir)
 {  NIY }
-
-static void asm_stack_check(ASMState *as, BCReg topslot,
-          IRIns *irp, RegSet allow, ExitNo exitno)
-{ NIY }
 
 static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
 { NIY }

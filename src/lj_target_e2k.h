@@ -43,7 +43,11 @@ enum {
   PREDREGDEF(RIDENUM) /* Predicates */
   CTPRDEF(RIDENUM) /* Control transer preparation registers */
   RID_MAX,
-  RID_TMP = RID_G16,
+  RID_TMP  = RID_G16,
+  RID_TMP1 = RID_G16,
+  RID_TMP2 = RID_G17,
+  RID_TMP3 = RID_G18,
+  RID_TMP4 = RID_G19,
   RID_BASE = RID_R4,  /* Interpreter BASE */
   RID_SP = RID_R6,  /* Interpreter stack pointer */
   RID_LPC = RID_R7, /* Interpreter PC */
