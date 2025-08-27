@@ -582,6 +582,28 @@ static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+/* Generic load of register with base and (small) offset address. */
+static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
+{
+  int opc = irt_is64(ir->t) ? OPC_LDD : OPC_LDW;
+  emit_alopf1(as, 0, opc, RES_ALS_0235,
+              emit_src1(as, E2K_REG, base),
+              emit_src2(as, E2K_CONST, ofs),
+              emit_dst(as, E2K_REG, r));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
+/* Generic store of register with base and (small) offset address. */
+static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
+{
+  int opc = irt_is64(ir->t) ? OPC_STD : OPC_STW;
+  emit_alopf3(as, 0, opc, RES_ALS_25,
+              emit_src1(as, E2K_REG, base),
+              emit_src2(as, E2K_CONST, ofs),
+              emit_src3(as, E2K_REG, r));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
 /* Add offset to pointer. */
 static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
 {
@@ -592,16 +614,6 @@ static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
                 emit_dst(as, E2K_REG, r));
     as->mcp = emit_bundle_finalize(as, as->mcp);
   }
-}
-
-static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
-{
-  NIY
-}
-
-static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
-{
-  NIY
 }
 
 #define emit_spsub(as, ofs) emit_addptr(as, 0, -(ofs))
