@@ -104,14 +104,11 @@ enum {
 **
 ** SPS_FIRST: First spill slot for general use.
 */
-/* TODO no idea what is it */
 #define SPS_FIXED 0
-#define SPOFS_TMP 0
 #define SPS_FIRST 0
+#define SPOFS_TMP 0x68
 
-/* TODO check about slots */
 #define sps_scale(slot)   (4 * (int32_t)(slot))
-/* TODO check is it align 16?? */
 #define sps_align(slot)   (((slot) - SPS_FIXED + 1) & ~1)
 
 /* -- Exit state ---------------------------------------------------------- */
@@ -361,9 +358,6 @@ typedef enum {
 #define CONST_U16 16
 #define CONST_U32 32
 #define CONST_U64 64
-
-/* -- stack layout of interpreter. Must match with lj_frame.h ------------- */
-#define E2K_STACK_TMP 0x68
 
 /* -- Opcodes ------------------------------------------------------------- */
 

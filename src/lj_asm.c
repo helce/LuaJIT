@@ -552,7 +552,7 @@ static void ra_evictset(ASMState *as, RegSet drop)
 {
   RegSet work;
   as->modset |= drop;
-#if !LJ_SOFTFP
+#if !LJ_SOFTFP && !LJ_GPRASFPR
   work = (drop & ~as->freeset) & RSET_FPR;
   while (work) {
     Reg r = rset_pickbot(work);

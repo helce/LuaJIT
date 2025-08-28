@@ -158,7 +158,7 @@
 |.define SAVE_ERRF,     0x4c
 |.define SAVE_NRES,     0x48
 |.define MULTRES,       0x40
-|.define RESERVE_CARGS, 0x0                 // 8*8
+|.define SAVE_GPR,      0x0                 // 8*8
 |
 |//-----------------------------------------------------------------------
 |// Helper macros.

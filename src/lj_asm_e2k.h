@@ -60,7 +60,7 @@ static void asm_exitstub_setup(ASMState *as)
   mxp = emit_bundle_finalize(as, mxp);
   emit_alopf3(as, 0, OPC_STW, RES_ALS_25,
                 emit_src1(as, E2K_REG, RID_SP),
-                emit_src2(as, E2K_CONST, E2K_STACK_TMP),
+                emit_src2(as, E2K_CONST, SPOFS_TMP),
                 emit_src3(as, E2K_REG, RID_TMP));
   mxp = emit_bundle_finalize(as, mxp);
 
