@@ -233,6 +233,34 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
   }
 }
 
+/* -- Returns ------------------------------------------------------------- */
+
+/* Return to lower frame. Guard that it goes to the right spot. */
+static void asm_retf(ASMState *as, IRIns *ir)
+{
+  Reg base = ra_alloc1(as, REF_BASE, RSET_GPR);
+  void *pc = ir_kptr(IR(ir->op2));
+  int32_t delta = 1+LJ_FR2+bc_a(*((const BCIns *)pc - 1));
+  as->topslot -= (BCReg)delta;
+  if ((int32_t)as->topslot < 0) as->topslot = 0;
+  irt_setmark(IR(REF_BASE)->t);  /* Children must not coalesce with BASE reg. */
+  emit_setgl(as, base, jit_base);
+  emit_addptr(as, base, -8*delta);
+  Reg pred = ra_pred(as, RSET_PRED);
+  Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, base));
+  asm_guard(as, pred, 1);
+  emit_alopf7(as, 0, OPC_CMPDB, CMPI_EQ, RES_ALS_0134,
+              emit_src1(as, E2K_REG, tmp),
+              emit_src2(as, E2K_CONST, (intptr_t)pc),
+              emit_pdst(as, E2K_REG_PRED, pred));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+              emit_src1(as, E2K_REG, base),
+              emit_src2(as, E2K_CONST, LJ_FR2 ? -8 : -4),
+              emit_dst(as, E2K_REG, tmp));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
 /* -- Type conversions ---------------------------------------------------- */
 
 static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
@@ -1302,9 +1330,6 @@ static void asm_hiop(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_prof(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_retf(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bnot(ASMState *as, IRIns *ir)
