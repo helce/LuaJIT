@@ -109,7 +109,7 @@ enum {
 #define SPOFS_TMP 0x0
 
 #define sps_scale(slot)   (4 * (int32_t)(slot))
-#define sps_align(slot)   (((slot) - SPS_FIXED + 1) & ~1)
+#define sps_align(slot)   (((slot) - SPS_FIXED + 3) & ~3)
 
 /* -- Exit state ---------------------------------------------------------- */
 
