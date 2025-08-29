@@ -333,6 +333,14 @@ typedef union {
   } fields;
 } E2kCDS;
 
+typedef union {
+  uint16_t i;
+  struct {
+    uint16_t opce2   : 8;
+    uint16_t opc2    : 8;
+  } fields;
+} E2kAlef2;
+
 typedef enum {
   E2K_CONST = 0,
   E2K_CONST4 = 4,
@@ -397,6 +405,7 @@ typedef enum {
 #define OPC_FDTOD  0x3d
 #define OPC_FSTOD  0x3e
 #define OPC_FDTOS  0x3f
+#define OPC_GETSP  0x58
 #define OPC_MOVTD  0x61
 #define OPC_LDB    0x64
 #define OPC_LDH    0x65
@@ -428,6 +437,14 @@ typedef enum {
 #define MOVT_MVC   0xc1
 #define MOVT_MVR   0xc2
 #define MOVT_MVRC  0xc3
+/* rw specificator opce */
+#define RW_NONE    0xc0
+#define RW_CUD     0xf0
+#define RW_GD      0xf2
+#define RW_USD     0xec
+#define RW_STAT    0xee
+/* default specificator opce */
+#define OPCE_NONE  0xc0
 /* convertation opc */
 #define CO_FSTOISTR 0xc2
 #define CO_FSTOIDTR 0xc2
@@ -448,5 +465,7 @@ typedef enum {
 #define SXT_WZ      0x6
 /* nop */
 #define E2K_NOP     0x0
+/* opc2 extension */
+#define OPC2_EXT    0x01
 
 #endif

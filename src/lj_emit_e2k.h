@@ -154,11 +154,11 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
   // aas, 16-bit syls, not used
   // ales 16-bit syls
   hmxp = (uint16_t *)mxp;
-  if (half_pad) *--hmxp = 0;
   if (hs_ales & 0x10) *--hmxp = as->bundle.ales[4];
   if (hs_ales & 0x08) *--hmxp = as->bundle.ales[3];
   if (hs_ales & 0x02) *--hmxp = as->bundle.ales[1];
   if (hs_ales & 0x01) *--hmxp = as->bundle.ales[0];
+  if (half_pad) *--hmxp = 0;
   // cs, 32-bit syls
   mxp = (MCode *)hmxp;
   if (hs_c & 0x02) *--mxp = as->bundle.cs[1];
@@ -429,6 +429,26 @@ static int emit_alopf1(ASMState *as, uint32_t spec, uint32_t cop,
   return als_idx;
 }
 
+static void emit_alef2(ASMState *as, uint16_t opc2, uint16_t opce2, int als_idx)
+{
+  check_resource(as, 1 << (RES_ALES_SHIFT + als_idx));
+  E2kAlef2 syl;
+  syl.i = 0;
+  syl.fields.opce2 = opce2;
+  syl.fields.opc2 = opc2;
+  as->bundle.ales[als_idx] = syl.i;
+  as->bundle.f3++;
+}
+
+static int emit_alopf12(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
+                        uint16_t opc2, uint16_t opce2, uint64_t mask,
+                        uint32_t src2, uint32_t dst)
+{
+  int als_idx = emit_alopf2(as, 0, cop, opce, mask, src2, dst);
+  emit_alef2(as, opc2, opce2, als_idx);
+  return als_idx;
+}
+
 #define emit_nop(as, nops) \
   as->bundle.nop = nops
 
@@ -616,4 +636,13 @@ static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
   }
 }
 
-#define emit_spsub(as, ofs) emit_addptr(as, 0, -(ofs))
+/* Get additional stack space. */
+static void emit_spsub(ASMState *as, int32_t ofs)
+{
+  if (ofs) {
+    emit_alopf12(as, 0, OPC_GETSP, RW_USD, OPC2_EXT, OPCE_NONE, RES_ALS0,
+                 emit_src2(as, E2K_CONST, -ofs),
+                 emit_dst(as, E2K_REG, RID_SP));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+}
