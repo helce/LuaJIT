@@ -1238,18 +1238,16 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
   MCode *p = as->mctop;
   int32_t spadj = as->T->spadjust;
   /*
-    addd STACK, spadj, STACK (2 nop)
+    getsp spadj, RID_SP(2 nop)
     ibranch lj_vm_exit_interp(lnk)
   */
   emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), 0, 0);
   p = emit_bundle_finalize(as, p); /* 4(HS+SS+CS0+Align) */
   if (spadj) {
-    // TODO check about spadj if its needed write into a hole
-    // make a hole in asm_tail_prep
-    // addd RID_SP, adj, RID_SP
-    // check a hole in asm_loop_fixup
-    /* 4(HS+ALS+LTS?+ALIGN) */
-    NIY
+    emit_alopf12(as, 0, OPC_GETSP, RW_USD, OPC2_EXT, OPCE_NONE, RES_ALS0,
+                 emit_src2(as, E2K_CONST, spadj),
+                 emit_dst(as, E2K_REG, RID_SP));
+    p = emit_bundle_finalize(as, p); /* 4(HS+ALS+ALES+LTS) */
   } else {
     p[-1] = E2K_NOP; p[-2] = E2K_NOP; p[-3] = E2K_NOP; p[-4] = E2K_NOP;
   }
