@@ -85,7 +85,7 @@ enum {
 
 /* In pipe state scratch registers are r52-r59 */
 #define RSET_SCRATCH_FPR  0
-#define RSET_SCRATCH_GPR  (RSET_RANGE(RID_R52, RID_R59))
+#define RSET_SCRATCH_GPR  (RSET_RANGE(RID_R52, RID_R59+1))
 #define RSET_SCRATCH    (RSET_SCRATCH_GPR|RSET_SCRATCH_FPR)
 
 #define REGARG_FIRSTGPR RID_R52
@@ -104,9 +104,9 @@ enum {
 **
 ** SPS_FIRST: First spill slot for general use.
 */
-#define SPS_FIXED 0
-#define SPS_FIRST 0
-#define SPOFS_TMP 0x68
+#define SPS_FIXED 2
+#define SPS_FIRST 2
+#define SPOFS_TMP 0x0
 
 #define sps_scale(slot)   (4 * (int32_t)(slot))
 #define sps_align(slot)   (((slot) - SPS_FIXED + 1) & ~1)
