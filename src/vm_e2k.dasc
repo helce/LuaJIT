@@ -4686,13 +4686,13 @@ static void build_subroutines(BuildCtx *ctx)
     | stw       2, DISPATCH, DISPATCH_J(exitno), T7 // Store exit number
     | std       5, DISPATCH, DISPATCH_J(L), T5
     | --
+    | addd      0, T1, 0x0, S0
     | addd      1, T5, 0x0, RB
     | std       2, T5, L->base, BASE
     | std       5, DISPATCH, DISPATCH_GL(jit_base), T8
     | pipe_call ctpr1                          // lj_trace_exit(jit_State *J, ExitState *ex)
     | --
     | // MULTRES(unscaled) or negated error code returned
-    | getsp     0, 320, S0                     // Release spill stack
     | ldd       2, RB, L->cframe, RA
     | ldd       3, RB, L->base, BASE
     | wait_load RA, 0
@@ -4700,7 +4700,9 @@ static void build_subroutines(BuildCtx *ctx)
     | andd      0, RA, CFRAME_RAWMASK, STACK
     | --
     | ldd       0, STACK, SAVE_PC, PC          // Get SAVE_PC.
+    | subd      1, STACK, S0, S0
     | --
+    | getsp     0, S0, S1                      // Release spill stack
     | std       2, STACK, SAVE_L, RB           // Set SAVE_L (on-trace resume/yield).
     | --
     | // Fall through
