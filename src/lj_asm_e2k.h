@@ -226,10 +226,13 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
   ra_evictset(as, drop);  /* Evictions must be performed first. */
   if (ra_used(ir)) {
     lj_assertA(!irt_ispri(ir->t), "PRI dest");
-    if (hiop)
+    if (irt_isfp(ir->t) && (ci->flags & CCI_CASTU64)) {
+      NIY
+    } else if (hiop) {
       ra_destpair(as, ir);
-    else
+    } else {
       ra_destreg(as, ir, RID_RET);
+    }
   }
 }
 
