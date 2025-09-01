@@ -4578,7 +4578,104 @@ static void build_subroutines(BuildCtx *ctx)
     |.endif
     |
     |->cont_stitch:                         // Trace stitching.
-    | do_fault
+    |.if JIT
+    | // BASE = base, CRET1 = result, RB = meta base
+    | ldd       0, RB, -40, S0              // Save previous trace.
+    | ldw       2, STACK, MULTRES, T2
+    | ldb       3, PC, PREV_PC_RA, RA
+    | addd      4, 0x0, LJ_TNIL, T5
+    | disp ctpr1, >1
+    | --
+    | ldb       0, PC, PREV_PC_RA, RC
+    | subd      1, BASE, 0x8, T4
+    | ldb       2, PC, PREV_PC_RB, RB
+    | lddsm     3, DISPATCH, DISPATCH_J(trace), T0
+    | ldd       5, STACK, SAVE_L, T6
+    | wait_load S0, 1
+    | disp ctpr2, >2
+    | --
+    | extract_value 0, S0, S0
+    | subd      1, T2, 0x8, T2
+    | shld      3, RA, 0x3, RA
+    | disp      ctpr3, ->vm_restart_pipeline
+    | --
+    | cmpedb    0, S0, 0x0, pred2
+    | cmpedb    1, T2, 0x0, pred0
+    | addd      2, RC, RB, RC
+    | addd      3, BASE, RA, RA             // Call base.
+    | --
+    | ldh       0, S0, TRACE->traceno, RB
+    | shld      1, RC, 0x3, RC
+    | ldh       2, S0, TRACE->link, RD
+    | wait_load RD, 0
+    | --
+    | cmpedb    0, RD, RB, pred3
+    | cmpedb    1, RD, 0x0, pred4
+    | shld      2, RD, 0x3, RD
+    | addd      3, RC, T4, RC
+    | --
+    | lddsm     0, T0, RD, T4
+    | wait_load T4, 0
+    | --
+    | lddsm     0, T4, TRACE->mcode, T3
+    | ct        ctpr2, pred0
+    | wait_load T3, 0
+    | --
+    |1:                                     // Move results down.
+    | ldd       0, CRET1, 0x0, T1
+    | subd      1, T2, 0x8, T2
+    | --
+    | cmpedb    0, T2, 0x0, pred0
+    | wait_load T1, 1
+    | --
+    | addd      3, CRET1, 0x8, CRET1
+    | addd      4, RA, 0x8, RA
+    | std       5, RA, 0x0, T1
+    | ct        ctpr1, ~pred0               // <1
+    | --
+    |2:
+    | movtdsm   0, T3, ctpr1
+    | cmpbedb   3, RC, RA, pred1
+    | pass      pred2, p0
+    | pass      pred3, p1                   // Blacklisted.
+    | landp     ~p0, ~p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred1, 0
+    | --
+    | addd      4, RA, 0x8, RA, ~pred1
+    | std       5, RA, 0x0, T5, ~pred1      // Fill up results with nil.
+    | ct        ctpr2, ~pred1               // More results wanted?
+    | --
+    | ct        ctpr3, ~pred0
+    | --
+    | ct        ctpr1, ~pred4               // Jump to stitched trace.
+    | --
+    | // Stitch a new trace to the previous trace.
+    | setwd_call
+    | disp      ctpr2, extern lj_dispatch_stitch
+    | --
+    | addd      0, PC, 0x0, CARG2
+    | addd      1, DISPATCH, GG_DISP2J, CARG1
+    | stw       2, DISPATCH, DISPATCH_J(exitno), RB
+    | std       5, T6, L->base, BASE
+    | --
+    | addd      1, T6, 0x0, RB
+    | std       2, DISPATCH, DISPATCH_J(L), T6
+    | call      ctpr2, wbs=0x8              // (jit_State *J, const BCIns *pc)
+    | --
+    | ldd       0, RB, L->base, BASE
+    | ldb       2, PC, PC_OP, RARG1
+    | wait_load RARG1, 0
+    | --
+    | shld      0, RARG1, 3, RARG1
+    | --
+    | ldd       0, RARG1, DISPATCH, RARG1   // E: Load pointer to insn handler.
+    | wait_load RARG1, 0
+    | --
+    | setwd_pipe
+    | pipe_restart_fast RARG1, PC
+    | --
+    |.endif
     |
     |->vm_profhook:                         // Dispatch target for profiler hook.
 #if LJ_HASPROFILE
@@ -8780,7 +8877,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_JLOOP:
         |.if JIT
         | // ins_AD RA_E = src1*8 (ignored), RD_E = traceno*8
-        | do_fault
         | ldd       2, DISPATCH, DISPATCH_J(trace), T0
         | ldd       0, STACK, SAVE_L, T3
         | wait_load T0, 0
