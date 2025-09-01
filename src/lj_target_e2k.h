@@ -119,6 +119,9 @@ typedef struct {
   int32_t spill[256];
 } ExitState;
 
+/* Highest exit + 1 indicates stack check. */
+#define EXITSTATE_CHECKEXIT 1
+
 /* Return the address of a per-trace exit stub. */
 static LJ_AINLINE uint32_t *exitstub_trace_addr_(uint32_t *p, uint32_t exitno)
 {
