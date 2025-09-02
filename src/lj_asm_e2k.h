@@ -512,6 +512,60 @@ static void asm_hrefk(ASMState *as, IRIns *ir)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+static void asm_uref(ASMState *as, IRIns *ir)
+{
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg tmp = RID_NONE;
+  int guarded = (irt_t(ir->t) & (IRT_GUARD|IRT_TYPE)) == (IRT_GUARD|IRT_PGC);
+  if (irref_isk(ir->op1) && !guarded) {
+    GCfunc *fn = ir_kfunc(IR(ir->op1));
+    MRef *v = &gcref(fn->l.uvptr[(ir->op2 >> 8)])->uv.v;
+    intptr_t ofs = dispofs(as, v);
+    emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+                emit_src1(as, E2K_REG, RID_DISPATCH),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  } else {
+    if (guarded) {
+      Reg pred = ra_pred(as, RSET_PRED);
+      tmp = ra_scratch(as, rset_exclude(RSET_GPR, dest));
+      asm_guard(as, pred, ir->o == IR_UREFC ? 0 : 1);
+      emit_alopf7(as, 0, OPC_CMPDB, CMPI_EQ, RES_ALS_0134,
+                  emit_src1(as, E2K_REG, tmp),
+                  emit_src2(as, E2K_CONST, 0),
+                  emit_pdst(as, E2K_REG_PRED, pred));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+    }
+    intptr_t ofs = (intptr_t)offsetof(GCupval, tv);
+    int opc = ir->o == IR_UREFC ? OPC_ADDD : OPC_LDD;
+    emit_alopf1(as, 0, opc, RES_ALS_012345,
+                emit_src1(as, E2K_REG, dest),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_dst(as, E2K_REG, dest));
+    if (guarded) {
+      emit_alopf1(as, 0, OPC_LDB, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, dest),
+                  emit_src2(as, E2K_CONST, ofs),
+                  emit_dst(as, E2K_REG, tmp));
+    }
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    if (irref_isk(ir->op1)) {
+      GCfunc *fn = ir_kfunc(IR(ir->op1));
+      GCobj *o = gcref(fn->l.uvptr[(ir->op2 >> 8)]);
+      emit_loada(as, dest, o);
+    } else {
+       ofs = (intptr_t)offsetof(GCfuncL, uvptr) +
+             (intptr_t)sizeof(MRef) * (intptr_t)(ir->op2 >> 8);
+       emit_alopf1(as, 0, OPC_LDD, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, ra_alloc1(as, ir->op1, RSET_GPR)),
+                  emit_src2(as, E2K_CONST, ofs),
+                  emit_dst(as, E2K_REG, dest));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+    }
+  }
+}
+
 /* -- Loads and stores ---------------------------------------------------- */
 
 static uint32_t asm_loadins(ASMState *as, IRIns *ir, Reg dest)
@@ -1389,9 +1443,6 @@ static void asm_mulov(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_href(ASMState *as, IRIns *ir, IROp merge)
-{  NIY }
-
-static void asm_uref(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_fref(ASMState *as, IRIns *ir)
