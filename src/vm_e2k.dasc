@@ -2950,15 +2950,14 @@ static void build_subroutines(BuildCtx *ctx)
     | lddsm     5, RB, L->base, S0
     | --
     | cmpedb    3, CARG1, LUA_YIELD, pred2
-    | --
     | pass      pred0, p0
     | pass      pred1, p1
     | landp     p0, p1, p4
     | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
     | cmpbedb   3, RA, S0, pred1            // Check for presence of initial func.
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
-    | nop 1
     | --
     | lddsm     0, RB, L->maxstack, S0
     | pass      pred1, p0
@@ -2967,6 +2966,7 @@ static void build_subroutines(BuildCtx *ctx)
     | landp     ~p0, ~p1, p5
     | pass      p4, pred0
     | pass      p5, pred1                   // Status != LUA_YIELD (i.e. 0)?
+    | wait_pred_ct pred0, 0
     | --
     | ldd       3, RA, -8, PC, pred1        // Move initial function up.
     | ct        ctpr1, pred0                // fff_fallback(RD)
@@ -4624,7 +4624,7 @@ static void build_subroutines(BuildCtx *ctx)
     | subd      1, T2, 0x8, T2
     | --
     | cmpedb    0, T2, 0x0, pred0
-    | wait_load T1, 1
+    | wait_pred_ct, pred0, 0
     | --
     | addd      3, CRET1, 0x8, CRET1
     | addd      4, RA, 0x8, RA
