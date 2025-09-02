@@ -4648,20 +4648,22 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ct        ctpr3, ~pred0
     | --
+    | setwd_pipe                            // Need to setup pipe, here we can enter jit
+    | std       2, DISPATCH, DISPATCH_GL(jit_base), BASE, ~pred4
+    | std       5, DISPATCH, DISPATCH_GL(tmpbuf.L), T6, ~pred4
     | ct        ctpr1, ~pred4               // Jump to stitched trace.
     | --
     | // Stitch a new trace to the previous trace.
-    | setwd_call
     | disp      ctpr2, extern lj_dispatch_stitch
     | --
-    | addd      0, PC, 0x0, CARG2
-    | addd      1, DISPATCH, GG_DISP2J, CARG1
+    | addd      0, PC, 0x0, PARG2
+    | addd      1, DISPATCH, GG_DISP2J, PARG1
     | stw       2, DISPATCH, DISPATCH_J(exitno), RB
     | std       5, T6, L->base, BASE
     | --
     | addd      1, T6, 0x0, RB
     | std       2, DISPATCH, DISPATCH_J(L), T6
-    | call      ctpr2, wbs=0x8              // (jit_State *J, const BCIns *pc)
+    | pipe_call ctpr2                       // (jit_State *J, const BCIns *pc)
     | --
     | ldd       0, RB, L->base, BASE
     | ldb       2, PC, PC_OP, RARG1
