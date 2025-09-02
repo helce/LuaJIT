@@ -4241,8 +4241,8 @@ static void build_subroutines(BuildCtx *ctx)
     | pass pred0, p0
     | pass pred1, p1
     | pass pred2, p2
-    | landp p1, ~p2, p5
-    | landp ~p0, ~p5, p6
+    | landp p0, p1, p5
+    | landp ~p2, p5, p6
     | pass p6, pred1
     | wait_pred pred1, 0
     | --
@@ -4377,7 +4377,6 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |.if JIT
     |->vm_hotloop:                          // Hot loop counter underflow.
-    | setwd_call
     | ldd       0, BASE, -16, T0            // Same as curr_topL(L).
     | ldd       2, STACK, SAVE_L, RB
     | disp      ctpr1, extern lj_trace_hot
@@ -4398,13 +4397,12 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, BASE, RD, RD
     | std       2, RB, L->base, BASE
     | --
-    | addd      0, DISPATCH, GG_DISP2J, CARG1
-    | addd      1, PC, 0, CARG2
+    | addd      0, DISPATCH, GG_DISP2J, PARG1
+    | addd      1, PC, 0, PARG2
     | std       2, RB, L->top, RD
-    | call      ctpr1, wbs = 0x8            // lj_trace_hot(jit_State *J, const BCIns *pc)
+    | pipe_call ctpr1                       // lj_trace_hot(jit_State *J, const BCIns *pc)
     | --
     | // PC, RA, restart pipeline static
-    | setwd_pipe
     | ldd       0, RB, L->base, BASE
     | subd      1, PC, 4, PC                // Current PC.
     | ldb       2, PC, PREV_PC_RA, RA
