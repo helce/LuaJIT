@@ -517,10 +517,11 @@ static void asm_uref(ASMState *as, IRIns *ir)
   Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg tmp = RID_NONE;
   int guarded = (irt_t(ir->t) & (IRT_GUARD|IRT_TYPE)) == (IRT_GUARD|IRT_PGC);
+  intptr_t ofs = 0;
   if (irref_isk(ir->op1) && !guarded) {
     GCfunc *fn = ir_kfunc(IR(ir->op1));
     MRef *v = &gcref(fn->l.uvptr[(ir->op2 >> 8)])->uv.v;
-    intptr_t ofs = dispofs(as, v);
+    ofs = dispofs(as, v);
     emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
                 emit_src1(as, E2K_REG, RID_DISPATCH),
                 emit_src2(as, E2K_CONST, ofs),
@@ -537,14 +538,17 @@ static void asm_uref(ASMState *as, IRIns *ir)
                   emit_pdst(as, E2K_REG_PRED, pred));
       as->mcp = emit_bundle_finalize(as, as->mcp);
     }
-    intptr_t ofs = (intptr_t)offsetof(GCupval, tv);
+    ofs = ir->o == IR_UREFC ? (intptr_t)offsetof(GCupval, tv)
+                             : (intptr_t)offsetof(GCupval, v);
     int opc = ir->o == IR_UREFC ? OPC_ADDD : OPC_LDD;
-    emit_alopf1(as, 0, opc, RES_ALS_012345,
+    uint64_t mask = ir->o == IR_UREFC ? RES_ALS_012345 : RES_ALS_0235;
+    emit_alopf1(as, 0, opc, mask,
                 emit_src1(as, E2K_REG, dest),
                 emit_src2(as, E2K_CONST, ofs),
                 emit_dst(as, E2K_REG, dest));
     if (guarded) {
-      emit_alopf1(as, 0, OPC_LDB, RES_ALS_012345,
+      ofs = (intptr_t)offsetof(GCupval, closed);
+      emit_alopf1(as, 0, OPC_LDB, RES_ALS_0235,
                   emit_src1(as, E2K_REG, dest),
                   emit_src2(as, E2K_CONST, ofs),
                   emit_dst(as, E2K_REG, tmp));
@@ -557,7 +561,7 @@ static void asm_uref(ASMState *as, IRIns *ir)
     } else {
        ofs = (intptr_t)offsetof(GCfuncL, uvptr) +
              (intptr_t)sizeof(MRef) * (intptr_t)(ir->op2 >> 8);
-       emit_alopf1(as, 0, OPC_LDD, RES_ALS_012345,
+       emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
                   emit_src1(as, E2K_REG, ra_alloc1(as, ir->op1, RSET_GPR)),
                   emit_src2(as, E2K_CONST, ofs),
                   emit_dst(as, E2K_REG, dest));
