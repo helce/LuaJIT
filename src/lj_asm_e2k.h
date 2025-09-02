@@ -302,10 +302,11 @@ static void asm_conv(ASMState *as, IRIns *ir)
   int stfp = (st == IRT_NUM || st == IRT_FLOAT);
   int st64 = (st == IRT_I64 || st == IRT_U64 || st == IRT_P64);
   int cop = 0, opce = 0;
+  RegSet allow = RSET_GPR;
   lj_assertA(irt_type(ir->t) != st, "inconsistent types for CONV");
-  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
+  Reg left = ra_alloc1(as, ir->op1, allow);
   if (irt_isfp(ir->t)) {
-    Reg dest = ra_dest(as, ir, RSET_GPR);
+    Reg dest = ra_dest(as, ir, allow);
     if (stfp) { /* FP to FP conversion */
       cop = (st == IRT_NUM ? OPC_FDTOS : OPC_FSTOD);
       opce = CO_FSTOFD; /* smae for both cop */
@@ -326,7 +327,7 @@ static void asm_conv(ASMState *as, IRIns *ir)
                  "bad type for checked CONV");
       asm_tointg(as, ir, left);
     } else {
-      Reg dest = ra_dest(as, ir, RSET_GPR);
+      Reg dest = ra_dest(as, ir, allow);
       if (irt_isu64(ir->t)) { /* FP to U64 */
         /* for inputs >= 2^63 add -2^64, convert again. */
         NIY
@@ -684,24 +685,25 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
 
 static void asm_sload(ASMState *as, IRIns *ir)
 {
-  int32_t ofs = 8*((int32_t)ir->op1-2);
+  Reg dest = RID_NONE, base;
+  RegSet allow = RSET_GPR;
   IRType1 t = ir->t;
+  int32_t ofs = 8*((int32_t)ir->op1-2);
   int cop = 0, opce = 0;
-  Reg dest = RID_NONE, base = RID_NONE;
   lj_assertA(!(ir->op2 & IRSLOAD_PARENT),
              "bad parent SLOAD");  /* Handled by asm_head_side(). */
   lj_assertA(irt_isguard(ir->t) || !(ir->op2 & IRSLOAD_TYPECHECK),
              "inconsistent SLOAD variant");
   if ((ir->op2 & IRSLOAD_CONVERT) && irt_isguard(t) && irt_isint(t)) {
-    dest = ra_scratch(as, RSET_GPR);
+    dest = ra_scratch(as, allow);
+    allow = rset_exclude(allow, dest);
     asm_tointg(as, ir, dest);
-    base = ra_alloc1(as, REF_BASE, RSET_GPR);
     t.irt = IRT_NUM; /* Continue with a regular number type check. */
   } else if (ra_used(ir)) {
     lj_assertA(irt_isnum(ir->t) || irt_isint(ir->t) || irt_isaddr(ir->t),
                "bad SLOAD type %d", irt_type(t));
-    dest = ra_dest(as, ir, RSET_GPR);
-    base = ra_alloc1(as, REF_BASE, RSET_GPR);
+    dest = ra_dest(as, ir, allow);
+    allow = rset_exclude(allow, dest);
     if (ir->op2 & IRSLOAD_CONVERT) {
       cop = irt_isint(t) ? OPC_FDTOS : OPC_FSTOD;
       opce = irt_isint(t) ? CO_FDTOISTR : CO_ISTOFD;
@@ -722,16 +724,22 @@ static void asm_sload(ASMState *as, IRIns *ir)
       // TODO SIGN EXTEND ??
       NIY
     }
-  } else {
-    if (!(ir->op2 & IRSLOAD_TYPECHECK))
-      return; /* No type check: avoid base alloc. */
-    base = ra_alloc1(as, REF_BASE, RSET_GPR);
   }
+  base = ra_alloc1(as, REF_BASE, allow);
+  allow = rset_exclude(allow, base);
   if (ir->op2 & IRSLOAD_TYPECHECK) {
-    Reg type = ra_scratch(as, rset_exclude(RSET_GPR, dest));
     Reg pred = ra_pred(as, RSET_PRED);
+    Reg type = ra_scratch(as, allow);
+    if (!ra_hasreg(dest))
+      dest = type;
     if (irt_ispri(t)) {
-      NIY
+      asm_guard(as, pred, 1);
+      intptr_t k = ~((int64_t)~irt_toitype(t) << 47);
+      emit_alopf7(as, 0, OPC_CMPDB, CMPI_EQ, RES_ALS_0134,
+                  emit_src1(as, E2K_REG, type),
+                  emit_src2(as, E2K_CONST, k),
+                  emit_pdst(as, E2K_REG_PRED, pred));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
     } else if (ir->op2 & IRSLOAD_KEYINDEX) {
       NIY
     } else {
@@ -745,7 +753,6 @@ static void asm_sload(ASMState *as, IRIns *ir)
                    (int32_t)irt_toitype(t);
       opce = irt_isnum(t) ? CMPI_B : CMPI_EQ;
       asm_guard(as, pred, 1);
-
       emit_alopf7(as, 0, OPC_CMPSB, opce, RES_ALS_0134,
                   emit_src1(as, E2K_REG, type),
                   emit_src2(as, E2K_CONST, k),
