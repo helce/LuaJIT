@@ -420,18 +420,15 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
     if (irt_isnum(ir->t)) {
       if (irref_isk(ref) && !(mode & IRTMPREF_OUT1)) {
         /* Use the number constant itself as a TValue. */
-        ra_allockreg(as, igcptr(ir_knum(ir)), dest);
-      } else {
-        emit_movrr(as, ir, dest, ra_alloc1(as, ref, RSET_GPR));
+        emit_loada(as, dest, ir_knum(ir));
+        return;
       }
     } else {
       /* Otherwise use g->tmptv to hold the TValue. */
       asm_tvstore64(as, dest, 0, ref);
-      emit_loada(as, dest, &J2G(as->J)->tmptv);
     }
-  } else {
-    emit_loada(as, dest, &J2G(as->J)->tmptv);
   }
+  emit_loada(as, dest, &J2G(as->J)->tmptv);
 }
 
 static void asm_aref(ASMState *as, IRIns *ir)
