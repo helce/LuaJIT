@@ -92,7 +92,6 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
                         emit_src1(as, E2K_CONST, 0),
                         emit_lts(as, E2K_CONST32, as->snapno) | 0xd8,
                         emit_dst(as, E2K_REG, RID_TMP));
-  emit_alu_cond(as, als, pred, inverted);
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
@@ -472,6 +471,11 @@ static void asm_aref(ASMState *as, IRIns *ir)
       as->mcp = emit_bundle_finalize(as, as->mcp);
     }
   }
+}
+
+static void asm_href(ASMState *as, IRIns *ir, IROp merge)
+{
+  NIY
 }
 
 static void asm_hrefk(ASMState *as, IRIns *ir)
@@ -1470,9 +1474,6 @@ static void asm_max(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_mulov(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_href(ASMState *as, IRIns *ir, IROp merge)
 {  NIY }
 
 static void asm_fref(ASMState *as, IRIns *ir)
