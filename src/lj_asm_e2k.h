@@ -295,6 +295,20 @@ static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+static void asm_tobit(ASMState *as, IRIns *ir)
+{
+  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
+  Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+// TODO
+//  asm_alopf1(as, ir, OPC_FADDD, RES_ALS_0134);
+  emit_alopf1(as, 0, OPC_FADDD, RES_ALS_0134,
+              emit_src1(as, E2K_REG, left),
+              emit_src2(as, E2K_REG, right),
+              emit_dst(as, E2K_REG, dest));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
 // TODO refactor after full implementation
 static void asm_conv(ASMState *as, IRIns *ir)
 {
@@ -892,7 +906,9 @@ static void asm_alopf1(ASMState *as, IRIns *ir, int cop, int mask)
   Reg left = ra_hintalloc(as, ir->op1, dest, allow);
   allow = rset_exclude(allow, left);
   uint32_t right_src2 = 0;
-  if (irref_isk(ir->op2)) {
+  if (ir->o == IR_BNOT) {
+    right_src2 = emit_src2(as, E2K_CONST, -1);
+  } else if (irref_isk(ir->op2)) {
     intptr_t k = get_kval(as, ir->op2);
     right_src2 = emit_src2(as, E2K_CONST, k);
   } else {
@@ -972,6 +988,34 @@ static void asm_mul(ASMState *as, IRIns *ir)
     NIY
     //asm_alopf11(as, ir, cop, opce);
   }
+}
+
+static void asm_bor(ASMState *as, IRIns *ir)
+{
+  asm_alopf1(as, ir,
+             irt_is64(ir->t) ? OPC_ORD : OPC_ORS,
+             RES_ALS_012345);
+}
+
+static void asm_band(ASMState *as, IRIns *ir)
+{
+  asm_alopf1(as, ir,
+             irt_is64(ir->t) ? OPC_ANDD : OPC_ANDS,
+             RES_ALS_012345);
+}
+
+static void asm_bnot(ASMState *as, IRIns *ir)
+{
+  asm_alopf1(as, ir,
+             irt_is64(ir->t) ? OPC_XORD : OPC_XORS,
+             RES_ALS_012345);
+}
+
+static void asm_bshr(ASMState *as, IRIns *ir)
+{
+  asm_alopf1(as, ir,
+             irt_is64(ir->t) ? OPC_SHRD : OPC_SHRS,
+             RES_ALS_012345);
 }
 
 #define asm_addov(as, ir) asm_alopf1(as, ir, OPC_ADDS, RES_ALS_012345)
@@ -1398,25 +1442,13 @@ static void asm_hiop(ASMState *as, IRIns *ir)
 static void asm_prof(ASMState *as, IRIns *ir)
 {  NIY }
 
-static void asm_bnot(ASMState *as, IRIns *ir)
-{  NIY }
-
 static void asm_bswap(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_band(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bor(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bxor(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bshl(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bshr(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bsar(ASMState *as, IRIns *ir)
@@ -1432,9 +1464,6 @@ static void asm_abs(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_fpmath(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_tobit(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_min(ASMState *as, IRIns *ir)

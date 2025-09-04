@@ -381,6 +381,8 @@ typedef enum {
 #define OPC_ANDD   0x01
 #define OPC_ANDNS  0x02
 #define OPC_ANDND  0x03
+#define OPC_ORS    0x04
+#define OPC_ORD    0x05
 #define OPC_XORS   0x08
 #define OPC_XORD   0x09
 #define OPC_XORNS  0x0a
@@ -392,6 +394,9 @@ typedef enum {
 #define OPC_SUBD   0x13
 #define OPC_SHLS   0x18
 #define OPC_SHLD   0x19
+#define OPC_SHRS   0x1a
+#define OPC_SHRD   0x1b
+#define OPC_SARS   0x1c
 #define OPC_SARD   0x1d
 #define OPC_GETFD  0x1f
 #define OPC_CMPSB  0x20
@@ -401,6 +406,7 @@ typedef enum {
 #define OPC_STW    0x26
 #define OPC_STD    0x27
 #define OPC_FCMPDB 0x2f
+#define OPC_FADDS  0x30
 #define OPC_FADDD  0x31
 #define OPC_FSUBD  0x33
 #define OPC_FMULD  0x39
