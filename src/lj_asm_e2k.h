@@ -991,34 +991,10 @@ static void asm_mul(ASMState *as, IRIns *ir)
   }
 }
 
-static void asm_bor(ASMState *as, IRIns *ir)
-{
-  asm_alopf1(as, ir,
-             irt_is64(ir->t) ? OPC_ORD : OPC_ORS,
-             RES_ALS_012345);
-}
-
-static void asm_band(ASMState *as, IRIns *ir)
-{
-  asm_alopf1(as, ir,
-             irt_is64(ir->t) ? OPC_ANDD : OPC_ANDS,
-             RES_ALS_012345);
-}
-
-static void asm_bnot(ASMState *as, IRIns *ir)
-{
-  asm_alopf1(as, ir,
-             irt_is64(ir->t) ? OPC_XORD : OPC_XORS,
-             RES_ALS_012345);
-}
-
-static void asm_bshr(ASMState *as, IRIns *ir)
-{
-  asm_alopf1(as, ir,
-             irt_is64(ir->t) ? OPC_SHRD : OPC_SHRS,
-             RES_ALS_012345);
-}
-
+#define asm_bor(as, ir) asm_alopf1(as, ir, irt_is64(ir->t) ? OPC_ORD : OPC_ORS, RES_ALS_012345)
+#define asm_band(as, ir) asm_alopf1(as, ir, irt_is64(ir->t) ? OPC_ANDD : OPC_ANDS, RES_ALS_012345)
+#define asm_bnot(as, ir) asm_alopf1(as, ir, irt_is64(ir->t) ? OPC_XORD : OPC_XORS, RES_ALS_012345)
+#define asm_bshr(as, ir) asm_alopf1(as, ir, irt_is64(ir->t) ? OPC_SHRD : OPC_SHRS, RES_ALS_012345)
 #define asm_addov(as, ir) asm_alopf1(as, ir, OPC_ADDS, RES_ALS_012345)
 #define asm_subov(as, ir) asm_alopf1(as, ir, OPC_SUBS, RES_ALS_012345)
 
