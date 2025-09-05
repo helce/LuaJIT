@@ -2937,6 +2937,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |.endif
     | setwd_call
+    | --
     | ldd       3, RB, L->cframe, S0
     | addd      4, RB, 0x0, S1
     | ldbsm     5, RB, L->status, CARG1
