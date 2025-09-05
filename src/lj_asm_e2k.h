@@ -1373,9 +1373,9 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   MCode exitload = 0x11c0d8f0;
   for (p++; p < pe; p++) {
     if (*p == exitload) { /* Look for load of exit number. */
-      if (p[1] != exitno) continue;
+      if (p[2] != exitno) continue;
       /* p[-3] - E2K_NOPATCH_GC_CHECK_HS; p[-2] - E2K_NOPATCH_GC_CHECK. */
-      /* p[-1] - HS; p[0] - ALS; p[1] LTS; p[2] - PDS or Align. */
+      /* p[-1] - HS; p[0] - ALS; p[1] - hole; p[2] - LTS. */
       /* p[3] - HS; p[4] - SS; p[5] - CS0; p[6] - Align. */
       /* Look for exitstub branch. */
       uint32_t disp = (ptrdiff_t)((void *)px - (void *)p - 3*4) >> 3;
