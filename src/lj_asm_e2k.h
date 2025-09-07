@@ -83,7 +83,7 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
     target = p; /* Patch target later in asm_loop_fixup. */
   }
   /*
-    addd snapno(32), TMP0, pred
+    addd snapno(32), TMP0
     ibranch target, pred
   */
   emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), pred, inverted);
@@ -1018,15 +1018,15 @@ static const uint32_t asm_compmap[IR_ABC+1] = {
 static const uint32_t asm_fpcompmap[IR_ABC+1] = {
   /* op     opce */
   /* LT  */ CMPF_LT,  /* inverted */
-  /* GE  */ CMPF_NLT, /* inverted */
+  /* GE  */ CMPF_LE,  /* inverted */ /* swap */
   /* LE  */ CMPF_LE,  /* inverted */
-  /* GT  */ CMPF_NLE, /* inverted */
-  /* ULT */ CMPF_LT,  /* inverted */
+  /* GT  */ CMPF_LT,  /* inverted */ /* swap */
+  /* ULT */ CMPF_NLE, /* inverted */ /* swap */
   /* UGE */ CMPF_NLT, /* inverted */
-  /* ULE */ CMPF_LE,  /* inverted */
+  /* ULE */ CMPF_NLT, /* inverted */ /* swap */
   /* UGT */ CMPF_NLE, /* inverted */
   /* EQ  */ CMPF_EQ,  /* inverted */
-  /* NE  */ CMPF_EQ,  /* should be ordered */
+  /* NE  */ CMPF_EQ,
   /* ABC */ CMPF_NLE, /* inverted */ /* same as UGT */
 };
 
@@ -1034,32 +1034,33 @@ static void asm_comp(ASMState *as, IRIns *ir)
 {
   IROp op = ir->o;
   int inverted = 0, cop = 0, opce = 0;
-  /*
-    cmp src1, src2, predN
-    asm_guard(?inverted)
-  */
+  IRRef lref = ir->op1;
+  IRRef rref = ir->op2;
   if (op == IR_ABC) op = IR_UGT;
   if (irt_isnum(ir->t)) {
     inverted = (op == IR_NE) ? 0 : 1;
     cop = OPC_FCMPDB; // only doubles
     opce = asm_fpcompmap[op];
+    if ((op == IR_GE) || (op == IR_GT) || (op == IR_ULT) || (op == IR_ULE)) {
+      IRRef tmp = lref; lref = rref; rref = tmp;
+    }
   } else {
     inverted = (op&1) ? 0 : 1;
     cop = irt_is64(ir->t) ? OPC_CMPDB : OPC_CMPSB;
     opce = asm_compmap[op];
   }
   Reg pred = ra_pred(as, RSET_PRED);
-  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
+  Reg left = ra_alloc1(as, lref, RSET_GPR);
   asm_guard(as, pred, inverted);
 
-  if (irref_isk(ir->op2)) {
-    intptr_t k = get_kval(as, ir->op2);
+  if (irref_isk(rref)) {
+    intptr_t k = get_kval(as, rref);
     emit_alopf7(as, 0, cop, opce, RES_ALS_0134,
                 emit_src1(as, E2K_REG, left),
                 emit_src2(as, E2K_CONST, k),
                 emit_pdst(as, E2K_REG_PRED, pred));
   } else {
-    Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
+    Reg right = ra_alloc1(as, rref, rset_exclude(RSET_GPR, left));
     emit_alopf7(as, 0, cop, opce, RES_ALS_0134,
                 emit_src1(as, E2K_REG, left),
                 emit_src2(as, E2K_REG, right),
