@@ -82,16 +82,12 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
     inverted = inverted ? 0 : 1;
     target = p; /* Patch target later in asm_loop_fixup. */
   }
-  /*
-    addd snapno(32), TMP0
-    ibranch target, pred
-  */
   emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), pred, inverted);
   as->mcp = emit_bundle_finalize(as, as->mcp);
-  int als = emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
-                        emit_src1(as, E2K_CONST, 0),
-                        emit_lts(as, E2K_CONST32, as->snapno) | 0xd8,
-                        emit_dst(as, E2K_REG, RID_TMP));
+  emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+              emit_src1(as, E2K_CONST, 0),
+              emit_lts(as, E2K_CONST32, as->snapno) | 0xd8,
+              emit_dst(as, E2K_REG, RID_TMP));
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
@@ -422,6 +418,12 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
         emit_loada(as, dest, ir_knum(ir));
         return;
       }
+      Reg src = ra_alloc1(as, ref, RSET_GPR);
+      emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
+                  emit_src1(as, E2K_REG, dest),
+                  emit_src2(as, E2K_CONST, 0),
+                  emit_src3(as, E2K_REG, src));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
     } else {
       /* Otherwise use g->tmptv to hold the TValue. */
       asm_tvstore64(as, dest, 0, ref);
