@@ -1273,8 +1273,8 @@ static void asm_loop_fixup(ASMState *as)
     uint32_t disp = (ptrdiff_t)((void *)target - (void *)p + 4*4) >> 3;
     p[-2] = tmp | (disp & 0xfffffff);
   } else {
-    // TODO not sure about this case, need real example
-    NIY
+    emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), 0, 0);
+    p = emit_bundle_finalize(as, p); /* 4(HS+SS+CS0+Align) */
   }
 }
 
