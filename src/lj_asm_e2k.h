@@ -991,6 +991,35 @@ static void asm_alopf1(ASMState *as, IRIns *ir, int cop, int mask)
   as->mcp = emit_bundle_finalize(as, as->mcp);
 }
 
+static void asm_fpmath(ASMState *as, IRIns *ir)
+{
+  IRFPMathOp fpm = (IRFPMathOp)ir->op2;
+  if (fpm == IRFPM_SQRT) {
+    Reg dest = ra_dest(as, ir, RSET_GPR);
+    Reg left = ra_alloc1(as, ir->op1, rset_exclude(RSET_GPR, dest));
+    emit_alopf11(as, 0, OPC_FSQRTTD, OPC2_EXT, OPCE_NONE, RES_ALS5,
+                 emit_src1(as, E2K_REG, left),
+                 emit_src2(as, E2K_REG, dest),
+                 emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf12(as, 0, OPC_GETSP, OPCE_NONE, OPC2_EXT, OPCE_NONE, RES_ALS5,
+                 emit_src2(as, E2K_REG, left),
+                 emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  /* floor(0x1), ceil(0x2), trunc(0x3) */
+  } else if (fpm <= IRFPM_TRUNC) {
+    Reg dest = ra_dest(as, ir, RSET_GPR);
+    Reg left = ra_hintalloc(as, ir->op1, dest, RSET_GPR);
+    emit_alopf11(as, 0, OPC_FDTOIFD, OPC2_EXT, OPCE_NONE, RES_ALS_0134,
+                 emit_src1(as, E2K_CONST, (intptr_t)(fpm+1)),
+                 emit_src2(as, E2K_REG, left),
+                 emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  } else {
+    asm_callid(as, ir, IRCALL_lj_vm_floor + fpm);
+  }
+}
+
 static void asm_add(ASMState *as, IRIns *ir)
 {
   /*
@@ -1503,9 +1532,6 @@ static void asm_bror(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_abs(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_fpmath(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_min(ASMState *as, IRIns *ir)

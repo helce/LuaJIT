@@ -406,7 +406,6 @@ typedef enum {
 #define OPC_STH    0x25
 #define OPC_STW    0x26
 #define OPC_STD    0x27
-#define OPC_FCMPDB 0x2f
 #define OPC_FADDS  0x30
 #define OPC_FADDD  0x31
 #define OPC_FSUBD  0x33
@@ -415,16 +414,20 @@ typedef enum {
 #define OPC_FDTOD  0x3d
 #define OPC_FSTOD  0x3e
 #define OPC_FDTOS  0x3f
-#define OPC_FDIVD  0x49
-#define OPC_GETSP  0x58
 #define OPC_MOVTD  0x61
 #define OPC_LDB    0x64
 #define OPC_LDH    0x65
 #define OPC_LDW    0x66
 #define OPC_LDD    0x67
 /* non-combined operations long */
-#define OPC_MULS   0x20
-#define OPC_MULD   0x21
+#define OPC_MULS    0x20
+#define OPC_MULD    0x21
+#define OPC_FCMPDB  0x2f
+#define OPC_FDIVD   0x49
+#define OPC_FSQRTID 0x4d
+#define OPC_FSQRTTD 0x51
+#define OPC_GETSP   0x58
+#define OPC_FDTOIFD 0x6d
 /* integer comparation opce */
 #define CMPI_O     0x0
 #define CMPI_B     0x1
