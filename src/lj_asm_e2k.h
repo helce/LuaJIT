@@ -1029,6 +1029,18 @@ static void asm_mul(ASMState *as, IRIns *ir)
   }
 }
 
+static void asm_fpdiv(ASMState *as, IRIns *ir)
+{
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
+  Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
+  emit_alopf11(as, 0, OPC_FDIVD, OPC2_EXT, OPCE_NONE, RES_ALS5,
+               emit_src1(as, E2K_REG, left),
+               emit_src2(as, E2K_REG, right),
+               emit_dst(as, E2K_REG, dest));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
 #define asm_bor(as, ir) asm_alopf1(as, ir, irt_is64(ir->t) ? OPC_ORD : OPC_ORS, RES_ALS_012345)
 #define asm_band(as, ir) asm_alopf1(as, ir, irt_is64(ir->t) ? OPC_ANDD : OPC_ANDS, RES_ALS_012345)
 #define asm_bnot(as, ir) asm_alopf1(as, ir, irt_is64(ir->t) ? OPC_XORD : OPC_XORS, RES_ALS_012345)
@@ -1463,9 +1475,6 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 }
 
 // TODO
-static void asm_fpdiv(ASMState *as, IRIns *ir)
-{  NIY }
-
 static void asm_neg(ASMState *as, IRIns *ir)
 {  NIY }
 

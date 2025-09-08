@@ -180,6 +180,7 @@ enum {
   RES_ALS_03     = RES_ALS0 | RES_ALS3,
   RES_ALS_25     = RES_ALS2 | RES_ALS5,
   RES_ALS_ALL    = RES_ALS_012345,
+  RES_ALES_25    = RES_ALES2 | RES_ALES5,
   RES_ALES_ALL   = RES_ALES0 | RES_ALES1 | RES_ALES2 | RES_ALES3 | RES_ALES4 | RES_ALES5,
   RES_CS_ALL     = RES_CS0 | RES_CS1,
   RES_LTS_ALL    = RES_LTS0 | RES_LTS1 | RES_LTS2| RES_LTS3,
@@ -414,6 +415,7 @@ typedef enum {
 #define OPC_FDTOD  0x3d
 #define OPC_FSTOD  0x3e
 #define OPC_FDTOS  0x3f
+#define OPC_FDIVD  0x49
 #define OPC_GETSP  0x58
 #define OPC_MOVTD  0x61
 #define OPC_LDB    0x64

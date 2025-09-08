@@ -431,20 +431,33 @@ static int emit_alopf1(ASMState *as, uint32_t spec, uint32_t cop,
 
 static void emit_alef2(ASMState *as, uint16_t opc2, uint16_t opce2, int als_idx)
 {
-  check_resource(as, 1 << (RES_ALES_SHIFT + als_idx));
-  E2kAlef2 syl;
-  syl.i = 0;
-  syl.fields.opce2 = opce2;
-  syl.fields.opc2 = opc2;
-  as->bundle.ales[als_idx] = syl.i;
-  as->bundle.f3++;
+  // No combined operations on 2 and 5 channels
+  int res = 1 << (RES_ALES_SHIFT + als_idx);
+  check_resource(as, res);
+  if (!(res & RES_ALES_25)) {
+    E2kAlef2 syl;
+    syl.i = 0;
+    syl.fields.opce2 = opce2;
+    syl.fields.opc2 = opc2;
+    as->bundle.ales[als_idx] = syl.i;
+    as->bundle.f3++;
+  }
 }
 
-static int emit_alopf12(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
-                        uint16_t opc2, uint16_t opce2, uint64_t mask,
-                        uint32_t src2, uint32_t dst)
+static int emit_alopf12(ASMState *as, uint32_t spec, uint32_t cop,
+                        uint32_t opce, uint16_t opc2, uint16_t opce2,
+                        uint64_t mask, uint32_t src2, uint32_t dst)
 {
-  int als_idx = emit_alopf2(as, 0, cop, opce, mask, src2, dst);
+  int als_idx = emit_alopf2(as, spec, cop, opce, mask, src2, dst);
+  emit_alef2(as, opc2, opce2, als_idx);
+  return als_idx;
+}
+
+static int emit_alopf11(ASMState *as, uint32_t spec, uint32_t cop,
+                        uint16_t opc2, uint16_t opce2, uint64_t mask,
+                        uint32_t src1, uint32_t src2, uint32_t dst)
+{
+  int als_idx = emit_alopf1(as, spec, cop, mask, src1, src2, dst);
   emit_alef2(as, opc2, opce2, als_idx);
   return als_idx;
 }
