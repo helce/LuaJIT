@@ -587,6 +587,34 @@ static void asm_uref(ASMState *as, IRIns *ir)
   }
 }
 
+static void asm_strref(ASMState *as, IRIns *ir)
+{
+  RegSet allow = RSET_GPR;
+  Reg dest = ra_dest(as, ir, allow);
+  Reg base = ra_alloc1(as, ir->op1, allow);
+  IRIns *irr = IR(ir->op2);
+  int32_t ofs = sizeof(GCstr);
+  if (irref_isk(ir->op2)) {
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, base),
+                emit_src2(as, E2K_CONST, (intptr_t)(ofs + irr->i)),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  } else {
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, dest),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    Reg right = ra_alloc1(as, ir->op2, rset_exclude(allow, base));
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, base),
+                emit_src2(as, E2K_REG, right),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+}
+
 /* -- Loads and stores ---------------------------------------------------- */
 
 static uint32_t asm_loadins(ASMState *as, IRIns *ir, Reg dest)
@@ -1355,6 +1383,23 @@ static void asm_tail_prep(ASMState *as)
 
 /* -- Trace setup --------------------------------------------------------- */
 
+/* Ensure there are enough stack slots for call arguments. */
+static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
+{
+  uint32_t nslots = 0, nargs = CCI_XNARGS(ci);
+  if ((nargs > REGARG_NUMGPR) || ci->flags & CCI_VARARG) {
+    NIY
+    //IRRef args[CCI_NARGS_MAX*2];
+    //asm_collectargs(as, ir, ci, args);
+    //for (int i = 0; i < nargs; i++) {
+    //  if (ngpr > 0) ngpr-- else nslots +=2;
+    //}
+    //if (nslots > as->evenspill) /* Leave room for args in stack slots.
+    //  as->evenspill = nslots;
+  }
+  return REGSP_HINT(RID_RET);
+}
+
 /* Target-specific setup. */
 static void asm_setup_target(ASMState *as)
 {
@@ -1458,9 +1503,6 @@ static void asm_mulov(ASMState *as, IRIns *ir)
 static void asm_fref(ASMState *as, IRIns *ir)
 {  NIY }
 
-static void asm_strref(ASMState *as, IRIns *ir)
-{  NIY }
-
 static void asm_xload(ASMState *as, IRIns *ir)
 {  NIY }
 
@@ -1481,9 +1523,6 @@ static void asm_strto(ASMState *as, IRIns *ir)
 
 static void asm_callx(ASMState *as, IRIns *ir)
 {  NIY }
-
-static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
-{ NIY }
 
 static void asm_bufhdr_write(ASMState *as, Reg sb)
 { NIY }
