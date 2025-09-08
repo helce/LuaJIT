@@ -164,7 +164,8 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
 static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
 {
   uint32_t n, nargs = CCI_XNARGS(ci);
-  int32_t ofs = ci->flags & CCI_VARARG ? 0 : STACKARG_OFS;
+  uint32_t vararg = ci->flags & CCI_VARARG;
+  int32_t ofs = vararg ? 0 : STACKARG_OFS;
   Reg gpr = RID_NONE;
   Reg ctpr = ra_ctpr(as, RSET_CTPR);
   if (ci->func) {
@@ -182,7 +183,7 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
         lj_assertA(rset_test(as->freeset, gpr),
                    "arg%d not free", gpr-REGARG_FIRSTGPR); /*  Already evicted. */
         ra_leftov(as, gpr, ref);
-        if (ci->flags & CCI_VARARG) {
+        if (vararg) {
           NIY
         }
         gpr++;
@@ -195,6 +196,9 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
     } else {
       NIY
       if (gpr <= REGARG_LASTGPR) {
+        if (vararg) {
+          NIY
+        }
         gpr++;
       } else {
         ofs += 8;
@@ -601,15 +605,19 @@ static void asm_strref(ASMState *as, IRIns *ir)
                 emit_dst(as, E2K_REG, dest));
     as->mcp = emit_bundle_finalize(as, as->mcp);
   } else {
+    Reg right = ra_alloc1(as, ir->op2, rset_clear(allow, base));
     emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
                 emit_src1(as, E2K_REG, dest),
-                emit_src2(as, E2K_CONST, ofs),
+                emit_src2(as, E2K_REG, right),
                 emit_dst(as, E2K_REG, dest));
     as->mcp = emit_bundle_finalize(as, as->mcp);
-    Reg right = ra_alloc1(as, ir->op2, rset_exclude(allow, base));
+    emit_alopf1(as, 0, OPC_SXT, RES_ALS_012345,
+                emit_src1(as, E2K_CONST, SXT_WS),
+                emit_src2(as, E2K_REG, right),
+                emit_dst(as, E2K_REG, right));
     emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
                 emit_src1(as, E2K_REG, base),
-                emit_src2(as, E2K_REG, right),
+                emit_src2(as, E2K_CONST, ofs),
                 emit_dst(as, E2K_REG, dest));
     as->mcp = emit_bundle_finalize(as, as->mcp);
   }
