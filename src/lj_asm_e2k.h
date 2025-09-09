@@ -661,15 +661,42 @@ static void asm_fload(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg base = RID_NONE;
+  uint32_t cop = asm_loadins(as, ir, dest);
   int32_t ofs = 0;
   if (ir->op1 == REF_NIL) { /* FLOAD from GG_State with offset. */
     ofs = (int32_t)(ir->op2 << 2) - GG_OFS(dispatch);
     base = RID_DISPATCH;
+  } else if (irref_isk(ir->op1)) {
+    IRIns *op1 = IR(ir->op1);
+    if (op1->o == IR_KPTR || op1->o == IR_KKPTR) {
+      ofs = field_ofs[ir->op2] + dispofs(as, ir_kptr(op1));
+      base = RID_DISPATCH;
+    }
   } else {
     ofs = field_ofs[ir->op2];
     base = ra_alloc1(as, ir->op1, RSET_GPR);
   }
+  emit_alopf1(as, 0, cop, RES_ALS_0235,
+              emit_src1(as, E2K_REG, base),
+              emit_src2(as, E2K_CONST, ofs),
+              emit_dst(as, E2K_REG, dest));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
+static void asm_xload(ASMState *as, IRIns *ir)
+{
+  IRRef ref = ir->op1;
+  IRIns *lir = IR(ref);
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg base = ra_alloc1(as, ref, RSET_GPR);
   uint32_t cop = asm_loadins(as, ir, dest);
+  int32_t ofs = 0;
+  if (ra_noreg(lir->r) && canfuse(as, lir)) {
+    if ((lir->o == IR_ADD) && (irref_isk(lir->op2))) {
+      ref = lir->op1;
+      ofs = get_kval(as, lir->op2);
+    }
+  }
   emit_alopf1(as, 0, cop, RES_ALS_0235,
               emit_src1(as, E2K_REG, base),
               emit_src2(as, E2K_CONST, ofs),
@@ -1544,9 +1571,6 @@ static void asm_mulov(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_fref(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_xload(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_fstore(ASMState *as, IRIns *ir)
