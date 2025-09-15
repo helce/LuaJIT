@@ -135,7 +135,7 @@ static LJ_AINLINE uint32_t *exitstub_trace_addr_(uint32_t *p, uint32_t exitno)
 
 /* -- e2k bundle ---------------------------------------------------------- */
 
-enum {
+typedef enum E2kResourceMask {
   /* HS */
   RES_ALS0    = 0x0001,
   RES_ALS1    = 0x0002,
@@ -193,7 +193,7 @@ enum {
   RES_LTS_SHIFT  = 14,
   RES_ALES_SHIFT = 21,
   RES_CDS_SHIFT  = 28,
-};
+} E2kResourceMask;
 
 typedef struct {
   uint8_t f1;
@@ -213,18 +213,6 @@ typedef struct {
 //  uint32_t pls[3];
   uint16_t cds[6];
 } E2kBundle;
-
-typedef struct {
-  int type;
-  union {
-    uint8_t u4;
-    uint8_t u5;
-    uint16_t u16;
-    uint32_t u32;
-    uint64_t u64;
-    uint32_t regn;
-  } value;
-} E2kOperand;
 
 /* -- Instructions -------------------------------------------------------- */
 
@@ -359,7 +347,7 @@ typedef enum {
   E2K_REG_PRED = 2048,
   E2K_REG_CTPR = 4096,
   E2K_REG_RARG = 8192
-} E2kOp;
+} E2kOpT;
 
 #define REG_R 1
 #define REG_B 2
@@ -378,60 +366,23 @@ typedef enum {
 #define OPC_IBRANCH 0x0
 #define OPC_CALL    0x5
 /* non-combined operations short */
-#define OPC_ANDS   0x00
-#define OPC_ANDD   0x01
-#define OPC_ANDNS  0x02
-#define OPC_ANDND  0x03
-#define OPC_ORS    0x04
-#define OPC_ORD    0x05
-#define OPC_XORS   0x08
-#define OPC_XORD   0x09
-#define OPC_XORNS  0x0a
-#define OPC_XORND  0x0b
-#define OPC_SXT    0x0c
-#define OPC_ADDS   0x10
-#define OPC_ADDD   0x11
-#define OPC_SUBS   0x12
-#define OPC_SUBD   0x13
-#define OPC_SCLS   0x14
-#define OPC_SCLD   0x15
-#define OPC_SCRS   0x16
-#define OPC_SCRD   0x17
-#define OPC_SHLS   0x18
-#define OPC_SHLD   0x19
-#define OPC_SHRS   0x1a
-#define OPC_SHRD   0x1b
-#define OPC_SARS   0x1c
-#define OPC_SARD   0x1d
-#define OPC_GETFD  0x1f
 #define OPC_CMPSB  0x20
 #define OPC_CMPDB  0x21
 #define OPC_STB    0x24
 #define OPC_STH    0x25
 #define OPC_STW    0x26
 #define OPC_STD    0x27
-#define OPC_FADDS  0x30
-#define OPC_FADDD  0x31
-#define OPC_FSUBD  0x33
-#define OPC_FMULD  0x39
 #define OPC_FSTOS  0x3c
 #define OPC_FDTOD  0x3d
 #define OPC_FSTOD  0x3e
 #define OPC_FDTOS  0x3f
 #define OPC_MOVTD  0x61
-#define OPC_LDB    0x64
-#define OPC_LDH    0x65
-#define OPC_LDW    0x66
-#define OPC_LDD    0x67
 /* non-combined operations long */
 #define OPC_MULS    0x20
 #define OPC_MULD    0x21
 #define OPC_FCMPDB  0x2f
-#define OPC_FDIVD   0x49
 #define OPC_FSQRTID 0x4d
-#define OPC_FSQRTTD 0x51
 #define OPC_GETSP   0x58
-#define OPC_FDTOIFD 0x6d
 /* integer comparation opce */
 #define CMPI_O     0x0
 #define CMPI_B     0x1
@@ -485,5 +436,77 @@ typedef enum {
 #define E2K_NOP     0x0
 /* opc2 extension */
 #define OPC2_EXT    0x01
+
+typedef struct E2kOp {
+  char *name;
+  E2kResourceMask mask;
+  uint32_t opc;
+  uint32_t opc2;
+  uint32_t opce2;
+  // in_latency?
+  // out_latency?
+} E2kOp;
+
+enum {
+  E2K_ANDS,  E2K_ANDD, E2K_ANDNS, E2K_ANDND, E2K_ORS,   E2K_ORD,  E2K_ORNS,
+  E2K_ORND,  E2K_XORS, E2K_XORD,  E2K_XORNS, E2K_XORND, E2K_SXT,  E2K_ADDS,
+  E2K_ADDD,  E2K_SUBS, E2K_SUBD,  E2K_SCLS,  E2K_SCLD,  E2K_SCRS, E2K_SCRD,
+  E2K_SHLS,  E2K_SHLD, E2K_SHRS,  E2K_SHRD,  E2K_SARS,  E2K_SARD, E2K_GETFD,
+  E2K_FADDS,
+  E2K_FADDD,
+  E2K_FSUBD,
+  E2K_FMULD,
+  E2K_LDB,
+  E2K_LDH,
+  E2K_LDW,
+  E2K_LDD,
+  E2K_FDIVD,
+  E2K_FSQRTTD,
+  E2K_FDTOIFD
+};
+
+static const E2kOp e2kop[] = {
+/*  name       resources       opc   opc2  opce */
+/* non-combined operations short */
+  { "ANDs",    RES_ALS_012345, 0x00, 0,    0    },
+  { "ANDd",    RES_ALS_012345, 0x01, 0,    0    },
+  { "ANDNs",   RES_ALS_012345, 0x02, 0,    0    },
+  { "ANDNd",   RES_ALS_012345, 0x03, 0,    0    },
+  { "ORs",     RES_ALS_012345, 0x04, 0,    0    },
+  { "ORd",     RES_ALS_012345, 0x05, 0,    0    },
+  { "ORNs",    RES_ALS_012345, 0x06, 0,    0    },
+  { "ORNd",    RES_ALS_012345, 0x07, 0,    0    },
+  { "XORs",    RES_ALS_012345, 0x08, 0,    0    },
+  { "XORd",    RES_ALS_012345, 0x09, 0,    0    },
+  { "XORNs",   RES_ALS_012345, 0x0a, 0,    0    },
+  { "XORNd",   RES_ALS_012345, 0x0b, 0,    0    },
+  { "SXT",     RES_ALS_012345, 0x0c, 0,    0    },
+  { "ADDs",    RES_ALS_012345, 0x10, 0,    0    },
+  { "ADDd",    RES_ALS_012345, 0x11, 0,    0    },
+  { "SUBs",    RES_ALS_012345, 0x12, 0,    0    },
+  { "SUBd",    RES_ALS_012345, 0x13, 0,    0    },
+  { "SCLs",    RES_ALS_012345, 0x14, 0,    0    },
+  { "SCLd",    RES_ALS_012345, 0x15, 0,    0    },
+  { "SCRs",    RES_ALS_012345, 0x16, 0,    0    },
+  { "SCRd",    RES_ALS_012345, 0x17, 0,    0    },
+  { "SHLs",    RES_ALS_012345, 0x18, 0,    0    },
+  { "SHLd",    RES_ALS_012345, 0x19, 0,    0    },
+  { "SHRs",    RES_ALS_012345, 0x1a, 0,    0    },
+  { "SHRd",    RES_ALS_012345, 0x1b, 0,    0    },
+  { "SARs",    RES_ALS_012345, 0x1c, 0,    0    },
+  { "SARd",    RES_ALS_012345, 0x1d, 0,    0    },
+  { "GETFd",   RES_ALS_012345, 0x1f, 0,    0    },
+  { "FADDs",   RES_ALS_0134,   0x30, 0,    0    },
+  { "FADDd",   RES_ALS_0134,   0x31, 0,    0    },
+  { "FSUBd",   RES_ALS_0134,   0x33, 0,    0    },
+  { "FMULd",   RES_ALS_0134,   0x39, 0,    0    },
+  { "LDb",     RES_ALS_0134,   0x64, 0,    0    },
+  { "LDh",     RES_ALS_0134,   0x65, 0,    0    },
+  { "LDw",     RES_ALS_0235,   0x66, 0,    0    },
+  { "LDd",     RES_ALS_0235,   0x67, 0,    0    },
+  { "FDIVd",   RES_ALS5,       0x49, 0x01, 0xc0 },
+  { "FSQRTTd", RES_ALS5,       0x51, 0x01, 0xc0 },
+  { "FDTOIFd", RES_ALS_0134,   0x6d, 0x01, 0xc0 },
+};
 
 #endif
