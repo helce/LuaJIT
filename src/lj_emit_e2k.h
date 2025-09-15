@@ -604,6 +604,15 @@ static void emit_jmp(ASMState *as,  MCode *target)
 
 /* -- Emit generic operations --------------------------------------------- */
 
+/* argument extension */
+static void emit_ext(ASMState *as, Reg dest, Reg src, int ext) {
+  emit_alopf1(as, 0, OPC_SXT, RES_ALS_012345,
+              emit_src1(as, E2K_CONST, ext),
+              emit_src2(as, E2K_REG, src),
+              emit_dst(as, E2K_REG, dest));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
 /* Generic move between two regs. */
 static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
 {

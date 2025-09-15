@@ -1157,6 +1157,10 @@ static void asm_snew(ASMState *as, IRIns *ir)
   as->gcsteps++;
   asm_setupresult(as, ir, ci);  /* GCstr * */
   asm_gencall(as, ci, args);
+#if LJ_TARGET_E2K
+  IRIns *irl = IR(ir->op2);
+  emit_ext(as, irl->r, irl->r, SXT_WZ);
+#endif
 }
 
 static void asm_tnew(ASMState *as, IRIns *ir)
