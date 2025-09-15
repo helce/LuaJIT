@@ -962,6 +962,9 @@ static void asm_fload(ASMState *as, IRIns *ir)
     if (op1->o == IR_KPTR || op1->o == IR_KKPTR) {
       ofs = field_ofs[ir->op2] + dispofs(as, ir_kptr(op1));
       base = RID_DISPATCH;
+    } else {
+      ofs = field_ofs[ir->op2];
+      base = ra_alloc1(as, ir->op1, RSET_GPR);
     }
   } else {
     ofs = field_ofs[ir->op2];
