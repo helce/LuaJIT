@@ -479,9 +479,283 @@ static void asm_aref(ASMState *as, IRIns *ir)
   }
 }
 
+/* Inlined hash lookup. Specialized for key type and for const keys.
+** The equivalent C code is:
+**   Node *n = hashkey(t, key);
+**   do {
+**     if (lj_obj_equal(&n->key, key)) return &n->val;
+**   } while ((n = nextnode(n)));
+**   return niltv(L);
+*/
 static void asm_href(ASMState *as, IRIns *ir, IROp merge)
 {
-  NIY
+  RegSet allow = RSET_GPR;
+  int destused = ra_used(ir);
+  Reg dest = ra_dest(as, ir, allow);
+  Reg tab = ra_alloc1(as, ir->op1, rset_clear(allow, dest));
+  Reg key = RID_NONE, tmp1 = RID_NONE, tmp2 = RID_NONE;
+  Reg pred3 = RID_PRED3, pred2 = RID_PRED2, pred1 = RID_PRED1;
+  IRRef refkey = ir->op2;
+  IRIns *irkey = IR(refkey);
+  int isk = irref_isk(ir->op2);
+  IRType1 kt = irkey->t;
+  uint32_t khash;
+  MCLabel l_end, l_loop, l_next, l_exit;
+  if (!isk) {
+    key = ra_alloc1(as, refkey, rset_clear(allow, tab));
+    tmp1 = ra_scratch(as, rset_clear(allow, key));
+    allow = rset_clear(allow, tmp1);
+  }
+
+  /* Key not found in chain: jump to exit (if merged or load niltv. */
+  l_end = emit_label(as);
+  l_exit = asm_exitstub_addr(as);
+  if (merge == IR_NE) {
+    /* unconditional asm_guard */
+    emit_ibranch(as, (ptrdiff_t)((void *)l_exit -
+                                 (void *)as->mcp), 0, 0);
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_CONST, 0),
+                emit_lts(as, E2K_CONST32, as->snapno) | 0xd8,
+                emit_dst(as, E2K_REG, RID_TMP));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  } else if (destused) {
+    emit_loada(as, dest, niltvg(J2G(as->J)));
+  }
+
+  /* Follow hash chain until the end. */
+  // TODO get dest here
+  emit_ibranch(as, 0, pred3, 1);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  l_loop = as->mcp + 2;
+  emit_alopf7(as, 0, OPC_CMPDB, CMPI_EQ, RES_ALS_0134,
+              emit_src1(as, E2K_REG, dest),
+              emit_src2(as, E2K_CONST, 0),
+              emit_pdst(as, E2K_REG_PRED, pred3));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+//  emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+//              emit_src1(as, E2K_REG, tmp1),
+//              emit_src2(as, E2K_CONST, 0),
+//              emit_dst(as, E2K_REG, dest));
+//  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+              emit_src1(as, E2K_REG, dest),
+              emit_src2(as, E2K_CONST, (intptr_t)offsetof(Node, next)),
+              emit_dst(as, E2K_REG, dest));
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  l_next = emit_label(as);
+
+  /* Type  and value comparison. */
+  if (merge == IR_EQ) l_end = l_exit;
+  emit_ibranch(as, (ptrdiff_t)((void *)l_end -
+                               (void *)as->mcp), pred2, 0);
+  as->mcp = emit_bundle_finalize(as, as->mcp);
+  if (merge == IR_EQ) {
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_CONST, 0),
+                emit_lts(as, E2K_CONST32, as->snapno) | 0xd8,
+                emit_dst(as, E2K_REG, RID_TMP));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+// else {
+//    emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+//                emit_src1(as, E2K_REG, dest),
+//                emit_src2(as, E2K_CONST, (intptr_t)offsetof(Node, next)),
+//                emit_dst(as, E2K_REG, tmp1));
+//    as->mcp = emit_bundle_finalize(as, as->mcp);
+//  }
+
+  if (irt_isnum(kt)) {
+    emit_alopf7(as, 0, OPC_FCMPDB, CMPF_EQ, RES_ALS_0134,
+                emit_src1(as, E2K_REG, tmp1),
+                emit_src2(as, E2K_REG, key),
+                emit_pdst(as, E2K_REG_PRED, pred2));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_ibranch(as, (ptrdiff_t)((void *)l_next -
+                                 (void *)as->mcp), pred1, 0);
+    emit_alopf7(as, 0, OPC_CMPSB, CMPI_B, RES_ALS_0134,
+                emit_src1(as, E2K_REG, tmp2),
+                emit_src2(as, E2K_CONST, (intptr_t)LJ_TISNUM),
+                emit_pdst(as, E2K_REG_PRED, pred1));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_SARD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, tmp1),
+                emit_src2(as, E2K_CONST, 47),
+                emit_dst(as, E2K_REG, tmp2));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+                emit_src1(as, E2K_REG, dest),
+                emit_src2(as, E2K_CONST, (intptr_t)offsetof(Node, key.u64)),
+                emit_dst(as, E2K_REG, tmp1));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  } else {
+    uint32_t cmp_src2 = 0;
+    if (isk) {
+      intptr_t k = 0;
+      if (irt_isaddr(kt)) {
+        k = (intptr_t)irt_toitype(kt) << 47 | irkey[1].tv.u64;
+      } else {
+        lj_assertA(irt_ispri(kt) && !irt_isnil(kt), "bad HREF key type");
+        k = ~((intptr_t)~irt_toitype(kt) << 47);
+      }
+      cmp_src2 = emit_src2(as, E2K_CONST, k);
+    } else {
+      tmp2 = ra_scratch(as, allow);
+      cmp_src2 = emit_src2(as, E2K_REG, tmp2);
+    }
+    emit_alopf7(as, 0, OPC_CMPDB, CMPI_EQ, RES_ALS_0134,
+                emit_src1(as, E2K_REG, tmp1),
+                cmp_src2,
+                emit_pdst(as, E2K_REG_PRED, pred2));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+                emit_src1(as, E2K_REG, dest),
+                emit_src2(as, E2K_CONST, (intptr_t)offsetof(Node, key.u64)),
+                emit_dst(as, E2K_REG, tmp1));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+  uint32_t disp = (ptrdiff_t)((void *)as->mcp - (void *)l_loop + 3*4) >> 3;
+  *l_loop = disp & 0xfffffff;
+  if (!isk && irt_isaddr(kt)) {
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, key),
+                emit_src2(as, E2K_CONST, (intptr_t)irt_toitype(kt) << 47),
+                emit_dst(as, E2K_REG, tmp2));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
+
+  /* Load main position relative to tab->node into dest. */
+  khash = isk ? ir_khash(as, irkey) : 1;
+  if (khash == 0) {
+    emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+                emit_src1(as, E2K_REG, tab),
+                emit_src2(as, E2K_CONST, (intptr_t)offsetof(GCtab, node)),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  } else {
+    emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                emit_src1(as, E2K_REG, dest),
+                emit_src2(as, E2K_REG, tmp1),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_SXT, RES_ALS_012345,
+                emit_src1(as, E2K_CONST, SXT_WS),
+                emit_src2(as, E2K_REG, tmp1),
+                emit_dst(as, E2K_REG, tmp1));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    lj_assertA(sizeof(Node) == 24, "bad Node size");
+    emit_alopf1(as, 0, OPC_SUBS, RES_ALS_012345,
+                emit_src1(as, E2K_REG, tmp2),
+                emit_src2(as, E2K_REG, tmp1),
+                emit_dst(as, E2K_REG, tmp1));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_SHLS, RES_ALS_012345,
+                emit_src1(as, E2K_REG, tmp1),
+                emit_src2(as, E2K_CONST, 3),
+                emit_dst(as, E2K_REG, tmp1));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_SHLS, RES_ALS_012345,
+                emit_src1(as, E2K_REG, tmp1),
+                emit_src2(as, E2K_CONST, 5),
+                emit_dst(as, E2K_REG, tmp2));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_ANDS, RES_ALS_012345,
+                emit_src1(as, E2K_REG, tmp2),
+                isk ? emit_src2(as, E2K_CONST, khash) :
+                      emit_src2(as, E2K_REG, tmp1),
+                emit_dst(as, E2K_REG, tmp1));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_LDD, RES_ALS_0235,
+                emit_src1(as, E2K_REG, tab),
+                emit_src2(as, E2K_CONST, (intptr_t)offsetof(GCtab, node)),
+                emit_dst(as, E2K_REG, dest));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf1(as, 0, OPC_LDW, RES_ALS_0235,
+                emit_src1(as, E2K_REG, tab),
+                emit_src2(as, E2K_CONST, (intptr_t)offsetof(GCtab, hmask)),
+                emit_dst(as, E2K_REG, tmp2));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+    if (isk) {
+      /* Nothing to do */
+    } else if (irt_isstr(kt)) {
+      emit_alopf1(as, 0, OPC_LDW, RES_ALS_0235,
+                  emit_src1(as, E2K_REG, key),
+                  emit_src2(as, E2K_CONST, (intptr_t)offsetof(GCstr, sid)),
+                  emit_dst(as, E2K_REG, tmp1));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+    } else { /*  Must match with hash*() in lj_tab.c. */
+      emit_alopf1(as, 0, OPC_SUBS, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, tmp1),
+                  emit_src2(as, E2K_REG, tmp2),
+                  emit_dst(as, E2K_REG, tmp1));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+      emit_alopf1(as, 0, OPC_SCRS, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, tmp2),
+                  emit_src2(as, E2K_CONST, HASH_ROT3),
+                  emit_dst(as, E2K_REG, tmp2));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+      emit_alopf1(as, 0, OPC_XORS, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, tmp1),
+                  emit_src2(as, E2K_REG, tmp2),
+                  emit_dst(as, E2K_REG, tmp1));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+      emit_alopf1(as, 0, OPC_SCRS, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, tmp1),
+                  emit_src2(as, E2K_CONST, HASH_ROT2),
+                  emit_dst(as, E2K_REG, tmp1));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+      emit_alopf1(as, 0, OPC_SUBS, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, tmp2),
+                  emit_src2(as, E2K_REG, dest),
+                  emit_dst(as, E2K_REG, tmp2));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+      emit_alopf1(as, 0, OPC_XORS, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, tmp2),
+                  emit_src2(as, E2K_REG, tmp1),
+                  emit_dst(as, E2K_REG, tmp2));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+      emit_alopf1(as, 0, OPC_SCRS, RES_ALS_012345,
+                  emit_src1(as, E2K_REG, tmp1),
+                  emit_src2(as, E2K_CONST, HASH_ROT1),
+                  emit_dst(as, E2K_REG, dest));
+      as->mcp = emit_bundle_finalize(as, as->mcp);
+      if (irt_isnum(kt)) {
+        emit_alopf1(as, 0, OPC_ADDS, RES_ALS_012345,
+                    emit_src1(as, E2K_REG, tmp1),
+                    emit_src2(as, E2K_REG, tmp1),
+                    emit_dst(as, E2K_REG, tmp1));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+        emit_alopf1(as, 0, OPC_SHRD, RES_ALS_012345,
+                    emit_src1(as, E2K_REG, key),
+                    emit_src2(as, E2K_CONST, 32),
+                    emit_dst(as, E2K_REG, tmp1));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+        emit_alopf1(as, 0, OPC_ADDS, RES_ALS_012345,
+                    emit_src1(as, E2K_REG, key),
+                    emit_src2(as, E2K_CONST, 0),
+                    emit_dst(as, E2K_REG, tmp2));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+      } else {
+        checkmclim(as);
+        emit_alopf1(as, 0, OPC_SHRD, RES_ALS_012345,
+                    emit_src1(as, E2K_REG, tmp1),
+                    emit_src2(as, E2K_CONST, 32),
+                    emit_dst(as, E2K_REG, tmp1));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+        emit_alopf1(as, 0, OPC_ADDS, RES_ALS_012345,
+                    emit_src1(as, E2K_REG, key),
+                    emit_src2(as, E2K_CONST, 0),
+                    emit_dst(as, E2K_REG, tmp2));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+        emit_alopf1(as, 0, OPC_ADDD, RES_ALS_012345,
+                    emit_src1(as, E2K_REG, key),
+                    emit_src2(as, E2K_CONST, (intptr_t)irt_toitype(kt) << 47),
+                    emit_dst(as, E2K_REG, tmp1));
+        as->mcp = emit_bundle_finalize(as, as->mcp);
+      }
+    }
+  }
 }
 
 static void asm_hrefk(ASMState *as, IRIns *ir)
@@ -591,6 +865,12 @@ static void asm_uref(ASMState *as, IRIns *ir)
   }
 }
 
+static void asm_fref(ASMState *as, IRIns *ir)
+{
+  UNUSED(as); UNUSED(ir);
+  lj_assertA(!ra_used(ir), "unfused FREF");
+}
+
 static void asm_strref(ASMState *as, IRIns *ir)
 {
   RegSet allow = RSET_GPR;
@@ -627,7 +907,6 @@ static void asm_strref(ASMState *as, IRIns *ir)
 
 static uint32_t asm_loadins(ASMState *as, IRIns *ir, Reg dest)
 {
-  UNUSED(as);
   uint32_t sxt_cop = 0, need_sxt = 0, cop = 0;
   switch (irt_type(ir->t)) {
   case IRT_I8:
@@ -657,6 +936,18 @@ static uint32_t asm_loadins(ASMState *as, IRIns *ir, Reg dest)
   return cop;
 }
 
+static uint32_t asm_storeins(ASMState *as, IRIns *ir)
+{
+  UNUSED(as);
+  switch (irt_type(ir->t)) {
+  case IRT_I8: case IRT_U8: return OPC_STB;
+  case IRT_I16: case IRT_U16: return OPC_STH;
+  default:
+    if (irt_is64(ir->t)) return OPC_STW;
+    else return OPC_STD;
+  }
+}
+
 static void asm_fload(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, RSET_GPR);
@@ -681,6 +972,25 @@ static void asm_fload(ASMState *as, IRIns *ir)
               emit_src2(as, E2K_CONST, ofs),
               emit_dst(as, E2K_REG, dest));
   as->mcp = emit_bundle_finalize(as, as->mcp);
+}
+
+static void asm_fstore(ASMState *as, IRIns *ir)
+{
+  if (ir->r != RID_SINK) {
+    IRIns *irf = IR(ir->op1);
+    Reg src = irref_isk(ir->op2) ?
+              ra_allock(as, get_kval(as, ir->op2), RSET_GPR) :
+              ra_alloc1(as, ir->op2, RSET_GPR);
+    Reg idx = ra_alloc1(as, irf->op1, rset_exclude(RSET_GPR, src));
+    lj_assertA(!irt_isfp(ir->t), "bad FP FSTORE");
+    int32_t ofs = field_ofs[irf->op2];
+    uint32_t cop = asm_storeins(as, ir);
+    emit_alopf3(as, 0, cop, RES_ALS_25,
+                emit_src1(as, E2K_REG, idx),
+                emit_src2(as, E2K_CONST, ofs),
+                emit_src3(as, E2K_REG, src));
+    as->mcp = emit_bundle_finalize(as, as->mcp);
+  }
 }
 
 static void asm_xload(ASMState *as, IRIns *ir)
@@ -1568,12 +1878,6 @@ static void asm_max(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_mulov(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_fref(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_fstore(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_xstore(ASMState *as, IRIns *ir)
