@@ -4713,7 +4713,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ldd       0, DISPATCH, DISPATCH_GL(jit_base), BASE
     | addd      1, 0x0, 0x0, T8
-    | ldd       2, STACK, STACK_TMP, T7
+    | ldw       2, STACK, STACK_TMP, T7
     | addd      3, 0x0, ~LJ_VMST_EXIT, T9
     | --
     | stdsm     2, T1, 0x0, r0
