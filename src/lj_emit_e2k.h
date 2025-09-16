@@ -360,21 +360,23 @@ static uint32_t emit_pdst(ASMState *as, E2kOpT type, intptr_t pred)
   }
 }
 
-static int emit_alopf7(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
-                        uint64_t mask, uint32_t src1, uint32_t src2, uint32_t pred)
+static int emit_alopf7(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
+                       uint32_t src1, uint32_t src2, uint32_t pred)
 {
+  uint64_t mask = e2kop[op].mask;
   int als_idx = get_sylidx(as, mask, RES_ALS_SHIFT);
   E2kAlopf7 syl;
   syl.i = 0;
   syl.fields.pdst = pred;
-  syl.fields.cmpopce = opce;
+  syl.fields.cmpopce = e2kop[op].opce;
   syl.fields.src2 = src2;
   syl.fields.src1 = src1;
-  syl.fields.cop = cop;
+  syl.fields.cop = e2kop[op].opc;
   syl.fields.spec = spec;
 
   as->bundle.als[als_idx] = syl.i;
   as->bundle.f1++;
+  if (p) *p = emit_bundle_finalize(as, *p);
   return als_idx;
 }
 
@@ -474,6 +476,11 @@ static int emit_alopf11(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
 #define RSRC2(src2) emit_src2(as, E2K_REG, src2)
 #define RSRC3(src3) emit_src3(as, E2K_REG, src3)
 #define RDST(dst)  emit_dst(as, E2K_REG, dst)
+#define PDST(pred) emit_pdst(as, E2K_REG_PRED, pred)
+#define emit_alopf7_rr(as, spec, op, src1, src2, pred, p) \
+  emit_alopf7(as, p, spec, op, RSRC1(src1), RSRC2(src2), PDST(pred))
+#define emit_alopf7_ri(as, spec, op, src1, src2, pred, p) \
+  emit_alopf7(as, p, spec, op, RSRC1(src1), ISRC2(src2), PDST(pred))
 #define emit_alopf3_ri(as, spec, op, src1, src2, src3, p) \
   emit_alopf3(as, p, spec, op, RSRC1(src1), ISRC2(src2), RSRC3(src3))
 #define emit_alopf12_i(as, spec, op, src2, dst, p) \

@@ -365,31 +365,9 @@ typedef enum {
 #define OPC_DISP    0x0
 #define OPC_IBRANCH 0x0
 #define OPC_CALL    0x5
-/* non-combined operations short */
-#define OPC_CMPSB  0x20
-#define OPC_CMPDB  0x21
 /* non-combined operations long */
 #define OPC_MULS    0x20
 #define OPC_MULD    0x21
-#define OPC_FCMPDB  0x2f
-/* integer comparation opce */
-#define CMPI_O     0x0
-#define CMPI_B     0x1
-#define CMPI_EQ    0x2
-#define CMPI_BE    0x3
-#define CMPI_S     0x4
-#define CMPI_P     0x5
-#define CMPI_LT    0x6
-#define CMPI_LE    0x7
-/* fp comporation opce */
-#define CMPF_EQ    0x0
-#define CMPF_LT    0x1
-#define CMPF_LE    0x2
-#define CMPF_UO    0x3
-#define CMPF_NE    0x4
-#define CMPF_NLT   0x5
-#define CMPF_NLE   0x6
-#define CMPF_OD    0x7
 /* default specificator opce */
 #define OPCE_NONE  0xc0
 /* sxt codes */
@@ -416,38 +394,44 @@ typedef struct E2kOp {
 } E2kOp;
 
 enum {
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
   E2K_ANDS,     E2K_ANDD,     E2K_ANDNS,    E2K_ANDND,
   E2K_ORS,      E2K_ORD,      E2K_ORNS,     E2K_ORND,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
   E2K_XORS,     E2K_XORD,     E2K_XORNS,    E2K_XORND,
   E2K_SXT,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
   E2K_ADDS,     E2K_ADDD,     E2K_SUBS,     E2K_SUBD,
   E2K_SCLS,     E2K_SCLD,     E2K_SCRS,     E2K_SCRD,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
   E2K_SHLS,     E2K_SHLD,     E2K_SHRS,     E2K_SHRD,
   E2K_SARS,     E2K_SARD,     E2K_GETFS,    E2K_GETFD,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
+  E2K_CMPBSB,   E2K_CMPESB,   E2K_CMPBESB,  E2K_CMPLSB,
+  E2K_CMPLESB,  E2K_CMPBDB,   E2K_CMPEDB,   E2K_CMPBEDB,
+  E2K_CMPLDB,   E2K_CMPLEDB,
   E2K_STB,      E2K_STH,      E2K_STW,      E2K_STD,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
+  E2K_FCMPEQDB, E2K_FCMPLTDB, E2K_FCMPLEDB, E2K_FCMPNLTDB,
+  E2K_FCMPNLEDB,
+  /* ------------------------------------------------- */
   E2K_FADDS,    E2K_FADDD,    E2K_FSUBS,    E2K_FSUBD,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
   E2K_FMULS,    E2K_FMULD,    E2K_FSTOISTR, E2K_ISTOFS,
   E2K_FDTOIDTR, E2K_IDTOFD,   E2K_FSTOIDTR, E2K_ISTOFD,
   E2K_FSTOFD,   E2K_FDTOISTR, E2K_IDTOFS,   E2K_FDTOFS,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
   E2K_MOVTD,    E2K_LDB,      E2K_LDH,      E2K_LDW,
   E2K_LDD,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
   E2K_FDIVD,    E2K_FSQRTID,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
   E2K_FSQRTTD,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
   E2K_GETSP,
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
   E2K_FDTOIFD
-  /* ----------------------------------------------- */
+  /* ------------------------------------------------- */
 };
 
 static const E2kOp e2kop[] = {
@@ -486,10 +470,26 @@ static const E2kOp e2kop[] = {
   { "GETFs",    RES_ALS_012345, 0x1e, 0,    0,    0    },
   { "GETFd",    RES_ALS_012345, 0x1f, 0,    0,    0    },
 /* --------------------------------------------------- */
+  { "CMPBsb",   RES_ALS_0134,   0x20, 0x1,  0,    0    },
+  { "CMPEsb",   RES_ALS_0134,   0x20, 0x2,  0,    0    },
+  { "CMPBEsb",  RES_ALS_0134,   0x20, 0x3,  0,    0    },
+  { "CMPLsb",   RES_ALS_0134,   0x20, 0x6,  0,    0    },
+  { "CMPLEsb",  RES_ALS_0134,   0x20, 0x7,  0,    0    },
+  { "CMPBdb",   RES_ALS_0134,   0x21, 0x1,  0,    0    },
+  { "CMPEdb",   RES_ALS_0134,   0x21, 0x2,  0,    0    },
+  { "CMPBEdb",  RES_ALS_0134,   0x21, 0x3,  0,    0    },
+  { "CMPLdb",   RES_ALS_0134,   0x21, 0x6,  0,    0    },
+  { "CMPLEdb",  RES_ALS_0134,   0x21, 0x7,  0,    0    },
   { "STb",      RES_ALS_25,     0x24, 0,    0,    0    },
   { "STh",      RES_ALS_25,     0x25, 0,    0,    0    },
   { "STw",      RES_ALS_25,     0x26, 0,    0,    0    },
   { "STd",      RES_ALS_25,     0x27, 0,    0,    0    },
+/* --------------------------------------------------- */
+  { "FCMPEQdb", RES_ALS_0134,   0x2f, 0x0,  0,    0    },
+  { "FCMPLTdb", RES_ALS_0134,   0x2f, 0x1,  0,    0    },
+  { "FCMPLEdb", RES_ALS_0134,   0x2f, 0x2,  0,    0    },
+  { "FCMPNLTdb",RES_ALS_0134,   0x2f, 0x5,  0,    0    },
+  { "FCMPNLEdb",RES_ALS_0134,   0x2f, 0x6,  0,    0    },
 /* --------------------------------------------------- */
   { "FADDs",    RES_ALS_0134,   0x30, 0,    0,    0    },
   { "FADDd",    RES_ALS_0134,   0x31, 0,    0,    0    },
