@@ -368,10 +368,6 @@ typedef enum {
 /* non-combined operations short */
 #define OPC_CMPSB  0x20
 #define OPC_CMPDB  0x21
-#define OPC_STB    0x24
-#define OPC_STH    0x25
-#define OPC_STW    0x26
-#define OPC_STD    0x27
 /* non-combined operations long */
 #define OPC_MULS    0x20
 #define OPC_MULD    0x21
@@ -420,36 +416,38 @@ typedef struct E2kOp {
 } E2kOp;
 
 enum {
-  /* ---------------------------------------------- */
-  E2K_ANDS,   E2K_ANDD,     E2K_ANDNS,    E2K_ANDND,
-  E2K_ORS,      E2K_ORD,    E2K_ORNS,     E2K_ORND,
-  /* ---------------------------------------------- */
-  E2K_XORS,   E2K_XORD,     E2K_XORNS,    E2K_XORND,
+  /* ----------------------------------------------- */
+  E2K_ANDS,     E2K_ANDD,     E2K_ANDNS,    E2K_ANDND,
+  E2K_ORS,      E2K_ORD,      E2K_ORNS,     E2K_ORND,
+  /* ----------------------------------------------- */
+  E2K_XORS,     E2K_XORD,     E2K_XORNS,    E2K_XORND,
   E2K_SXT,
-  /* ---------------------------------------------- */
-  E2K_ADDS,   E2K_ADDD,     E2K_SUBS,     E2K_SUBD,
-  E2K_SCLS,     E2K_SCLD,   E2K_SCRS,     E2K_SCRD,
-  /* ---------------------------------------------- */
-  E2K_SHLS,   E2K_SHLD,     E2K_SHRS,     E2K_SHRD,
-  E2K_SARS,     E2K_SARD,   E2K_GETFS,    E2K_GETFD,
-  /* ---------------------------------------------- */
-  E2K_FADDS,  E2K_FADDD,    E2K_FSUBS,    E2K_FSUBD,
-  /* ---------------------------------------------- */
-  E2K_FMULS,  E2K_FMULD,    E2K_FSTOISTR, E2K_ISTOFS,
-  E2K_FDTOIDTR, E2K_IDTOFD, E2K_FSTOIDTR, E2K_ISTOFD,
-  E2K_FSTOFD, E2K_FDTOISTR, E2K_IDTOFS,   E2K_FDTOFS,
-  /* ---------------------------------------------- */
-  E2K_MOVTD,  E2K_LDB,      E2K_LDH,      E2K_LDW,
+  /* ----------------------------------------------- */
+  E2K_ADDS,     E2K_ADDD,     E2K_SUBS,     E2K_SUBD,
+  E2K_SCLS,     E2K_SCLD,     E2K_SCRS,     E2K_SCRD,
+  /* ----------------------------------------------- */
+  E2K_SHLS,     E2K_SHLD,     E2K_SHRS,     E2K_SHRD,
+  E2K_SARS,     E2K_SARD,     E2K_GETFS,    E2K_GETFD,
+  /* ----------------------------------------------- */
+  E2K_STB,      E2K_STH,      E2K_STW,      E2K_STD,
+  /* ----------------------------------------------- */
+  E2K_FADDS,    E2K_FADDD,    E2K_FSUBS,    E2K_FSUBD,
+  /* ----------------------------------------------- */
+  E2K_FMULS,    E2K_FMULD,    E2K_FSTOISTR, E2K_ISTOFS,
+  E2K_FDTOIDTR, E2K_IDTOFD,   E2K_FSTOIDTR, E2K_ISTOFD,
+  E2K_FSTOFD,   E2K_FDTOISTR, E2K_IDTOFS,   E2K_FDTOFS,
+  /* ----------------------------------------------- */
+  E2K_MOVTD,    E2K_LDB,      E2K_LDH,      E2K_LDW,
   E2K_LDD,
-  /* ---------------------------------------------- */
-  E2K_FDIVD,  E2K_FSQRTID,
-  /* ---------------------------------------------- */
+  /* ----------------------------------------------- */
+  E2K_FDIVD,    E2K_FSQRTID,
+  /* ----------------------------------------------- */
   E2K_FSQRTTD,
-  /* ---------------------------------------------- */
+  /* ----------------------------------------------- */
   E2K_GETSP,
-  /* ---------------------------------------------- */
+  /* ----------------------------------------------- */
   E2K_FDTOIFD
-  /* ---------------------------------------------- */
+  /* ----------------------------------------------- */
 };
 
 static const E2kOp e2kop[] = {
@@ -487,6 +485,11 @@ static const E2kOp e2kop[] = {
   { "SARd",     RES_ALS_012345, 0x1d, 0,    0,    0    },
   { "GETFs",    RES_ALS_012345, 0x1e, 0,    0,    0    },
   { "GETFd",    RES_ALS_012345, 0x1f, 0,    0,    0    },
+/* --------------------------------------------------- */
+  { "STb",      RES_ALS_25,     0x24, 0,    0,    0    },
+  { "STh",      RES_ALS_25,     0x25, 0,    0,    0    },
+  { "STw",      RES_ALS_25,     0x26, 0,    0,    0    },
+  { "STd",      RES_ALS_25,     0x27, 0,    0,    0    },
 /* --------------------------------------------------- */
   { "FADDs",    RES_ALS_0134,   0x30, 0,    0,    0    },
   { "FADDd",    RES_ALS_0134,   0x31, 0,    0,    0    },

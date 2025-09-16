@@ -378,20 +378,22 @@ static int emit_alopf7(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
   return als_idx;
 }
 
-static int emit_alopf3(ASMState *as, uint32_t spec, uint32_t cop, uint32_t mask,
+static int emit_alopf3(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
                         uint64_t src1, uint32_t src2, uint32_t src3)
 {
+  uint64_t mask = e2kop[op].mask;
   int als_idx = get_sylidx(as, mask, RES_ALS_SHIFT);
   E2kAlopf3 syl;
   syl.i = 0;
   syl.fields.src3  = src3;
   syl.fields.src2 = src2;
   syl.fields.src1 = src1;
-  syl.fields.cop = cop;
+  syl.fields.cop = e2kop[op].opc;
   syl.fields.spec = spec;
 
   as->bundle.als[als_idx] = syl.i;
   as->bundle.f1++;
+  if (p) *p = emit_bundle_finalize(as, *p);
   return als_idx;
 }
 
@@ -470,7 +472,10 @@ static int emit_alopf11(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
 #define RSRC1(src1) emit_src1(as, E2K_REG, src1)
 #define ISRC2(src2) emit_src2(as, E2K_CONST, src2)
 #define RSRC2(src2) emit_src2(as, E2K_REG, src2)
+#define RSRC3(src3) emit_src3(as, E2K_REG, src3)
 #define RDST(dst)  emit_dst(as, E2K_REG, dst)
+#define emit_alopf3_ri(as, spec, op, src1, src2, src3, p) \
+  emit_alopf3(as, p, spec, op, RSRC1(src1), ISRC2(src2), RSRC3(src3))
 #define emit_alopf12_i(as, spec, op, src2, dst, p) \
   emit_alopf12(as, p, spec, op, ISRC2(src2), RDST(dst))
 #define emit_alopf12_r(as, spec, op, src2, dst, p) \
@@ -530,12 +535,8 @@ static void emit_ldd(ASMState *as, Reg dest, void *addr)
 
 static void emit_std(ASMState *as, Reg src, void *addr)
 {
-  intptr_t ofs = dispofs(as, addr);
-  emit_alopf3(as, 0, OPC_STD, RES_ALS_25,
-              emit_src1(as, E2K_REG, RID_DISPATCH),
-              emit_src2(as, E2K_CONST, ofs),
-              emit_src3(as, E2K_REG, src));
-  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf3_ri(as, 0, E2K_STD, RID_DISPATCH, (intptr_t)dispofs(as, addr),
+                 src, &as->mcp);
 }
 
 /* Load a constant address into a GPR. */
@@ -653,12 +654,8 @@ static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 /* Generic store of register with base and (small) offset address. */
 static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 {
-  int opc = irt_is64(ir->t) ? OPC_STD : OPC_STW;
-  emit_alopf3(as, 0, opc, RES_ALS_25,
-              emit_src1(as, E2K_REG, base),
-              emit_src2(as, E2K_CONST, ofs),
-              emit_src3(as, E2K_REG, r));
-  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf3_ri(as, 0, irt_is64(ir->t) ? E2K_STD : E2K_STW,
+                 base, ofs, r, &as->mcp);
 }
 
 /* Add offset to pointer. */
