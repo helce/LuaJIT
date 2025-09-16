@@ -271,15 +271,8 @@ static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
               emit_pdst(as, E2K_REG_PRED, pred));
   as->mcp = emit_bundle_finalize(as, as->mcp);
 
-  emit_alopf2(as, 0, OPC_FSTOD, CO_ISTOFD, RES_ALS_0134,
-              emit_src2(as, E2K_REG, dest),
-              emit_dst(as, E2K_REG, tmp));
-  as->mcp = emit_bundle_finalize(as, as->mcp);
-
-  emit_alopf2(as, 0, OPC_FDTOS, CO_FDTOISTR, RES_ALS_0134,
-              emit_src2(as, E2K_REG, left),
-              emit_dst(as, E2K_REG, dest));
-  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_alopf2_r(as, 0, E2K_ISTOFD, dest, tmp, &as->mcp);
+  emit_alopf2_r(as, 0, E2K_FDTOISTR, left, dest, &as->mcp);
 }
 
 static void asm_tobit(ASMState *as, IRIns *ir)
@@ -298,25 +291,20 @@ static void asm_conv(ASMState *as, IRIns *ir)
   IRType st = (IRType)(ir->op2 & IRCONV_SRCMASK);
   int stfp = (st == IRT_NUM || st == IRT_FLOAT);
   int st64 = (st == IRT_I64 || st == IRT_U64 || st == IRT_P64);
-  int cop = 0, opce = 0;
+  int op = 0;
   RegSet allow = RSET_GPR;
   lj_assertA(irt_type(ir->t) != st, "inconsistent types for CONV");
   Reg left = ra_alloc1(as, ir->op1, allow);
   if (irt_isfp(ir->t)) {
     Reg dest = ra_dest(as, ir, allow);
     if (stfp) { /* FP to FP conversion */
-      cop = (st == IRT_NUM ? OPC_FDTOS : OPC_FSTOD);
-      opce = CO_FSTOFD; /* smae for both cop */
+      op = st == IRT_NUM ? E2K_FDTOFS : E2K_FSTOFD;
     } else { /* INT to FP conversion */
-      cop = (st == IRT_U32 || st == IRT_INT) ?
-        (irt_isnum(ir->t) ? OPC_FSTOD : OPC_FSTOS) :
-        (irt_isnum(ir->t) ? OPC_FDTOD : OPC_FDTOS);
-      opce = CO_ISTOFS; /* smae for all cop */
+      op = (st == IRT_U32 || st == IRT_INT) ?
+           (irt_isnum(ir->t) ? E2K_ISTOFD : E2K_ISTOFS) :
+           (irt_isnum(ir->t) ? E2K_IDTOFD : E2K_IDTOFS);
     }
-    emit_alopf2(as, 0, cop, opce, RES_ALS_0134,
-                emit_src2(as, E2K_REG, left),
-                emit_dst(as, E2K_REG, dest));
-    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf2_r(as, 0, op, left, dest, &as->mcp);
   } else if (stfp) { /* FP to INT conversion */
     if (irt_isguard(ir->t)) {
       /* Checked conversions are only supported from NUM to INT */
@@ -331,14 +319,10 @@ static void asm_conv(ASMState *as, IRIns *ir)
       } else if (irt_isu32(ir->t)) { /* FP to U32 */
         NIY
       } else {
-        cop = irt_is64(ir->t) ?
-          (st == IRT_NUM ? OPC_FDTOD : OPC_FSTOD) :
-          (st == IRT_NUM ? OPC_FDTOS : OPC_FSTOS);
-        opce = CO_FSTOISTR; /* same for all cop */
-        emit_alopf2(as, 0, cop, opce, RES_ALS_0134,
-                    emit_src2(as, E2K_REG, left),
-                    emit_dst(as, E2K_REG, dest));
-        as->mcp = emit_bundle_finalize(as, as->mcp);
+        op = irt_is64(ir->t) ?
+             (st == IRT_NUM ? E2K_FDTOIDTR : E2K_FSTOIDTR) :
+             (st == IRT_NUM ? E2K_FDTOISTR : E2K_FSTOISTR);
+        emit_alopf2_r(as, 0, op, left, dest, &as->mcp);
       }
     }
   } else { /* INT to INT conversion */
@@ -899,7 +883,7 @@ static void asm_sload(ASMState *as, IRIns *ir)
   RegSet allow = RSET_GPR;
   IRType1 t = ir->t;
   int32_t ofs = 8*((int32_t)ir->op1-2);
-  int cop = 0, op = 0, opce = 0;
+  int op = 0, opce = 0;
   lj_assertA(!(ir->op2 & IRSLOAD_PARENT),
              "bad parent SLOAD");  /* Handled by asm_head_side(). */
   lj_assertA(irt_isguard(ir->t) || !(ir->op2 & IRSLOAD_TYPECHECK),
@@ -915,13 +899,9 @@ static void asm_sload(ASMState *as, IRIns *ir)
     dest = ra_dest(as, ir, allow);
     allow = rset_exclude(allow, dest);
     if (ir->op2 & IRSLOAD_CONVERT) {
-      cop = irt_isint(t) ? OPC_FDTOS : OPC_FSTOD;
-      opce = irt_isint(t) ? CO_FDTOISTR : CO_ISTOFD;
+      emit_alopf2_r(as, 0, irt_isint(t) ? E2K_FDTOISTR : E2K_ISTOFD,
+                    dest, dest, &as->mcp);
       t.irt = irt_isint(t) ? IRT_NUM : IRT_INT;
-      emit_alopf2(as, 0, cop, opce, RES_ALS_0134,
-                  emit_src2(as, E2K_REG, dest),
-                  emit_dst(as, E2K_REG, dest));
-      as->mcp = emit_bundle_finalize(as, as->mcp);
     } else if (irt_isaddr(t)) {
       /* Clear type from pointers. */
       emit_alopf1_ri(as, 0, E2K_GETFD, dest, 0xbc0, dest, &as->mcp);
@@ -1057,10 +1037,7 @@ static void asm_fpmath(ASMState *as, IRIns *ir)
     Reg dest = ra_dest(as, ir, RSET_GPR);
     Reg left = ra_alloc1(as, ir->op1, rset_exclude(RSET_GPR, dest));
     emit_alopf11_rr(as, 0, E2K_FSQRTTD, left, dest, dest, &as->mcp);
-    emit_alopf12(as, 0, OPC_GETSP, OPCE_NONE, OPC2_EXT, OPCE_NONE, RES_ALS5,
-                 emit_src2(as, E2K_REG, left),
-                 emit_dst(as, E2K_REG, dest));
-    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf12_r(as, 0, E2K_FSQRTID, left, dest, &as->mcp);
   /* floor(0x1), ceil(0x2), trunc(0x3) */
   } else if (fpm <= IRFPM_TRUNC) {
     Reg dest = ra_dest(as, ir, RSET_GPR);
@@ -1421,10 +1398,8 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
   emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), 0, 0);
   p = emit_bundle_finalize(as, p); /* 4(HS+SS+CS0+Align) */
   if (spadj) {
-    emit_alopf12(as, 0, OPC_GETSP, RW_USD, OPC2_EXT, OPCE_NONE, RES_ALS0,
-                 emit_src2(as, E2K_CONST, spadj),
-                 emit_dst(as, E2K_REG, RID_SP));
-    p = emit_bundle_finalize(as, p); /* 4(HS+ALS+ALES+LTS) */
+    emit_alopf12_i(as, 0, E2K_GETSP, spadj, RID_SP, &p);
+    /* 4(HS+ALS+ALES+LTS) */
   } else {
     p[-1] = E2K_NOP; p[-2] = E2K_NOP; p[-3] = E2K_NOP; p[-4] = E2K_NOP;
   }

@@ -372,17 +372,10 @@ typedef enum {
 #define OPC_STH    0x25
 #define OPC_STW    0x26
 #define OPC_STD    0x27
-#define OPC_FSTOS  0x3c
-#define OPC_FDTOD  0x3d
-#define OPC_FSTOD  0x3e
-#define OPC_FDTOS  0x3f
-#define OPC_MOVTD  0x61
 /* non-combined operations long */
 #define OPC_MULS    0x20
 #define OPC_MULD    0x21
 #define OPC_FCMPDB  0x2f
-#define OPC_FSQRTID 0x4d
-#define OPC_GETSP   0x58
 /* integer comparation opce */
 #define CMPI_O     0x0
 #define CMPI_B     0x1
@@ -401,30 +394,8 @@ typedef enum {
 #define CMPF_NLT   0x5
 #define CMPF_NLE   0x6
 #define CMPF_OD    0x7
-/* movt specificator opce */
-#define MOVT_MV    0xc0
-#define MOVT_MVC   0xc1
-#define MOVT_MVR   0xc2
-#define MOVT_MVRC  0xc3
-/* rw specificator opce */
-#define RW_NONE    0xc0
-#define RW_CUD     0xf0
-#define RW_GD      0xf2
-#define RW_USD     0xec
-#define RW_STAT    0xee
 /* default specificator opce */
 #define OPCE_NONE  0xc0
-/* convertation opc */
-#define CO_FSTOISTR 0xc2
-#define CO_FSTOIDTR 0xc2
-#define CO_FDTOISTR 0xc2
-#define CO_FDTOIDTR 0xc2
-#define CO_ISTOFS   0xc4
-#define CO_ISTOFD   0xc4
-#define CO_IDTOFS   0xc4
-#define CO_IDTOFD   0xc4
-#define CO_FSTOFD   0xc6
-#define CO_FDTOFS   0xc6
 /* sxt codes */
 #define SXT_BS      0x0
 #define SXT_HS      0x1
@@ -441,6 +412,7 @@ typedef struct E2kOp {
   char *name;
   E2kResourceMask mask;
   uint32_t opc;
+  uint32_t opce;
   uint32_t opc2;
   uint32_t opce2;
   // in_latency?
@@ -448,72 +420,107 @@ typedef struct E2kOp {
 } E2kOp;
 
 enum {
-  E2K_ANDS,  E2K_ANDD,  E2K_ANDNS, E2K_ANDND, E2K_ORS,  E2K_ORD,  E2K_ORNS,  E2K_ORND,
-  E2K_XORS,  E2K_XORD,  E2K_XORNS, E2K_XORND, E2K_SXT,
-  E2K_ADDS,  E2K_ADDD,  E2K_SUBS,  E2K_SUBD,  E2K_SCLS, E2K_SCLD, E2K_SCRS,  E2K_SCRD,
-  E2K_SHLS,  E2K_SHLD,  E2K_SHRS,  E2K_SHRD,  E2K_SARS, E2K_SARD, E2K_GETFS, E2K_GETFD,
-  E2K_FADDS, E2K_FADDD, E2K_FSUBS, E2K_FSUBD,
-  E2K_FMULS, E2K_FMULD,
-  E2K_LDB,   E2K_LDH,   E2K_LDW,   E2K_LDD,
-  E2K_FDIVD,
+  /* ---------------------------------------------- */
+  E2K_ANDS,   E2K_ANDD,     E2K_ANDNS,    E2K_ANDND,
+  E2K_ORS,      E2K_ORD,    E2K_ORNS,     E2K_ORND,
+  /* ---------------------------------------------- */
+  E2K_XORS,   E2K_XORD,     E2K_XORNS,    E2K_XORND,
+  E2K_SXT,
+  /* ---------------------------------------------- */
+  E2K_ADDS,   E2K_ADDD,     E2K_SUBS,     E2K_SUBD,
+  E2K_SCLS,     E2K_SCLD,   E2K_SCRS,     E2K_SCRD,
+  /* ---------------------------------------------- */
+  E2K_SHLS,   E2K_SHLD,     E2K_SHRS,     E2K_SHRD,
+  E2K_SARS,     E2K_SARD,   E2K_GETFS,    E2K_GETFD,
+  /* ---------------------------------------------- */
+  E2K_FADDS,  E2K_FADDD,    E2K_FSUBS,    E2K_FSUBD,
+  /* ---------------------------------------------- */
+  E2K_FMULS,  E2K_FMULD,    E2K_FSTOISTR, E2K_ISTOFS,
+  E2K_FDTOIDTR, E2K_IDTOFD, E2K_FSTOIDTR, E2K_ISTOFD,
+  E2K_FSTOFD, E2K_FDTOISTR, E2K_IDTOFS,   E2K_FDTOFS,
+  /* ---------------------------------------------- */
+  E2K_MOVTD,  E2K_LDB,      E2K_LDH,      E2K_LDW,
+  E2K_LDD,
+  /* ---------------------------------------------- */
+  E2K_FDIVD,  E2K_FSQRTID,
+  /* ---------------------------------------------- */
   E2K_FSQRTTD,
+  /* ---------------------------------------------- */
+  E2K_GETSP,
+  /* ---------------------------------------------- */
   E2K_FDTOIFD
+  /* ---------------------------------------------- */
 };
 
 static const E2kOp e2kop[] = {
-/*  name       resources       opc   opc2  opce */
+/*  name        resources       opc   opce  opc2 opce2 */
 /* non-combined operations short */
-  { "ANDs",    RES_ALS_012345, 0x00, 0,    0    },
-  { "ANDd",    RES_ALS_012345, 0x01, 0,    0    },
-  { "ANDNs",   RES_ALS_012345, 0x02, 0,    0    },
-  { "ANDNd",   RES_ALS_012345, 0x03, 0,    0    },
-  { "ORs",     RES_ALS_012345, 0x04, 0,    0    },
-  { "ORd",     RES_ALS_012345, 0x05, 0,    0    },
-  { "ORNs",    RES_ALS_012345, 0x06, 0,    0    },
-  { "ORNd",    RES_ALS_012345, 0x07, 0,    0    },
-/* -------------------------------------------- */
-  { "XORs",    RES_ALS_012345, 0x08, 0,    0    },
-  { "XORd",    RES_ALS_012345, 0x09, 0,    0    },
-  { "XORNs",   RES_ALS_012345, 0x0a, 0,    0    },
-  { "XORNd",   RES_ALS_012345, 0x0b, 0,    0    },
-  { "SXT",     RES_ALS_012345, 0x0c, 0,    0    },
-/* -------------------------------------------- */
-  { "ADDs",    RES_ALS_012345, 0x10, 0,    0    },
-  { "ADDd",    RES_ALS_012345, 0x11, 0,    0    },
-  { "SUBs",    RES_ALS_012345, 0x12, 0,    0    },
-  { "SUBd",    RES_ALS_012345, 0x13, 0,    0    },
-  { "SCLs",    RES_ALS_012345, 0x14, 0,    0    },
-  { "SCLd",    RES_ALS_012345, 0x15, 0,    0    },
-  { "SCRs",    RES_ALS_012345, 0x16, 0,    0    },
-  { "SCRd",    RES_ALS_012345, 0x17, 0,    0    },
-/* -------------------------------------------- */
-  { "SHLs",    RES_ALS_012345, 0x18, 0,    0    },
-  { "SHLd",    RES_ALS_012345, 0x19, 0,    0    },
-  { "SHRs",    RES_ALS_012345, 0x1a, 0,    0    },
-  { "SHRd",    RES_ALS_012345, 0x1b, 0,    0    },
-  { "SARs",    RES_ALS_012345, 0x1c, 0,    0    },
-  { "SARd",    RES_ALS_012345, 0x1d, 0,    0    },
-  { "GETFs",   RES_ALS_012345, 0x1e, 0,    0    },
-  { "GETFd",   RES_ALS_012345, 0x1f, 0,    0    },
-/* -------------------------------------------- */
-  { "FADDs",   RES_ALS_0134,   0x30, 0,    0    },
-  { "FADDd",   RES_ALS_0134,   0x31, 0,    0    },
-  { "FSUBs",   RES_ALS_0134,   0x32, 0,    0    },
-  { "FSUBd",   RES_ALS_0134,   0x33, 0,    0    },
-/* -------------------------------------------- */
-  { "FMULs",   RES_ALS_0134,   0x38, 0,    0    },
-  { "FMULd",   RES_ALS_0134,   0x39, 0,    0    },
-/* -------------------------------------------- */
-  { "LDb",     RES_ALS_0235,   0x64, 0,    0    },
-  { "LDh",     RES_ALS_0235,   0x65, 0,    0    },
-  { "LDw",     RES_ALS_0235,   0x66, 0,    0    },
-  { "LDd",     RES_ALS_0235,   0x67, 0,    0    },
-/* -------------------------------------------- */
-  { "FDIVd",   RES_ALS5,       0x49, 0x01, 0xc0 },
-/* -------------------------------------------- */
-  { "FSQRTTd", RES_ALS5,       0x51, 0x01, 0xc0 },
-/* -------------------------------------------- */
-  { "FDTOIFd", RES_ALS_0134,   0x6d, 0x01, 0xc0 },
+  { "ANDs",     RES_ALS_012345, 0x00, 0,    0,    0    },
+  { "ANDd",     RES_ALS_012345, 0x01, 0,    0,    0    },
+  { "ANDNs",    RES_ALS_012345, 0x02, 0,    0,    0    },
+  { "ANDNd",    RES_ALS_012345, 0x03, 0,    0,    0    },
+  { "ORs",      RES_ALS_012345, 0x04, 0,    0,    0    },
+  { "ORd",      RES_ALS_012345, 0x05, 0,    0,    0    },
+  { "ORNs",     RES_ALS_012345, 0x06, 0,    0,    0    },
+  { "ORNd",     RES_ALS_012345, 0x07, 0,    0,    0    },
+/* --------------------------------------------------- */
+  { "XORs",     RES_ALS_012345, 0x08, 0,    0,    0    },
+  { "XORd",     RES_ALS_012345, 0x09, 0,    0,    0    },
+  { "XORNs",    RES_ALS_012345, 0x0a, 0,    0,    0    },
+  { "XORNd",    RES_ALS_012345, 0x0b, 0,    0,    0    },
+  { "SXT",      RES_ALS_012345, 0x0c, 0,    0,    0    },
+/* --------------------------------------------------- */
+  { "ADDs",     RES_ALS_012345, 0x10, 0,    0,    0    },
+  { "ADDd",     RES_ALS_012345, 0x11, 0,    0,    0    },
+  { "SUBs",     RES_ALS_012345, 0x12, 0,    0,    0    },
+  { "SUBd",     RES_ALS_012345, 0x13, 0,    0,    0    },
+  { "SCLs",     RES_ALS_012345, 0x14, 0,    0,    0    },
+  { "SCLd",     RES_ALS_012345, 0x15, 0,    0,    0    },
+  { "SCRs",     RES_ALS_012345, 0x16, 0,    0,    0    },
+  { "SCRd",     RES_ALS_012345, 0x17, 0,    0,    0    },
+/* --------------------------------------------------- */
+  { "SHLs",     RES_ALS_012345, 0x18, 0,    0,    0    },
+  { "SHLd",     RES_ALS_012345, 0x19, 0,    0,    0    },
+  { "SHRs",     RES_ALS_012345, 0x1a, 0,    0,    0    },
+  { "SHRd",     RES_ALS_012345, 0x1b, 0,    0,    0    },
+  { "SARs",     RES_ALS_012345, 0x1c, 0,    0,    0    },
+  { "SARd",     RES_ALS_012345, 0x1d, 0,    0,    0    },
+  { "GETFs",    RES_ALS_012345, 0x1e, 0,    0,    0    },
+  { "GETFd",    RES_ALS_012345, 0x1f, 0,    0,    0    },
+/* --------------------------------------------------- */
+  { "FADDs",    RES_ALS_0134,   0x30, 0,    0,    0    },
+  { "FADDd",    RES_ALS_0134,   0x31, 0,    0,    0    },
+  { "FSUBs",    RES_ALS_0134,   0x32, 0,    0,    0    },
+  { "FSUBd",    RES_ALS_0134,   0x33, 0,    0,    0    },
+/* --------------------------------------------------- */
+  { "FMULs",    RES_ALS_0134,   0x38, 0,    0,    0    },
+  { "FMULd",    RES_ALS_0134,   0x39, 0,    0,    0    },
+  { "FSTOIStr", RES_ALS_0134,   0x3c, 0xc2, 0,    0    },
+  { "ISTOFS",   RES_ALS_0134,   0x3c, 0xc4, 0,    0    },
+  { "FDTOIDtr", RES_ALS_0134,   0x3d, 0xc2, 0,    0    },
+  { "IDTOFD",   RES_ALS_0134,   0x3d, 0xc4, 0,    0    },
+  { "FSTOIDtr", RES_ALS_0134,   0x3e, 0xc2, 0,    0    },
+  { "ISTOFD",   RES_ALS_0134,   0x3e, 0xc4, 0,    0    },
+  { "FSTOFD",   RES_ALS_0134,   0x3e, 0xc6, 0,    0    },
+  { "FDTOIStr", RES_ALS_0134,   0x3f, 0xc2, 0,    0    },
+  { "IDTOFS",   RES_ALS_0134,   0x3f, 0xc4, 0,    0    },
+  { "FDTOFS",   RES_ALS_0134,   0x3f, 0xc6, 0,    0    },
+/* --------------------------------------------------- */
+  { "MOVTd",    RES_ALS0,       0x61, 0xc0, 0,    0    },
+  { "LDb",      RES_ALS_0235,   0x64, 0,    0,    0    },
+  { "LDh",      RES_ALS_0235,   0x65, 0,    0,    0    },
+  { "LDw",      RES_ALS_0235,   0x66, 0,    0,    0    },
+  { "LDd",      RES_ALS_0235,   0x67, 0,    0,    0    },
+/* --------------------------------------------------- */
+  { "FDIVd",    RES_ALS5,       0x49, 0,    0x01, 0xc0 },
+  { "FSQRTId",  RES_ALS5,       0x4d, 0xc0, 0x01, 0xc0 },
+/* --------------------------------------------------- */
+  { "FSQRTTd",  RES_ALS5,       0x51, 0,    0x01, 0xc0 },
+/* --------------------------------------------------- */
+  { "GETSP",    RES_ALS0,       0x58, 0xec, 0x01, 0xc0 },
+/* --------------------------------------------------- */
+  { "FDTOIFd",  RES_ALS_0134,   0x6d, 0,    0x01, 0xc0 },
+/* --------------------------------------------------- */
 };
 
 #endif

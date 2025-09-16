@@ -395,20 +395,22 @@ static int emit_alopf3(ASMState *as, uint32_t spec, uint32_t cop, uint32_t mask,
   return als_idx;
 }
 
-static int emit_alopf2(ASMState *as, uint32_t spec, uint32_t cop, uint32_t opce,
-                        uint64_t mask, uint32_t src2, uint32_t dst)
+static int emit_alopf2(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
+                       uint32_t src2, uint32_t dst)
 {
+  uint64_t mask = e2kop[op].mask;
   int als_idx = get_sylidx(as, mask, RES_ALS_SHIFT);
   E2kAlopf2 syl;
   syl.i = 0;
   syl.fields.dst  = dst;
   syl.fields.src2 = src2;
-  syl.fields.opce = opce;
-  syl.fields.cop = cop;
+  syl.fields.opce = e2kop[op].opce;
+  syl.fields.cop = e2kop[op].opc;
   syl.fields.spec = spec;
 
   as->bundle.als[als_idx] = syl.i;
   as->bundle.f1++;
+  if (p) *p = emit_bundle_finalize(as, *p);
   return als_idx;
 }
 
@@ -431,7 +433,7 @@ static int emit_alopf1(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
   return als_idx;
 }
 
-static void emit_alef2(ASMState *as, uint16_t opc2, uint16_t opce2, int als_idx)
+static void emit_alef2(ASMState *as, uint32_t op, int als_idx)
 {
   // No combined operations on 2 and 5 channels
   int res = 1 << (RES_ALES_SHIFT + als_idx);
@@ -439,28 +441,27 @@ static void emit_alef2(ASMState *as, uint16_t opc2, uint16_t opce2, int als_idx)
   if (!(res & RES_ALES_25)) {
     E2kAlef2 syl;
     syl.i = 0;
-    syl.fields.opce2 = opce2;
-    syl.fields.opc2 = opc2;
+    syl.fields.opce2 = e2kop[op].opce2;
+    syl.fields.opc2 = e2kop[op].opc2;
     as->bundle.ales[als_idx] = syl.i;
     as->bundle.f3++;
   }
 }
 
-static int emit_alopf12(ASMState *as, uint32_t spec, uint32_t cop,
-                        uint32_t opce, uint16_t opc2, uint16_t opce2,
-                        uint64_t mask, uint32_t src2, uint32_t dst)
+static int emit_alopf12(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
+                        uint32_t src2, uint32_t dst)
 {
-  int als_idx = emit_alopf2(as, spec, cop, opce, mask, src2, dst);
-  emit_alef2(as, opc2, opce2, als_idx);
+  int als_idx = emit_alopf2(as, 0, spec, op, src2, dst);
+  emit_alef2(as, op, als_idx);
+  if (p) *p = emit_bundle_finalize(as, *p);
   return als_idx;
 }
 
-static int emit_alopf11_(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
+static int emit_alopf11(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
                         uint32_t src1, uint32_t src2, uint32_t dst)
 {
   int als_idx = emit_alopf1(as, 0, spec, op, src1, src2, dst);
-  // TODO, do all inside of alef2
-  emit_alef2(as, e2kop[op].opc2, e2kop[op].opce2, als_idx);
+  emit_alef2(as, op, als_idx);
   if (p) *p = emit_bundle_finalize(as, *p);
   return als_idx;
 }
@@ -470,14 +471,22 @@ static int emit_alopf11_(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
 #define ISRC2(src2) emit_src2(as, E2K_CONST, src2)
 #define RSRC2(src2) emit_src2(as, E2K_REG, src2)
 #define RDST(dst)  emit_dst(as, E2K_REG, dst)
+#define emit_alopf12_i(as, spec, op, src2, dst, p) \
+  emit_alopf12(as, p, spec, op, ISRC2(src2), RDST(dst))
+#define emit_alopf12_r(as, spec, op, src2, dst, p) \
+  emit_alopf12(as, p, spec, op, RSRC2(src2), RDST(dst))
+#define emit_alopf2_i(as, spec, op, src2, dst, p) \
+  emit_alopf2(as, p, spec, op, ISRC2(src2), RDST(dst))
+#define emit_alopf2_r(as, spec, op, src2, dst, p) \
+  emit_alopf2(as, p, spec, op, RSRC2(src2), RDST(dst))
 #define emit_alopf11_rr(as, spec, op, src1, src2, dst, p) \
-  emit_alopf11_(as, p, spec, op, RSRC1(src1), RSRC2(src2), RDST(dst))
+  emit_alopf11(as, p, spec, op, RSRC1(src1), RSRC2(src2), RDST(dst))
 #define emit_alopf11_ir(as, spec, op, src1, src2, dst, p) \
-  emit_alopf11_(as, p, spec, op, ISRC1(src1), RSRC2(src2), RDST(dst))
+  emit_alopf11(as, p, spec, op, ISRC1(src1), RSRC2(src2), RDST(dst))
 #define emit_alopf11_ri(as, spec, op, src1, src2, dst, p) \
-  emit_alopf11_(as, p, spec, op, RSRC1(src1), ISRC2(src2), RDST(dst))
+  emit_alopf11(as, p, spec, op, RSRC1(src1), ISRC2(src2), RDST(dst))
 #define emit_alopf11_ii(as, spec, op, src1, src2, dst, p) \
-  emit_alopf11_(as, p, spec, op, ISRC1(src1), ISRC2(src2), RDST(dst))
+  emit_alopf11(as, p, spec, op, ISRC1(src1), ISRC2(src2), RDST(dst))
 #define emit_alopf1_rr(as, spec, op, src1, src2, dst, p) \
   emit_alopf1(as, p, spec, op, RSRC1(src1), RSRC2(src2), RDST(dst))
 #define emit_alopf1_ir(as, spec, op, src1, src2, dst, p) \
@@ -605,9 +614,7 @@ static void emit_prepcall(ASMState *as, Reg ctpr, ASMFunction target) {
     ptrdiff_t disp = (ptrdiff_t)((void *) target - (void *)as->mcp);
     emit_copf2(as, OPC_DISP, ctpr, disp);
   } else { /* Target out of range; need indirect call. */
-    emit_alopf2(as, 0, OPC_MOVTD, MOVT_MV, RES_ALS0,
-                emit_src2(as, E2K_CONST, (intptr_t)target),
-                emit_dst(as, E2K_REG, ctpr));
+    emit_alopf2_i(as, 0, E2K_MOVTD, (intptr_t)target, ctpr, 0);
   }
 }
 
@@ -666,9 +673,6 @@ static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
 static void emit_spsub(ASMState *as, int32_t ofs)
 {
   if (ofs) {
-    emit_alopf12(as, 0, OPC_GETSP, RW_USD, OPC2_EXT, OPCE_NONE, RES_ALS0,
-                 emit_src2(as, E2K_CONST, -ofs),
-                 emit_dst(as, E2K_REG, RID_SP));
-    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_alopf12_i(as, 0, E2K_GETSP, -ofs, RID_SP, &as->mcp);
   }
 }
