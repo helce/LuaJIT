@@ -566,7 +566,7 @@ typedef MCode *MCLabel;
 /* Return label pointing to current PC. */
 #define emit_label(as)    ((as)->mcp)
 
-static void emit_ct(ASMState *as, Reg ctpr, Reg pred, int inverted)
+static void emit_ct(ASMState *as, Reg ctpr, Reg pred, int inverted, MCode **p)
 {
   // TODO it takes not a full syl
   check_resource(as, RES_SS);
@@ -588,21 +588,25 @@ static void emit_ct(ASMState *as, Reg ctpr, Reg pred, int inverted)
 
   as->bundle.ss = syl.i;
   as->bundle.f1++;
+  if (p) *p = emit_bundle_finalize(as, *p);
 }
 
-static void emit_call(ASMState *as, Reg ctpr, Reg pred, int inverted, int wbs)
+static void emit_call(ASMState *as, Reg ctpr, Reg pred,
+                      int inverted, int wbs, MCode **p)
 {
-  emit_ct(as, ctpr, pred, inverted);
+  emit_ct(as, ctpr, pred, inverted, 0);
   check_resource(as, RES_CS1);
   E2kC1f1 syl;
   syl.i = 0;
-  syl.fields.opc = OPC_CALL;
+  syl.fields.opc = E2K_CALL;
   syl.fields.params = wbs;
   as->bundle.cs[1] = syl.i;
   as->bundle.f2++;
+  if (p) *p = emit_bundle_finalize(as, *p);
 }
 
-static void emit_copf2(ASMState *as, uint32_t opc, Reg ctpr, uintptr_t disp)
+static void emit_copf2(ASMState *as, uint32_t opc, Reg ctpr,
+                       uintptr_t disp, MCode **p)
 {
   check_resource(as, RES_CS0);
   E2kCopf2 syl;
@@ -614,22 +618,26 @@ static void emit_copf2(ASMState *as, uint32_t opc, Reg ctpr, uintptr_t disp)
 
   as->bundle.cs[0] = syl.i;
   as->bundle.f1++;
+  if (p) *p = emit_bundle_finalize(as, *p);
 }
 
-static void emit_prepcall(ASMState *as, Reg ctpr, ASMFunction target) {
+static void emit_prepcall(ASMState *as, Reg ctpr,
+                          ASMFunction target, MCode **p)
+{
   /* check 28 bit disp */
   if (((((uintptr_t)target ^ (uintptr_t)as->mcp) >> 3) >> 28) == 0) {
     ptrdiff_t disp = (ptrdiff_t)((void *) target - (void *)as->mcp);
-    emit_copf2(as, OPC_DISP, ctpr, disp);
+    emit_copf2(as, E2K_DISP, ctpr, disp, p);
   } else { /* Target out of range; need indirect call. */
-    emit_alopf2_i(as, 0, E2K_MOVTD, (intptr_t)target, ctpr, 0);
+    emit_alopf2_i(as, 0, E2K_MOVTD, (intptr_t)target, ctpr, p);
   }
 }
 
-static void emit_ibranch(ASMState *as, uintptr_t disp, Reg pred, int inverted)
+static void emit_ibranch(ASMState *as, uintptr_t disp, Reg pred,
+                         int inverted, MCode **p)
 {
-  emit_ct(as, 0, pred, inverted);
-  emit_copf2(as, OPC_IBRANCH, 0, disp);
+  emit_ct(as, 0, pred, inverted, 0);
+  emit_copf2(as, E2K_IBRANCH, 0, disp, p);
 }
 
 static void emit_jmp(ASMState *as,  MCode *target)

@@ -42,17 +42,11 @@ static Reg ra_hintalloc(ASMState *as, IRRef ref, Reg hint, RegSet allow)
 /* Setup exit stub after the end of each trace. */
 static void asm_exitstub_setup(ASMState *as)
 {
-  /*
-    stw STACK, STACK_TMP, TMP0
-    addd  0, as->T->traceno, TMP0
-    ibranch ->lj_vm_exit_handler
-  */
-
   /* Register allocation is not started yet */
   MCode *mxp = as->mctop;
   /* Should be in separate bundle for patchexit */
-  emit_ibranch(as, (ptrdiff_t)((void *)lj_vm_exit_handler - (void *)mxp), 0, 0);
-  mxp = emit_bundle_finalize(as, mxp);
+  emit_ibranch(as, (ptrdiff_t)((void *)lj_vm_exit_handler - (void *)mxp),
+               0, 0, &mxp);
   emit_snapno(as, as->T->traceno, &mxp);
   emit_alopf3_ri(as, 0, E2K_STW, RID_SP, SPOFS_TMP, RID_TMP, &mxp);
 
@@ -74,8 +68,8 @@ static void asm_guard(ASMState *as, Reg pred, int inverted)
     inverted = inverted ? 0 : 1;
     target = p; /* Patch target later in asm_loop_fixup. */
   }
-  emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), pred, inverted);
-  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p),
+               pred, inverted, &as->mcp);
   emit_snapno(as, as->snapno, &as->mcp);
 }
 
@@ -157,8 +151,7 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
   Reg gpr = RID_NONE;
   Reg ctpr = ra_ctpr(as, RSET_CTPR);
   if (ci->func) {
-    emit_call(as, ctpr, 0, 0, PIPE_WBS);
-    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_call(as, ctpr, 0, 0, PIPE_WBS, &as->mcp);
   }
   for (gpr = REGARG_FIRSTGPR; gpr <= REGARG_LASTGPR; gpr++)
     as->cost[gpr] = REGCOST(~0u, ASMREF_L);
@@ -195,8 +188,7 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
     checkmclim(as);
   }
   if (ci->func) {
-    emit_prepcall(as, ctpr, ci->func);
-    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_prepcall(as, ctpr, ci->func, &as->mcp);
   }
 }
 
@@ -426,17 +418,15 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
   l_exit = asm_exitstub_addr(as);
   if (merge == IR_NE) {
     /* unconditional asm_guard */
-    emit_ibranch(as, (ptrdiff_t)((void *)l_exit -
-                                 (void *)as->mcp), 0, 0);
-    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_ibranch(as, (ptrdiff_t)((void *)l_exit - (void *)as->mcp),
+                 0, 0, &as->mcp);
     emit_snapno(as, as->snapno, &as->mcp);
   } else if (destused) {
     emit_loada(as, dest, niltvg(J2G(as->J)));
   }
 
   /* Follow hash chain until the end. */
-  emit_ibranch(as, 0, pred3, 1);
-  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_ibranch(as, 0, pred3, 1, &as->mcp);
   l_loop = as->mcp + 2;
   emit_alopf7_ri(as, 0, E2K_CMPEDB, dest, 0, pred3, &as->mcp);
   emit_alopf1_ri(as, 0, E2K_LDD, dest, (intptr_t)offsetof(Node, next),
@@ -445,18 +435,16 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
 
   /* Type  and value comparison. */
   if (merge == IR_EQ) l_end = l_exit;
-  emit_ibranch(as, (ptrdiff_t)((void *)l_end -
-                               (void *)as->mcp), pred2, 0);
-  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_ibranch(as, (ptrdiff_t)((void *)l_end - (void *)as->mcp),
+               pred2, 0, &as->mcp);
   if (merge == IR_EQ) {
     emit_snapno(as, as->snapno, &as->mcp);
   }
 
   if (irt_isnum(kt)) {
     emit_alopf7_rr(as, 0, E2K_FCMPEQDB, tmp1, key, pred2, &as->mcp);
-    emit_ibranch(as, (ptrdiff_t)((void *)l_next -
-                                 (void *)as->mcp), pred1, 0);
-    as->mcp = emit_bundle_finalize(as, as->mcp);
+    emit_ibranch(as, (ptrdiff_t)((void *)l_next - (void *)as->mcp),
+                 pred1, 0, &as->mcp);
     emit_alopf7_ri(as, 0, E2K_CMPBSB, tmp2, (intptr_t)LJ_TISNUM,
                    pred1, &as->mcp);
     emit_alopf1_ri(as, 0, E2K_SARD, tmp1, 47, tmp2, &as->mcp);
@@ -898,8 +886,8 @@ static void asm_tbar(ASMState *as, IRIns *ir)
   /* Clear black bit. */
   emit_alopf1_rr(as, 0, E2K_XORD, tmp, mark, mark, &as->mcp);
   Reg pred = ra_pred(as, RSET_PRED);
-  emit_ibranch(as, (ptrdiff_t)((void *)l_end - (void *)as->mcp), pred, 0);
-  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_ibranch(as, (ptrdiff_t)((void *)l_end - (void *)as->mcp),
+               pred, 0, &as->mcp);
   emit_alopf7_ri(as, 0, E2K_CMPEDB, tmp, 0, pred, &as->mcp);
   emit_alopf1_ri(as, 0, E2K_ANDD, mark, LJ_GC_BLACK, tmp, &as->mcp);
   emit_alopf1_ri(as, 0, E2K_LDB, tab, (intptr_t)offsetof(GCtab, marked),
@@ -1184,8 +1172,8 @@ static void asm_gc_check(ASMState *as)
   tmp2 = ra_releasetmp(as, ASMREF_TMP2);
   emit_loadi(as, tmp2, as->gcsteps);
   /* Jump around GC step if GC total < GC threshold. */
-  emit_ibranch(as, (ptrdiff_t)((void *)l_end - (void *)as->mcp), pred, 0);
-  as->mcp = emit_bundle_finalize(as, as->mcp);
+  emit_ibranch(as, (ptrdiff_t)((void *)l_end - (void *)as->mcp),
+               pred, 0, &as->mcp);
   emit_alopf7_rr(as, 0, E2K_CMPBDB, tmp1, tmp2, pred, &as->mcp);
   emit_getgl(as, tmp1, gc.total);
   emit_getgl(as, tmp2, gc.threshold);
@@ -1207,9 +1195,8 @@ static void asm_loop_fixup(ASMState *as)
     uint32_t tmp = p[-2] & 0xf0000000;
     uint32_t disp = (ptrdiff_t)((void *)target - (void *)p + 4*4) >> 3;
     p[-2] = tmp | (disp & 0xfffffff);
-  } else {
-    emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), 0, 0);
-    p = emit_bundle_finalize(as, p); /* 4(HS+SS+CS0+Align) */
+  } else { /* 4(HS+SS+CS0+Align) */
+    emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), 0, 0, &p);
   }
 }
 
@@ -1264,12 +1251,8 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
   MCode *target = lnk ? traceref(as->J, lnk)->mcode : (MCode *)lj_vm_exit_interp;
   MCode *p = as->mctop;
   int32_t spadj = as->T->spadjust;
-  /*
-    getsp spadj, RID_SP(2 nop)
-    ibranch lj_vm_exit_interp(lnk)
-  */
-  emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), 0, 0);
-  p = emit_bundle_finalize(as, p); /* 4(HS+SS+CS0+Align) */
+  emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)p), 0, 0, &p);
+  /* 4(HS+SS+CS0+Align) */
   if (spadj) {
     emit_alopf12_i(as, 0, E2K_GETSP, spadj, RID_SP, &p);
     /* 4(HS+ALS+ALES+LTS) */

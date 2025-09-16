@@ -361,26 +361,16 @@ typedef enum {
 
 /* -- Opcodes ------------------------------------------------------------- */
 
-/* control operations */
-#define OPC_DISP    0x0
-#define OPC_IBRANCH 0x0
-#define OPC_CALL    0x5
-/* non-combined operations long */
-#define OPC_MULS    0x20
-#define OPC_MULD    0x21
-/* default specificator opce */
-#define OPCE_NONE  0xc0
-/* sxt codes */
+#define E2K_DISP    0x0
+#define E2K_IBRANCH 0x0
+#define E2K_CALL    0x5
+#define E2K_NOP     0x0
 #define SXT_BS      0x0
 #define SXT_HS      0x1
 #define SXT_WS      0x2
 #define SXT_BZ      0x4
 #define SXT_HZ      0x5
 #define SXT_WZ      0x6
-/* nop */
-#define E2K_NOP     0x0
-/* opc2 extension */
-#define OPC2_EXT    0x01
 
 typedef struct E2kOp {
   char *name;
