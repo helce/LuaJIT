@@ -607,13 +607,14 @@ static void asm_strref(ASMState *as, IRIns *ir)
 {
   RegSet allow = RSET_GPR;
   Reg dest = ra_dest(as, ir, allow);
-  Reg base = ra_alloc1(as, ir->op1, allow);
+  Reg base = ra_alloc1(as, ir->op1, rset_clear(allow, dest));
   IRIns *irr = IR(ir->op2);
   int32_t ofs = sizeof(GCstr);
   if (irref_isk(ir->op2)) {
     emit_alopf1_ri(as, 0, E2K_ADDD, base, (intptr_t)(ofs + irr->i),
                    dest, &as->mcp);
   } else {
+    /* base + ofs + right(32-bit) */
     Reg right = ra_alloc1(as, ir->op2, rset_clear(allow, base));
     emit_alopf1_rr(as, 0, E2K_ADDD, dest, right, dest, &as->mcp);
     emit_alopf1_ir(as, 0, E2K_SXT, SXT_WS, right, right, 0);
