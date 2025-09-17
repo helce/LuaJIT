@@ -267,14 +267,14 @@ static void asm_tobit(ASMState *as, IRIns *ir)
 static void asm_conv(ASMState *as, IRIns *ir)
 {
   IRType st = (IRType)(ir->op2 & IRCONV_SRCMASK);
+  Reg dest = RID_NONE, left = RID_NONE;
   int stfp = (st == IRT_NUM || st == IRT_FLOAT);
   int st64 = (st == IRT_I64 || st == IRT_U64 || st == IRT_P64);
   int op = 0;
-  RegSet allow = RSET_GPR;
   lj_assertA(irt_type(ir->t) != st, "inconsistent types for CONV");
-  Reg left = ra_alloc1(as, ir->op1, allow);
   if (irt_isfp(ir->t)) {
-    Reg dest = ra_dest(as, ir, allow);
+    dest = ra_dest(as, ir, RSET_GPR);
+    left = ra_alloc1(as, ir->op1, RSET_GPR);
     if (stfp) { /* FP to FP conversion */
       op = st == IRT_NUM ? E2K_FDTOFS : E2K_FSTOFD;
     } else { /* INT to FP conversion */
@@ -284,13 +284,14 @@ static void asm_conv(ASMState *as, IRIns *ir)
     }
     emit_alopf2_r(as, 0, op, left, dest, &as->mcp);
   } else if (stfp) { /* FP to INT conversion */
+    left = ra_alloc1(as, ir->op1, RSET_GPR);
     if (irt_isguard(ir->t)) {
       /* Checked conversions are only supported from NUM to INT */
       lj_assertA(irt_isint(ir->t) && st == IRT_NUM,
                  "bad type for checked CONV");
       asm_tointg(as, ir, left);
     } else {
-      Reg dest = ra_dest(as, ir, allow);
+      dest = ra_dest(as, ir, RSET_GPR);
       if (irt_isu64(ir->t)) { /* FP to U64 */
         /* for inputs >= 2^63 add -2^64, convert again. */
         NIY
@@ -304,7 +305,33 @@ static void asm_conv(ASMState *as, IRIns *ir)
       }
     }
   } else { /* INT to INT conversion */
-    NIY
+    dest = ra_dest(as, ir, RSET_GPR);
+    if (st >= IRT_I8 && st <= IRT_U16) { /* Extend to 32/64 bit integer. */
+      left = ra_alloc1(as, ir->op1, RSET_GPR);
+      emit_alopf1_ir(as, 0, E2K_SXT,
+                     (ir->op2 & IRCONV_SEXT) ?
+                     (st == IRT_I8 ? SXT_BS : SXT_HS) :
+                     (st == IRT_U8 ? SXT_BZ : SXT_HZ), left, dest, &as->mcp);
+    } else { /* 32/64 bit integer conversions */
+      if (irt_is64(ir->t)) {
+        if (st64) { /* 64/64 bit no-op (cast) */
+          ra_leftov(as, dest, ir->op1);
+        } else {
+          left = ra_alloc1(as, ir->op1, RSET_GPR);
+          emit_alopf1_ir(as, 0, E2K_SXT, (ir->op2 & IRCONV_SEXT) ?
+                                         SXT_WS : SXT_WZ, left, dest, &as->mcp);
+        }
+      } else {
+        if (st64 && !(ir->op2 & IRCONV_NONE)) {
+        /* This is either a 32 bit reg/reg mov which zeroes the hiword
+           or a load of the loword from a 64 bit address. */
+          left = ra_alloc1(as, ir->op1, RSET_GPR);
+          emit_alopf1_ir(as, 0, E2K_SXT, SXT_WZ, left, dest, &as->mcp);
+        } else { /* 32/32 bit no-op (cast). */
+          ra_leftov(as, dest, ir->op1);
+        }
+      }
+    }
   }
 }
 
@@ -981,6 +1008,7 @@ static void asm_fpdiv(ASMState *as, IRIns *ir)
 #define asm_add(as, ir)   asm_alopf1(as, ir, irt_isnum(ir->t) ? E2K_FADDD : \
                                              (irt_is64(ir->t) ? E2K_ADDD : E2K_ADDS))
 #define asm_bor(as, ir)   asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_ORD : E2K_ORS)
+#define asm_bxor(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_XORD : E2K_XORS)
 #define asm_band(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_ANDD : E2K_ANDS)
 #define asm_bshr(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SHRD : E2K_SHRS)
 #define asm_bshl(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SHLD : E2K_SHLS)
@@ -1354,9 +1382,6 @@ static void asm_prof(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bswap(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bxor(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bsar(ASMState *as, IRIns *ir)
