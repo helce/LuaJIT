@@ -456,11 +456,35 @@ static void emit_alef2(ASMState *as, uint32_t op, int als_idx)
   }
 }
 
+static void emit_alef1(ASMState *as, uint32_t op, uint32_t src3, int als_idx)
+{
+   // No combined operations on 2 and 5 channels
+  int res = 1 << (RES_ALES_SHIFT + als_idx);
+  check_resource(as, res);
+  if (!(res & RES_ALES_25)) {
+    E2kAlef1 syl;
+    syl.i = 0;
+    syl.fields.src3 = (uint16_t)src3;
+    syl.fields.opc2 = e2kop[op].opc2;
+    as->bundle.ales[als_idx] = syl.i;
+    as->bundle.f3++;
+  }
+}
+
 static int emit_alopf12(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
                         uint32_t src2, uint32_t dst)
 {
   int als_idx = emit_alopf2(as, 0, spec, op, src2, dst);
   emit_alef2(as, op, als_idx);
+  if (p) *p = emit_bundle_finalize(as, *p);
+  return als_idx;
+}
+
+static int emit_alopf21(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
+                        uint32_t src1, uint32_t src2, uint32_t src3, uint32_t dst)
+{
+  int als_idx = emit_alopf1(as, 0, spec, op, src1, src2, dst);
+  emit_alef1(as, op, src3, als_idx);
   if (p) *p = emit_bundle_finalize(as, *p);
   return als_idx;
 }
@@ -495,6 +519,8 @@ static int emit_alopf11(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
   emit_alopf2(as, p, spec, op, ISRC2(src2), RDST(dst))
 #define emit_alopf2_r(as, spec, op, src2, dst, p) \
   emit_alopf2(as, p, spec, op, RSRC2(src2), RDST(dst))
+#define emit_alopf21_rrr(as, spec, op, src1, src2, src3, dst, p) \
+  emit_alopf21(as, p, spec, op, RSRC1(src1), RSRC2(src2), RSRC3(src3), RDST(dst))
 #define emit_alopf11_rr(as, spec, op, src1, src2, dst, p) \
   emit_alopf11(as, p, spec, op, RSRC1(src1), RSRC2(src2), RDST(dst))
 #define emit_alopf11_ir(as, spec, op, src1, src2, dst, p) \

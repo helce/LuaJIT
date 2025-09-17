@@ -980,6 +980,21 @@ static void asm_bnot(ASMState *as, IRIns *ir)
                  left, -1, dest, &as->mcp);
 }
 
+static void asm_bswap(ASMState *as, IRIns *ir)
+{
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
+  Reg smask = ra_scratch(as, rset_exclude(RSET_GPR, left));
+  if (irt_is64(ir->t)) {
+    emit_alopf21_rrr(as, 0, E2K_PSHUFB, left, left, smask, dest, &as->mcp);
+    emit_alopf1_ii(as, 0, E2K_ADDD, 0, 0x1020304050607, smask, &as->mcp);
+  } else {
+    emit_alopf21_rrr(as, 0, E2K_PSHUFB, left, left, smask, dest, &as->mcp);
+    emit_alopf1_ii(as, 0, E2K_ADDD, 0, 0x8080808000010203, smask, 0);
+    emit_alopf1_ir(as, 0, E2K_SXT, SXT_WZ, left, left, &as->mcp);
+  }
+}
+
 static void asm_mul(ASMState *as, IRIns *ir)
 {
   /*
@@ -1379,9 +1394,6 @@ static void asm_hiop(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_prof(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bswap(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bsar(ASMState *as, IRIns *ir)

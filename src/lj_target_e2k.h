@@ -333,6 +333,14 @@ typedef union {
   } fields;
 } E2kAlef2;
 
+typedef union {
+  uint16_t i;
+  struct {
+    uint16_t src3    : 8;
+    uint16_t opc2    : 8;
+  } fields;
+} E2kAlef1;
+
 typedef enum {
   E2K_CONST = 0,
   E2K_CONST4 = 4,
@@ -348,16 +356,6 @@ typedef enum {
   E2K_REG_CTPR = 4096,
   E2K_REG_RARG = 8192
 } E2kOpT;
-
-#define REG_R 1
-#define REG_B 2
-#define REG_G 3
-#define REG_CTPR 65
-#define CONST_U4 4
-#define CONST_U5 5
-#define CONST_U16 16
-#define CONST_U32 32
-#define CONST_U64 64
 
 /* -- Opcodes ------------------------------------------------------------- */
 
@@ -420,7 +418,9 @@ enum {
   /* ------------------------------------------------- */
   E2K_GETSP,
   /* ------------------------------------------------- */
-  E2K_FDTOIFD
+  E2K_FDTOIFD,
+  /* ------------------------------------------------- */
+  E2K_PSHUFB
   /* ------------------------------------------------- */
 };
 
@@ -513,6 +513,8 @@ static const E2kOp e2kop[] = {
   { "GETSP",    RES_ALS0,       0x58, 0xec, 0x01, 0xc0 },
 /* --------------------------------------------------- */
   { "FDTOIFd",  RES_ALS_0134,   0x6d, 0,    0x01, 0xc0 },
+/* --------------------------------------------------- */
+  { "PSHUFB",   RES_ALS_0134,   0x4d, 0,    0x0f, 0    },
 /* --------------------------------------------------- */
 };
 
