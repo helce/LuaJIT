@@ -162,7 +162,11 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
   // cs, 32-bit syls
   mxp = (MCode *)hmxp;
   if (hs_c & 0x02) *--mxp = as->bundle.cs[1];
-  if (hs_c & 0x01) *--mxp = (as->bundle.cs[0] + (hs_lng >> 1));
+  if (hs_c & 0x01) {
+    E2kCopf2 cs0 = { as->bundle.cs[0] };
+    cs0.fields.disp = cs0.fields.disp + (hs_lng >> 1);
+    *--mxp = cs0.i;
+  }
   // als, 32-bit syls
   if (hs_als & 0x20) *--mxp = as->bundle.als[5];
   if (hs_als & 0x10) *--mxp = as->bundle.als[4];
