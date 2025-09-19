@@ -1032,6 +1032,18 @@ static void asm_fpdiv(ASMState *as, IRIns *ir)
   emit_alopf11_rr(as, 0, E2K_FDIVD, left, right, dest, &as->mcp);
 }
 
+static void asm_neg(ASMState *as, IRIns *ir)
+{
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg left = ra_hintalloc(as, ir->op1, dest, RSET_GPR);
+  if (irt_isnum(ir->t)) {
+    emit_alopf1_ri(as, 0, E2K_XORD, left, 0x8000000000000000, dest, &as->mcp);
+  } else {
+    emit_alopf1_ir(as, 0, irt_is64(ir->t) ? E2K_SUBD : E2K_SUBS,
+                   0, left, dest, &as->mcp);
+  }
+}
+
 #define asm_sub(as, ir)   asm_alopf1(as, ir, irt_isnum(ir->t) ? E2K_FSUBD : \
                                              (irt_is64(ir->t) ? E2K_SUBD : E2K_SUBS))
 #define asm_add(as, ir)   asm_alopf1(as, ir, irt_isnum(ir->t) ? E2K_FADDD : \
@@ -1401,9 +1413,6 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 }
 
 // TODO
-static void asm_neg(ASMState *as, IRIns *ir)
-{  NIY }
-
 static void asm_hiop(ASMState *as, IRIns *ir)
 {  NIY }
 
