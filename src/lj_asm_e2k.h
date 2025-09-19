@@ -923,34 +923,48 @@ static void asm_tbar(ASMState *as, IRIns *ir)
 
 static void asm_alopf1(ASMState *as, IRIns *ir, int op)
 {
-  RegSet allow = RSET_GPR;
-  Reg dest = ra_dest(as, ir, allow);
-  Reg left = ra_hintalloc(as, ir->op1, dest, allow);
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg left = ra_hintalloc(as, ir->op1, dest, RSET_GPR);
   Reg right = RID_NONE;
   int isk = irref_isk(ir->op2);
-  if (!isk) right = ra_alloc1(as, ir->op2, rset_clear(allow, left));
-  if (irt_isguard(ir->t)) { /* For IR_ADDOV etc. */
-    lj_assertA(!irt_is64(ir->t), "bad usage");
-    Reg tmp1 = ra_scratch(as, allow);
-    Reg tmp2 = ra_scratch(as, rset_exclude(allow, tmp1));
-    Reg pred = ra_pred(as, RSET_PRED);
-    asm_guard(as, pred, 0);
-    /* ((dest^left) & (dest^(~)right)) < 0 */
-    emit_alopf7_ri(as, 0, E2K_CMPLSB, tmp1, 0, pred, &as->mcp);
-    emit_alopf1_rr(as, 0, E2K_ANDS, tmp1, tmp2, tmp1, &as->mcp);
-    emit_alopf1_rr(as, 0, E2K_XORS, dest, left, tmp1, 0);
-    if (isk) {
-      emit_alopf1_ri(as, 0, ir->o == IR_ADDOV ? E2K_XORS : E2K_XORNS,
-                     dest, get_kval(as, ir->op2), tmp2, &as->mcp);
-    } else {
-      emit_alopf1_rr(as, 0, ir->o == IR_ADDOV ? E2K_XORS : E2K_XORNS,
-                     dest, right, tmp2, &as->mcp);
-    }
+  if (!isk) {
+    right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
   }
   if (isk) {
     emit_alopf1_ri(as, 0, op, left, get_kval(as, ir->op2), dest, &as->mcp);
   } else {
     emit_alopf1_rr(as, 0, op, left, right, dest, &as->mcp);
+  }
+}
+
+static void asm_arithov(ASMState *as, IRIns *ir)
+{
+  RegSet allow = RSET_GPR;
+  lj_assertA(!irt_is64(ir->t), "bad usage");
+  Reg dest = ra_dest(as, ir, allow);
+  Reg left = ra_alloc1(as, ir->op1, rset_clear(allow, dest));
+  Reg right = RID_NONE, tmp1 = RID_NONE, tmp2 = RID_NONE;
+  Reg pred = ra_pred(as, RSET_PRED);
+  if (irref_isk(ir->op2)) {
+    /* (dest < left) == (k >= 0 ? 1 : 0) */
+    int k = IR(ir->op2)->i;
+    if (ir->o == IR_SUBOV) k = (int)(~(unsigned int)k+1u);
+    asm_guard(as, pred, k >= 0 ? 0 : 1);
+    emit_alopf7_rr(as, 0, E2K_CMPLSB, dest, left, pred, &as->mcp);
+    emit_alopf1_ri(as, 0, E2K_ADDS, left, k, dest, &as->mcp);
+  } else {
+    /* ((dest^left) & (dest^(~)right)) < 0 */
+    right = ra_alloc1(as, ir->op2, rset_clear(allow, left));
+    tmp1 = ra_scratch(as, rset_clear(allow, right));
+    tmp2 = ra_scratch(as, rset_clear(allow, tmp1));
+    asm_guard(as, pred, 0);
+    emit_alopf7_ri(as, 0, E2K_CMPLSB, tmp1, 0, pred, &as->mcp);
+    emit_alopf1_rr(as, 0, E2K_ANDS, tmp1, tmp2, tmp1, &as->mcp);
+    emit_alopf1_rr(as, 0, E2K_XORS, dest, left, tmp1, 0);
+    emit_alopf1_rr(as, 0, ir->o == IR_ADDOV ? E2K_XORS : E2K_XORNS,
+                   dest, right, tmp2, &as->mcp);
+    emit_alopf1_rr(as, 0, ir->o == IR_ADDOV ? E2K_ADDS : E2K_SUBS,
+                   left, right, dest, &as->mcp);
   }
 }
 
@@ -1029,8 +1043,8 @@ static void asm_fpdiv(ASMState *as, IRIns *ir)
 #define asm_bshl(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SHLD : E2K_SHLS)
 #define asm_bror(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SCRD : E2K_SCRS)
 #define asm_brol(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SCLD : E2K_SCLS)
-#define asm_addov(as, ir) asm_alopf1(as, ir, E2K_ADDS)
-#define asm_subov(as, ir) asm_alopf1(as, ir, E2K_SUBS)
+#define asm_addov(as, ir) asm_arithov(as, ir)
+#define asm_subov(as, ir) asm_arithov(as, ir)
 
 /* -- Comparisons --------------------------------------------------------- */
 
