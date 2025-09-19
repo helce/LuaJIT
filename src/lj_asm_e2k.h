@@ -1044,6 +1044,13 @@ static void asm_neg(ASMState *as, IRIns *ir)
   }
 }
 
+static void asm_abs(ASMState *as, IRIns *ir)
+{
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg left = ra_hintalloc(as, ir->op1, dest, RSET_GPR);;
+  emit_alopf1_ri(as, 0, E2K_ANDD, left, 0x7fffffffffffffff, dest, &as->mcp);
+}
+
 #define asm_sub(as, ir)   asm_alopf1(as, ir, irt_isnum(ir->t) ? E2K_FSUBD : \
                                              (irt_is64(ir->t) ? E2K_SUBD : E2K_SUBS))
 #define asm_add(as, ir)   asm_alopf1(as, ir, irt_isnum(ir->t) ? E2K_FADDD : \
@@ -1053,6 +1060,7 @@ static void asm_neg(ASMState *as, IRIns *ir)
 #define asm_band(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_ANDD : E2K_ANDS)
 #define asm_bshr(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SHRD : E2K_SHRS)
 #define asm_bshl(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SHLD : E2K_SHLS)
+#define asm_bsar(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SARD : E2K_SARS)
 #define asm_bror(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SCRD : E2K_SCRS)
 #define asm_brol(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SCLD : E2K_SCLS)
 #define asm_addov(as, ir) asm_arithov(as, ir)
@@ -1417,12 +1425,6 @@ static void asm_hiop(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_prof(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_bsar(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_abs(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_min(ASMState *as, IRIns *ir)
