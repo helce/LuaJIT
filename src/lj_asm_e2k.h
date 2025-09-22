@@ -891,6 +891,60 @@ static void asm_sload(ASMState *as, IRIns *ir)
   emit_alopf1_ri(as, 0, op, base, ofs, dest, &as->mcp);
 }
 
+/* -- Allocations --------------------------------------------------------- */
+#if LJ_HASFFI
+static void asm_cnew(ASMState *as, IRIns *ir)
+{
+  CTState *cts = ctype_ctsG(J2G(as->J));
+  CTypeID id = (CTypeID)IR(ir->op1)->i;
+  CTSize sz;
+  CTInfo info = lj_ctype_info(cts, id, &sz);
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_mem_newgco];
+  IRRef args[4];
+  RegSet drop = RSET_SCRATCH;
+  RegSet allow = (RSET_GPR & ~RSET_SCRATCH);
+  lj_assertA(sz != CTSIZE_INVALID || (ir->o == IR_CNEW && ir->op2 != REF_NIL),
+             "bad CNEW/CNEWI operands");
+  as->gcsteps++;
+  if (ra_hasreg(ir->r))
+    rset_clear(drop, ir->r);  /* Dest reg handled below. */
+  ra_evictset(as, drop);
+  if (ra_used(ir))
+    ra_destreg(as, ir, RID_RET);  /* GCcdata * */
+
+  /* Initialize immutable cdata object. */
+  if (ir->o == IR_CNEWI) {
+    emit_alopf3_ri(as, 0, sz == 8 ? E2K_STD : E2K_STW, RID_RET,
+                   (intptr_t)sizeof(GCcdata),
+                   ra_alloc1(as, ir->op2, allow), &as->mcp);
+    lj_assertA(sz == 4 || sz == 8, "bad CNEWI size %d", sz);
+  } else if (ir->op2 != REF_NIL) { /* Create VLA/VLS/aligned cdata. */
+    ci = &lj_ir_callinfo[IRCALL_lj_cdata_newv];
+    args[0] = ASMREF_L;     /* lua_State *L */
+    args[1] = ir->op1;      /* CTypeID id   */
+    args[2] = ir->op2;      /* CTSize sz    */
+    args[3] = ASMREF_TMP1;  /* CTSize align */
+    asm_gencall(as, ci, args);
+    emit_loadi(as, ra_releasetmp(as, ASMREF_TMP1), (int32_t)ctype_align(info));
+    return;
+  }
+
+  /* Initialize gct and ctypeid. lj_mem_newgco() already sets marked. */
+  Reg tmp1 = ra_scratch(as, allow);
+  Reg tmp2 = ra_scratch(as, rset_clear(allow, tmp1));
+  emit_alopf3_ri(as, 0, E2K_STB, RID_RET, (intptr_t)offsetof(GCcdata, gct),
+                 tmp1, 0);
+  emit_alopf3_ri(as, 0, E2K_STH, RID_RET, (intptr_t)offsetof(GCcdata, ctypeid),
+                 tmp2, &as->mcp);
+  emit_alopf1_ii(as, 0, E2K_ADDD, 0, (intptr_t)(~LJ_TCDATA), tmp1, 0);
+  emit_alopf1_ii(as, 0, E2K_ADDD, 0, (intptr_t)id, tmp2, &as->mcp);
+  args[0] = ASMREF_L;     /* lua_State *L */
+  args[1] = ASMREF_TMP1;  /* MSize size   */
+  asm_gencall(as, ci, args);
+  emit_loadi(as, ra_releasetmp(as, ASMREF_TMP1), (int32_t)(sz+sizeof(GCcdata)));
+}
+#endif
+
 /* -- Write barriers ------------------------------------------------------ */
 
 static void asm_tbar(ASMState *as, IRIns *ir)
@@ -1437,9 +1491,6 @@ static void asm_mulov(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_xstore(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_cnew(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_obar(ASMState *as, IRIns *ir)
