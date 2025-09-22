@@ -144,7 +144,6 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
 static Reg asm_fusexref(ASMState *as, IRRef ref, RegSet allow, intptr_t *ofs)
 {
   IRIns *ir = IR(ref);
-  Reg base = RID_NONE;
   if (ra_noreg(ir->r) && canfuse(as, ir)) {
     if ((ir->o == IR_ADD) && (irref_isk(ir->op2))) {
       *ofs = *ofs + get_kval(as, ir->op2);
@@ -1025,13 +1024,10 @@ static void asm_alopf1(ASMState *as, IRIns *ir, int op)
   Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg left = ra_hintalloc(as, ir->op1, dest, RSET_GPR);
   Reg right = RID_NONE;
-  int isk = irref_isk(ir->op2);
-  if (!isk) {
-    right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
-  }
-  if (isk) {
+  if (irref_isk(ir->op2)) {
     emit_alopf1_ri(as, 0, op, left, get_kval(as, ir->op2), dest, &as->mcp);
   } else {
+    right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
     emit_alopf1_rr(as, 0, op, left, right, dest, &as->mcp);
   }
 }
@@ -1110,16 +1106,19 @@ static void asm_bswap(ASMState *as, IRIns *ir)
 
 static void asm_mul(ASMState *as, IRIns *ir)
 {
-  /*
-    (f)mul(s/d) rN, src2, rN
-  */
   if (irt_isnum(ir->t)) {
     asm_alopf1(as, ir, E2K_FMULD);
   } else {
-    NIY
-    //cop = irt_is64(ir->t) ? E2K_MULD : E2K_MULS;
-    //mask = RES_ALS_03;
-    //asm_alopf11(as, ir, cop, opce);
+    /* alopf11 for muls/muld */
+    Reg dest = ra_dest(as, ir, RSET_GPR);
+    Reg right = RID_NONE, left = ra_hintalloc(as, ir->op1, dest, RSET_GPR);
+    uint32_t op = irt_is64(ir->t) ? E2K_MULD : E2K_MULS;
+    if (irref_isk(ir->op2)) {
+      emit_alopf11_ri(as, 0, op, left, get_kval(as, ir->op2), dest, &as->mcp);
+    } else {
+      right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
+      emit_alopf11_rr(as, 0, op, left, right, dest, &as->mcp);
+    }
   }
 }
 
