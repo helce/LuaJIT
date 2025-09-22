@@ -387,7 +387,7 @@ enum {
   E2K_ORS,      E2K_ORD,      E2K_ORNS,     E2K_ORND,
   /* ------------------------------------------------- */
   E2K_XORS,     E2K_XORD,     E2K_XORNS,    E2K_XORND,
-  E2K_SXT,
+  E2K_SXT,      E2K_MERGES,   E2K_MERGED,
   /* ------------------------------------------------- */
   E2K_ADDS,     E2K_ADDD,     E2K_SUBS,     E2K_SUBD,
   E2K_SCLS,     E2K_SCLD,     E2K_SCRS,     E2K_SCRD,
@@ -400,8 +400,9 @@ enum {
   E2K_CMPLDB,   E2K_CMPLEDB,
   E2K_STB,      E2K_STH,      E2K_STW,      E2K_STD,
   /* ------------------------------------------------- */
-  E2K_FCMPEQDB, E2K_FCMPLTDB, E2K_FCMPLEDB, E2K_FCMPNLTDB,
-  E2K_FCMPNLEDB,
+  E2K_FCMPEQSB, E2K_FCMPLTSB, E2K_FCMPLESB, E2K_FCMPNLTSB,
+  E2K_FCMPNLESB,E2K_FCMPEQDB, E2K_FCMPLTDB, E2K_FCMPLEDB,
+  E2K_FCMPNLTDB,E2K_FCMPNLEDB,
   /* ------------------------------------------------- */
   E2K_FADDS,    E2K_FADDD,    E2K_FSUBS,    E2K_FSUBD,
   /* ------------------------------------------------- */
@@ -443,6 +444,8 @@ static const E2kOp e2kop[] = {
   { "XORNs",    RES_ALS_012345, 0x0a, 0,    0,    0    },
   { "XORNd",    RES_ALS_012345, 0x0b, 0,    0,    0    },
   { "SXT",      RES_ALS_012345, 0x0c, 0,    0,    0    },
+  { "MERGEs",   RES_ALS_012345, 0x0e, 0,    0,    0    },
+  { "MERGEd",   RES_ALS_012345, 0x0f, 0,    0,    0    },
 /* --------------------------------------------------- */
   { "ADDs",     RES_ALS_012345, 0x10, 0,    0,    0    },
   { "ADDd",     RES_ALS_012345, 0x11, 0,    0,    0    },
@@ -477,6 +480,11 @@ static const E2kOp e2kop[] = {
   { "STw",      RES_ALS_25,     0x26, 0,    0,    0    },
   { "STd",      RES_ALS_25,     0x27, 0,    0,    0    },
 /* --------------------------------------------------- */
+  { "FCMPEQsb", RES_ALS_0134,   0x2e, 0x0,  0,    0    },
+  { "FCMPLTsb", RES_ALS_0134,   0x2e, 0x1,  0,    0    },
+  { "FCMPLEsb", RES_ALS_0134,   0x2e, 0x2,  0,    0    },
+  { "FCMPNLTsb",RES_ALS_0134,   0x2e, 0x5,  0,    0    },
+  { "FCMPNLEsb",RES_ALS_0134,   0x2e, 0x6,  0,    0    },
   { "FCMPEQdb", RES_ALS_0134,   0x2f, 0x0,  0,    0    },
   { "FCMPLTdb", RES_ALS_0134,   0x2f, 0x1,  0,    0    },
   { "FCMPLEdb", RES_ALS_0134,   0x2f, 0x2,  0,    0    },

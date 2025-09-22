@@ -223,31 +223,6 @@ static uint32_t emit_lts(ASMState *as, E2kOpT type, uint64_t val)
   return lts_idx;
 }
 
-static void emit_alu_cond(ASMState *as, int als, Reg pred, int inverted)
-{
-  int cds_idx = get_sylidx(as, RES_CDS_ALL, RES_CDS_SHIFT);
-  E2kCDS syl;
-  syl.i = 0;
-  syl.fields.pred = (pred - RID_PRED0)|0x60;
-  switch (1 << als) {
-  case 0x1: case 0x8:
-     if (inverted) syl.fields.neg = 1;
-     syl.fields.mask = 1;
-     break;
-  case 0x2: case 0x10:
-     if (inverted) syl.fields.neg = 2;
-     syl.fields.mask = 2;
-     break;
-  case 0x4: case 0x20:
-     if (inverted) syl.fields.neg = 4;
-     syl.fields.mask = 4;
-     break;
-  }
-  if (als >= 3) syl.fields.opc = 1;
-  as->bundle.cds[cds_idx] = syl.i;
-  as->bundle.hs_cds++;
-}
-
 static uint32_t emit_src1(ASMState *as, E2kOpT type, intptr_t src1)
 {
   UNUSED(as);
@@ -498,6 +473,37 @@ static int emit_alopf11(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
   return als_idx;
 }
 
+static void emit_cds(ASMState *as, int opc, int als, Reg pred, int inverted, MCode **p)
+{
+  int cds_idx = get_sylidx(as, RES_CDS_ALL, RES_CDS_SHIFT);
+  E2kCDS syl;
+  syl.i = 0;
+  syl.fields.pred = (pred - RID_PRED0)|0x60;
+  switch (1 << als) {
+  case 0x1: case 0x8:
+     if (inverted) syl.fields.neg = 1;
+     syl.fields.mask = 1;
+     break;
+  case 0x2: case 0x10:
+     if (inverted) syl.fields.neg = 2;
+     syl.fields.mask = 2;
+     break;
+  case 0x4: case 0x20:
+     if (inverted) syl.fields.neg = 4;
+     syl.fields.mask = 4;
+     break;
+  }
+  if (als >= 3) opc++;
+  syl.fields.opc = opc;
+  as->bundle.cds[cds_idx] = syl.i;
+  as->bundle.hs_cds++;
+  if (p) *p = emit_bundle_finalize(as, *p);
+}
+
+#define emit_rlp(as, als, pred, inv, p) \
+  emit_cds(as, 0, als, pred, inv, p)
+#define emit_mrgc(as, als, pred, inv, p) \
+  emit_cds(as, 2, als, pred, inv, p)
 #define ISRC1(src1) emit_src1(as, E2K_CONST, src1)
 #define RSRC1(src1) emit_src1(as, E2K_REG, src1)
 #define ISRC2(src2) emit_src2(as, E2K_CONST, src2)

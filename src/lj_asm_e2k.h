@@ -308,26 +308,48 @@ static void asm_tobit(ASMState *as, IRIns *ir)
   emit_alopf1_rr(as, 0, E2K_FADDD, left, right, dest, &as->mcp);
 }
 
-// TODO refactor after full implementation
 static void asm_conv(ASMState *as, IRIns *ir)
 {
   IRType st = (IRType)(ir->op2 & IRCONV_SRCMASK);
   Reg dest = RID_NONE, left = RID_NONE;
   int stfp = (st == IRT_NUM || st == IRT_FLOAT);
   int st64 = (st == IRT_I64 || st == IRT_U64 || st == IRT_P64);
-  int op = 0;
+  uint32_t op = 0;
   lj_assertA(irt_type(ir->t) != st, "inconsistent types for CONV");
   if (irt_isfp(ir->t)) {
     dest = ra_dest(as, ir, RSET_GPR);
-    left = ra_alloc1(as, ir->op1, RSET_GPR);
     if (stfp) { /* FP to FP conversion */
-      op = st == IRT_NUM ? E2K_FDTOFS : E2K_FSTOFD;
-    } else { /* INT to FP conversion */
-      op = (st == IRT_U32 || st == IRT_INT) ?
-           (irt_isnum(ir->t) ? E2K_ISTOFD : E2K_ISTOFS) :
-           (irt_isnum(ir->t) ? E2K_IDTOFD : E2K_IDTOFS);
+      left = ra_alloc1(as, ir->op1, RSET_GPR);
+      op = (st == IRT_NUM) ? E2K_FDTOFS : E2K_FSTOFD;
+      emit_alopf2_r(as, 0, op, left, dest, &as->mcp);
+    } else if (st == IRT_U32) { /* U32 to FP conversion */
+      left = ra_alloc1(as, ir->op1, RSET_GPR);
+      op = irt_isnum(ir->t) ? E2K_IDTOFD : E2K_IDTOFS;
+      emit_alopf2_r(as, 0, op, dest, dest, &as->mcp);
+      emit_alopf1_ir(as, 0, E2K_SXT, SXT_WZ, left, dest, &as->mcp);
+    } else if (st == IRT_U64) { /* U64 to FP conversion */
+      RegSet allow = RSET_GPR;
+      left = ra_alloc1(as, ir->op1, rset_clear(allow, dest));
+      Reg tmp1 = ra_scratch(as, rset_clear(allow, left));
+      Reg tmp2 = ra_scratch(as, rset_clear(allow, tmp1));
+      Reg pred = ra_pred(as, RSET_PRED);
+      op = irt_isnum(ir->t) ? E2K_IDTOFD : E2K_IDTOFS;
+      emit_mrgc(as, emit_alopf1_rr(as, 1, irt_isnum(ir->t) ? E2K_MERGED : E2K_MERGES,
+                                  tmp2, tmp1, dest, 0), pred, 0, &as->mcp);
+      emit_alopf1_rr(as, 1, irt_isnum(ir->t) ? E2K_FADDD : E2K_FADDS,
+                     tmp1, tmp1, tmp1, &as->mcp);
+      emit_alopf2_r(as, 1, op, left, tmp2, &as->mcp);
+      emit_alopf7_ri(as, 0, E2K_CMPLDB, left, 0x0, pred, &as->mcp);
+      emit_alopf2_r(as, 1, op, tmp1, tmp1, &as->mcp);
+      emit_alopf1_rr(as, 1, E2K_ORD, tmp2, tmp1, tmp1, &as->mcp);
+      emit_alopf1_ri(as, 1, E2K_SHRD, left, 0x1, tmp2, 0);
+      emit_alopf1_ri(as, 1, E2K_ANDD, left, 0x1, tmp1, &as->mcp);
+    } else {
+      left = ra_alloc1(as, ir->op1, RSET_GPR);
+      op = irt_isnum(ir->t) ? (st64 ? E2K_IDTOFD : E2K_ISTOFD) :
+                              (st64 ? E2K_IDTOFS : E2K_ISTOFS);
+      emit_alopf2_r(as, 0, op, left, dest, &as->mcp);
     }
-    emit_alopf2_r(as, 0, op, left, dest, &as->mcp);
   } else if (stfp) { /* FP to INT conversion */
     left = ra_alloc1(as, ir->op1, RSET_GPR);
     if (irt_isguard(ir->t)) {
@@ -337,11 +359,23 @@ static void asm_conv(ASMState *as, IRIns *ir)
       asm_tointg(as, ir, left);
     } else {
       dest = ra_dest(as, ir, RSET_GPR);
+      Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, left));
+      Reg pred = ra_pred(as, RSET_PRED);
       if (irt_isu64(ir->t)) { /* FP to U64 */
-        /* for inputs >= 2^63 add -2^64, convert again. */
-        NIY
+        intptr_t k = (st == IRT_NUM) ? 0x43e0000000000000 : 0x5f000000;
+        op = (st == IRT_NUM) ? E2K_FDTOIDTR : E2K_FSTOIDTR;
+        emit_rlp(as, emit_alopf1_ri(as, 1, E2K_ADDD, tmp, 0x8000000000000000,
+                                    dest, 0), pred, 1, 0);
+        emit_rlp(as, emit_alopf2_r(as, 0, op, left, dest, 0), pred, 0, &as->mcp);
+        emit_alopf2_r(as, 1, op, tmp, tmp, &as->mcp);
+        emit_alopf7_ri(as, 0, (st == IRT_NUM) ? E2K_FCMPLTDB : E2K_FCMPLTSB,
+                       left, k, pred, 0);
+        emit_alopf1_ri(as, 1, (st == IRT_NUM) ? E2K_FSUBD : E2K_FSUBS,
+                       left, k, tmp, &as->mcp);
       } else if (irt_isu32(ir->t)) { /* FP to U32 */
-        NIY
+        op = (st == IRT_NUM) ? E2K_FDTOIDTR : E2K_FSTOIDTR;
+        emit_alopf1_ri(as, 0, E2K_GETFD, dest, 0x800, dest, &as->mcp);
+        emit_alopf2_r(as, 0, op, left, dest, &as->mcp);
       } else {
         op = irt_is64(ir->t) ?
              (st == IRT_NUM ? E2K_FDTOIDTR : E2K_FSTOIDTR) :
