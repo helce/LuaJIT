@@ -235,6 +235,32 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
   }
 }
 
+static void asm_callx(ASMState *as, IRIns *ir)
+{
+  IRRef args[CCI_NARGS_MAX*2];
+  CCallInfo ci;
+  IRRef func;
+  IRIns *irf;
+  Reg ctpr = RID_NONE;
+  ci.flags = asm_callx_flags(as, ir);
+  asm_collectargs(as, ir, &ci, args);
+  asm_setupresult(as, ir, &ci);
+  func = ir->op2; irf = IR(func);
+  if (irf->o == IR_CARG) { func = irf->op1; irf = IR(func); }
+  if (irref_isk(func)) {  /* Call to constant address. */
+    ci.func = (ASMFunction)(void *)get_kval(as, func);
+  } else {
+    ctpr = ra_ctpr(as, RSET_CTPR);
+    emit_call(as, ctpr, 0, 0, PIPE_WBS, &as->mcp);
+    ci.func = (ASMFunction)(void *)0;
+  }
+  asm_gencall(as, &ci, args);
+  if (!ci.func) {
+    Reg r = ra_alloc1(as, func, RSET_GPR & ~RSET_SCRATCH);
+    emit_alopf2_r(as, 0, E2K_MOVTD, r, ctpr, &as->mcp);
+  }
+}
+
 /* -- Returns ------------------------------------------------------------- */
 
 /* Return to lower frame. Guard that it goes to the right spot. */
@@ -1513,9 +1539,6 @@ static void asm_obar(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_strto(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_callx(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bufhdr_write(ASMState *as, Reg sb)
