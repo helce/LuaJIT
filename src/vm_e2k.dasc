@@ -4707,86 +4707,86 @@ static void build_subroutines(BuildCtx *ctx)
     |// DISPATCH and STACK preserved on-trace
     |->vm_exit_handler:
     |.if JIT
-    | getsp     0, -320, T1
+    | getsp     0, -320, T4
     | ldd       2, DISPATCH, DISPATCH_GL(cur_L), T5
     | disp      ctpr1, extern lj_trace_exit
     | --
-    | ldd       0, DISPATCH, DISPATCH_GL(jit_base), BASE
+    | ldd       0, DISPATCH, DISPATCH_GL(jit_base), T6
     | addd      1, 0x0, 0x0, T8
     | ldw       2, STACK, STACK_TMP, T7
     | addd      3, 0x0, ~LJ_VMST_EXIT, T9
     | --
-    | stdsm     2, T1, 0x0, r0
-    | stdsm     5, T1, 0x8, r1
+    | stdsm     2, T4, 0x0, r0
+    | stdsm     5, T4, 0x8, r1
     | --
-    | stdsm     2, T1, 0x10, r2
-    | stdsm     5, T1, 0x18, r3
+    | stdsm     2, T4, 0x10, r2
+    | stdsm     5, T4, 0x18, r3
     | --
-    | stdsm     2, T1, 0x20, r4
-    | stdsm     5, T1, 0x28, r5
+    | stdsm     2, T4, 0x20, r4
+    | stdsm     5, T4, 0x28, r5
     | --
-    | stdsm     2, T1, 0x30, r6
-    | stdsm     5, T1, 0x38, r7
+    | stdsm     2, T4, 0x30, r6
+    | stdsm     5, T4, 0x38, r7
     | --
-    | stdsm     2, T1, 0x40, r8
-    | stdsm     5, T1, 0x48, r9
+    | stdsm     2, T4, 0x40, r8
+    | stdsm     5, T4, 0x48, r9
     | --
-    | stdsm     2, T1, 0x50, r10
-    | stdsm     5, T1, 0x58, r11
+    | stdsm     2, T4, 0x50, r10
+    | stdsm     5, T4, 0x58, r11
     | --
-    | stdsm     2, T1, 0x60, r12
-    | stdsm     5, T1, 0x68, r13
+    | stdsm     2, T4, 0x60, r12
+    | stdsm     5, T4, 0x68, r13
     | --
-    | stdsm     2, T1, 0x70, r14
-    | stdsm     5, T1, 0x78, r15
+    | stdsm     2, T4, 0x70, r14
+    | stdsm     5, T4, 0x78, r15
     | --
-    | stdsm     2, T1, 0x80, r52
-    | stdsm     5, T1, 0x88, r53
+    | stdsm     2, T4, 0x80, r52
+    | stdsm     5, T4, 0x88, r53
     | --
-    | stdsm     2, T1, 0x90, r54
-    | stdsm     5, T1, 0x98, r55
+    | stdsm     2, T4, 0x90, r54
+    | stdsm     5, T4, 0x98, r55
     | --
-    | stdsm     2, T1, 0xa0, r56
-    | stdsm     5, T1, 0xa8, r57
+    | stdsm     2, T4, 0xa0, r56
+    | stdsm     5, T4, 0xa8, r57
     | --
-    | stdsm     2, T1, 0xb0, r58
-    | stdsm     5, T1, 0xb8, r59
+    | stdsm     2, T4, 0xb0, r58
+    | stdsm     5, T4, 0xb8, r59
     | --
-    | stdsm     2, T1, 0xc0, b0
-    | stdsm     5, T1, 0xc8, b1
+    | stdsm     2, T4, 0xc0, b0
+    | stdsm     5, T4, 0xc8, b1
     | --
-    | stdsm     2, T1, 0xd0, b2
-    | stdsm     5, T1, 0xd8, b3
+    | stdsm     2, T4, 0xd0, b2
+    | stdsm     5, T4, 0xd8, b3
     | --
-    | stdsm     2, T1, 0xe0, b4
-    | stdsm     5, T1, 0xe8, b5
+    | stdsm     2, T4, 0xe0, b4
+    | stdsm     5, T4, 0xe8, b5
     | --
-    | stdsm     2, T1, 0xf0, b6
-    | stdsm     5, T1, 0xf8, b7
+    | stdsm     2, T4, 0xf0, b6
+    | stdsm     5, T4, 0xf8, b7
     | --
-    | stdsm     2, T1, 0x100, b8
-    | stdsm     5, T1, 0x108, b9
+    | stdsm     2, T4, 0x100, b8
+    | stdsm     5, T4, 0x108, b9
     | --
-    | stdsm     2, T1, 0x110, b10
-    | stdsm     5, T1, 0x118, b11
+    | stdsm     2, T4, 0x110, b10
+    | stdsm     5, T4, 0x118, b11
     | --
-    | stdsm     2, T1, 0x120, b12
-    | stdsm     5, T1, 0x128, b13
+    | stdsm     2, T4, 0x120, b12
+    | stdsm     5, T4, 0x128, b13
     | --
-    | stdsm     2, T1, 0x130, b14
-    | stdsm     5, T1, 0x138, b15
+    | stdsm     2, T4, 0x130, b14
+    | stdsm     5, T4, 0x138, b15
     | --
     | stw       2, DISPATCH, DISPATCH_J(parent), T0 // Store trace number
     | stw       5, DISPATCH, DISPATCH_GL(vmstate), T9
     | --
     | addd      0, DISPATCH, GG_DISP2J, PARG1
-    | addd      1, T1, 0x0, PARG2
+    | addd      1, T4, 0x0, PARG2
     | stw       2, DISPATCH, DISPATCH_J(exitno), T7 // Store exit number
     | std       5, DISPATCH, DISPATCH_J(L), T5
     | --
-    | addd      0, T1, 0x0, S0
+    | addd      0, T4, 0x0, S0
     | addd      1, T5, 0x0, RB
-    | std       2, T5, L->base, BASE
+    | std       2, T5, L->base, T6
     | std       5, DISPATCH, DISPATCH_GL(jit_base), T8
     | pipe_call ctpr1                          // lj_trace_exit(jit_State *J, ExitState *ex)
     | --
