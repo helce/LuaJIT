@@ -140,6 +140,26 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
   return ra_alloc1(as, ref, allow);
 }
 
+/* Fuse XLOAD/XSTORE reference into load/store operand. */
+static Reg asm_fusexref(ASMState *as, IRRef ref, RegSet allow, intptr_t *ofs)
+{
+  IRIns *ir = IR(ref);
+  Reg base = RID_NONE;
+  if (ra_noreg(ir->r) && canfuse(as, ir)) {
+    if ((ir->o == IR_ADD) && (irref_isk(ir->op2))) {
+      *ofs = *ofs + get_kval(as, ir->op2);
+      ref = ir->op1;
+    } else if ((ir->o == IR_STRREF) && irref_isk(ir->op2)) {
+      *ofs = (intptr_t)sizeof(GCstr) + get_kval(as, ir->op2);
+      ref = ir->op1;
+    } else if ((ir->o == IR_STRREF) && irref_isk(ir->op1)) {
+      *ofs = (intptr_t)sizeof(GCstr) + get_kval(as, ir->op1);
+      ref = ir->op2;
+    }
+  }
+  return ra_alloc1(as, ref, allow);
+}
+
 /* -- Calls --------------------------------------------------------------- */
 
 /* Generate a call to a C function. */
@@ -718,32 +738,31 @@ static void asm_fload(ASMState *as, IRIns *ir)
 static void asm_fstore(ASMState *as, IRIns *ir)
 {
   if (ir->r != RID_SINK) {
+    Reg src = ra_alloc1(as, ir->op2, RSET_GPR);
     IRIns *irf = IR(ir->op1);
-    Reg src = irref_isk(ir->op2) ?
-              ra_allock(as, get_kval(as, ir->op2), RSET_GPR) :
-              ra_alloc1(as, ir->op2, RSET_GPR);
-    Reg idx = ra_alloc1(as, irf->op1, rset_exclude(RSET_GPR, src));
-    lj_assertA(!irt_isfp(ir->t), "bad FP FSTORE");
+    Reg base = ra_alloc1(as, irf->op1, rset_exclude(RSET_GPR, src));
     int32_t ofs = field_ofs[irf->op2];
-    emit_alopf3_ri(as, 0, asm_storeins(as, ir), idx, ofs, src, &as->mcp);
+    lj_assertA(!irt_isfp(ir->t), "bad FP FSTORE");
+    emit_alopf3_ri(as, 0, asm_storeins(as, ir), base, ofs, src, &as->mcp);
   }
 }
 
 static void asm_xload(ASMState *as, IRIns *ir)
 {
-  IRRef ref = ir->op1;
-  IRIns *lir = IR(ref);
+  intptr_t ofs = 0;
   Reg dest = ra_dest(as, ir, RSET_GPR);
-  Reg base = ra_alloc1(as, ref, RSET_GPR);
-  uint32_t op = asm_loadins(as, ir, dest);
-  int32_t ofs = 0;
-  if (ra_noreg(lir->r) && canfuse(as, lir)) {
-    if ((lir->o == IR_ADD) && (irref_isk(lir->op2))) {
-      ref = lir->op1;
-      ofs = get_kval(as, lir->op2);
-    }
+  Reg base = asm_fusexref(as, ir->op1, RSET_GPR, &ofs);
+  emit_alopf1_ri(as, 0, asm_loadins(as, ir, dest), base, ofs, dest, &as->mcp);
+}
+
+static void asm_xstore(ASMState *as, IRIns *ir)
+{
+  if (ir->r != RID_SINK) {
+    intptr_t ofs = 0;
+    Reg src = ra_alloc1(as, ir->op2, RSET_GPR);
+    Reg base = asm_fusexref(as, ir->op1, rset_exclude(RSET_GPR, src), &ofs);
+    emit_alopf3_ri(as, 0, asm_storeins(as, ir), base, ofs, src, &as->mcp);
   }
-  emit_alopf1_ri(as, 0, op, base, ofs, dest, &as->mcp);
 }
 
 static void asm_ahuvload(ASMState *as, IRIns *ir)
@@ -1488,9 +1507,6 @@ static void asm_max(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_mulov(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_xstore(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_obar(ASMState *as, IRIns *ir)
