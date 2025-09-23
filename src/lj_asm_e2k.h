@@ -1177,6 +1177,22 @@ static void asm_abs(ASMState *as, IRIns *ir)
   emit_alopf1_ri(as, 0, E2K_ANDD, left, 0x7fffffffffffffff, dest, &as->mcp);
 }
 
+#define asm_addov(as, ir) asm_arithov(as, ir)
+#define asm_subov(as, ir) asm_arithov(as, ir)
+
+static void asm_mulov(ASMState *as, IRIns *ir)
+{
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
+  Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
+  Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, dest));
+  Reg pred = ra_pred(as, RSET_PRED);
+  asm_guard(as, pred, 1);
+  emit_alopf7_rr(as, 0, E2K_CMPEDB, tmp, dest, pred, &as->mcp);
+  emit_alopf1_ir(as, 0, E2K_SXT, SXT_WS, dest, tmp, &as->mcp);
+  emit_alopf11_rr(as, 0, E2K_SMULX, left, right, dest, &as->mcp);
+}
+
 #define asm_sub(as, ir)   asm_alopf1(as, ir, irt_isnum(ir->t) ? E2K_FSUBD : \
                                              (irt_is64(ir->t) ? E2K_SUBD : E2K_SUBS))
 #define asm_add(as, ir)   asm_alopf1(as, ir, irt_isnum(ir->t) ? E2K_FADDD : \
@@ -1189,9 +1205,6 @@ static void asm_abs(ASMState *as, IRIns *ir)
 #define asm_bsar(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SARD : E2K_SARS)
 #define asm_bror(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SCRD : E2K_SCRS)
 #define asm_brol(as, ir)  asm_alopf1(as, ir, irt_is64(ir->t) ? E2K_SCLD : E2K_SCLS)
-#define asm_addov(as, ir) asm_arithov(as, ir)
-#define asm_subov(as, ir) asm_arithov(as, ir)
-
 /* -- Comparisons --------------------------------------------------------- */
 
 static const uint32_t asm_compmap[IR_ABC+1] = {
@@ -1556,9 +1569,6 @@ static void asm_min(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_max(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_mulov(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_obar(ASMState *as, IRIns *ir)
