@@ -165,40 +165,36 @@ static Reg asm_fusexref(ASMState *as, IRRef ref, RegSet allow, intptr_t *ofs)
 static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
 {
   uint32_t n, nargs = CCI_XNARGS(ci);
-  uint32_t vararg = ci->flags & CCI_VARARG;
-  int32_t ofs = vararg ? 0 : STACKARG_OFS;
-  Reg gpr = RID_NONE;
-  Reg ctpr = ra_ctpr(as, RSET_CTPR);
-  if (ci->func) {
+  uint32_t is_vararg = ci->flags & CCI_VARARG;
+  int32_t ofs = is_vararg ? 0 : STACKARG_OFS;
+  Reg gpr = RID_NONE, ctpr = ra_ctpr(as, RSET_CTPR);
+  if (ci->func)
     emit_call(as, ctpr, 0, 0, PIPE_WBS, &as->mcp);
-  }
   for (gpr = REGARG_FIRSTGPR; gpr <= REGARG_LASTGPR; gpr++)
     as->cost[gpr] = REGCOST(~0u, ASMREF_L);
   gpr = REGARG_FIRSTGPR;
+
   for (n = 0; n < nargs; n++) { /* Setup args. */
     IRRef ref = args[n];
     if (ref) {
-      //IRIns *ir = IR(ref);
+      IRIns *ir = IR(ref);
       if (gpr <= REGARG_LASTGPR) {
         lj_assertA(rset_test(as->freeset, gpr),
                    "arg%d not free", gpr-REGARG_FIRSTGPR); /*  Already evicted. */
         ra_leftov(as, gpr, ref);
-        if (vararg) {
-          NIY
+        if (is_vararg) {
+          emit_spstore(as, ir, gpr, ofs);
+          ofs += 8;
         }
         gpr++;
       } else {
-        NIY
-        /* Reg r = ra_alloc1(as, ref, RSET_GPR);
+        Reg r = ra_alloc1(as, ref, RSET_GPR);
         emit_spstore(as, ir, r, ofs);
-        ofs += 8; */
+        ofs += 8;
       }
     } else {
-      NIY
       if (gpr <= REGARG_LASTGPR) {
-        if (vararg) {
-          NIY
-        }
+        if (is_vararg) ofs += 8;
         gpr++;
       } else {
         ofs += 8;
@@ -1484,17 +1480,16 @@ static void asm_tail_prep(ASMState *as)
 /* Ensure there are enough stack slots for call arguments. */
 static Reg asm_setup_call_slots(ASMState *as, IRIns *ir, const CCallInfo *ci)
 {
-  uint32_t nslots = 0, nargs = CCI_XNARGS(ci);
-  if ((nargs > REGARG_NUMGPR) || ci->flags & CCI_VARARG) {
-    NIY
-    //IRRef args[CCI_NARGS_MAX*2];
-    //asm_collectargs(as, ir, ci, args);
-    //for (int i = 0; i < nargs; i++) {
-    //  if (ngpr > 0) ngpr-- else nslots +=2;
-    //}
-    //if (nslots > as->evenspill) /* Leave room for args in stack slots.
-    //  as->evenspill = nslots;
-  }
+  IRRef args[CCI_NARGS_MAX*2];
+  uint32_t nargs = CCI_XNARGS(ci);
+  int nslots = 0, ngpr = REGARG_NUMGPR;
+  int is_vararg = ci->flags & CCI_VARARG;
+  asm_collectargs(as, ir, ci, args);
+  /* empty slots for first 8 args or slots if vararg */
+  if ((nargs > ngpr) || is_vararg)
+    nslots = nargs * 2;
+  if (nslots > as->evenspill) /* Leave room for args in stack slots. */
+    as->evenspill = nslots;
   return REGSP_HINT(RID_RET);
 }
 
