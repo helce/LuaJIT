@@ -141,24 +141,22 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
 }
 
 /* Fuse XLOAD/XSTORE reference into load/store operand. */
-static Reg asm_fusexref(ASMState *as, IRRef ref, RegSet allow, intptr_t *ofs,
-                        intptr_t *sxt)
+static IRRef asm_fusexref(ASMState *as, IRRef ref, intptr_t *ofs)
 {
   IRIns *ir = IR(ref);
   if (ra_noreg(ir->r) && canfuse(as, ir)) {
     if ((ir->o == IR_ADD) && (irref_isk(ir->op2))) {
       *ofs = *ofs + get_kval(as, ir->op2);
-      ref = ir->op1;
+      return ir->op1;
     } else if ((ir->o == IR_STRREF) && irref_isk(ir->op2)) {
       *ofs = (intptr_t)sizeof(GCstr) + get_kval(as, ir->op2);
-      ref = ir->op1;
+      return ir->op1;
     } else if ((ir->o == IR_STRREF) && irref_isk(ir->op1)) {
       *ofs = (intptr_t)sizeof(GCstr) + get_kval(as, ir->op1);
-      ref = ir->op2;
-      *sxt = 1; // int32, need extension
+      return ir->op2;
     }
   }
-  return ra_alloc1(as, ref, allow);
+  return ref;
 }
 
 /* -- Calls --------------------------------------------------------------- */
@@ -804,21 +802,25 @@ static void asm_fstore(ASMState *as, IRIns *ir)
 
 static void asm_xload(ASMState *as, IRIns *ir)
 {
-  intptr_t ofs = 0, sxt = 0;
+  intptr_t ofs = 0;
   Reg dest = ra_dest(as, ir, RSET_GPR);
-  Reg base = asm_fusexref(as, ir->op1, RSET_GPR, &ofs, &sxt);
+  IRRef ref = asm_fusexref(as, ir->op1, &ofs);
+  Reg base = ra_alloc1(as, ref, RSET_GPR);
   emit_alopf1_ri(as, 0, asm_loadins(as, ir, dest), base, ofs, dest, &as->mcp);
-  if (sxt) emit_alopf1_ir(as, 0, E2K_SXT, SXT_WS, base, base, &as->mcp);
+  if (!irt_is64(IR(ref)->t))
+    emit_alopf1_ir(as, 0, E2K_SXT, SXT_WS, base, base, &as->mcp);
 }
 
 static void asm_xstore(ASMState *as, IRIns *ir)
 {
   if (ir->r != RID_SINK) {
-    intptr_t ofs = 0, sxt = 0;
+    intptr_t ofs = 0;
     Reg src = ra_alloc1(as, ir->op2, RSET_GPR);
-    Reg base = asm_fusexref(as, ir->op1, rset_exclude(RSET_GPR, src), &ofs, &sxt);
+    IRRef ref = asm_fusexref(as, ir->op1, &ofs);
+    Reg base = ra_alloc1(as, ref, rset_exclude(RSET_GPR, src));
     emit_alopf3_ri(as, 0, asm_storeins(as, ir), base, ofs, src, &as->mcp);
-    if (sxt) emit_alopf1_ir(as, 0, E2K_SXT, SXT_WS, base, base, &as->mcp);
+    if (!irt_is64(IR(ref)->t))
+      emit_alopf1_ir(as, 0, E2K_SXT, SXT_WS, base, base, &as->mcp);
   }
 }
 
