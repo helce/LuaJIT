@@ -141,7 +141,8 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
 }
 
 /* Fuse XLOAD/XSTORE reference into load/store operand. */
-static Reg asm_fusexref(ASMState *as, IRRef ref, RegSet allow, intptr_t *ofs)
+static Reg asm_fusexref(ASMState *as, IRRef ref, RegSet allow, intptr_t *ofs,
+                        intptr_t *sxt)
 {
   IRIns *ir = IR(ref);
   if (ra_noreg(ir->r) && canfuse(as, ir)) {
@@ -154,6 +155,7 @@ static Reg asm_fusexref(ASMState *as, IRRef ref, RegSet allow, intptr_t *ofs)
     } else if ((ir->o == IR_STRREF) && irref_isk(ir->op1)) {
       *ofs = (intptr_t)sizeof(GCstr) + get_kval(as, ir->op1);
       ref = ir->op2;
+      *sxt = 1; // int32, need extension
     }
   }
   return ra_alloc1(as, ref, allow);
@@ -802,19 +804,21 @@ static void asm_fstore(ASMState *as, IRIns *ir)
 
 static void asm_xload(ASMState *as, IRIns *ir)
 {
-  intptr_t ofs = 0;
+  intptr_t ofs = 0, sxt = 0;
   Reg dest = ra_dest(as, ir, RSET_GPR);
-  Reg base = asm_fusexref(as, ir->op1, RSET_GPR, &ofs);
+  Reg base = asm_fusexref(as, ir->op1, RSET_GPR, &ofs, &sxt);
   emit_alopf1_ri(as, 0, asm_loadins(as, ir, dest), base, ofs, dest, &as->mcp);
+  if (sxt) emit_alopf1_ir(as, 0, E2K_SXT, SXT_WS, base, base, &as->mcp);
 }
 
 static void asm_xstore(ASMState *as, IRIns *ir)
 {
   if (ir->r != RID_SINK) {
-    intptr_t ofs = 0;
+    intptr_t ofs = 0, sxt = 0;
     Reg src = ra_alloc1(as, ir->op2, RSET_GPR);
-    Reg base = asm_fusexref(as, ir->op1, rset_exclude(RSET_GPR, src), &ofs);
+    Reg base = asm_fusexref(as, ir->op1, rset_exclude(RSET_GPR, src), &ofs, &sxt);
     emit_alopf3_ri(as, 0, asm_storeins(as, ir), base, ofs, src, &as->mcp);
+    if (sxt) emit_alopf1_ir(as, 0, E2K_SXT, SXT_WS, base, base, &as->mcp);
   }
 }
 
