@@ -4807,104 +4807,112 @@ static void build_subroutines(BuildCtx *ctx)
     |.endif
     |->vm_exit_interp:
     |.if JIT
-    | //  PRET1 = MULTRES(unscaled) or negated error code, BASE, PC and DISPATCH set.
-    | --
-    | ldd       0, STACK, SAVE_L, RB           // Reload, need it only for vm_exit_interp
+    | //  PRET1 = MULTRES(unscaled)(zext) or negated error code, BASE, PC and DISPATCH set.
+    | ldw       0, PC, 0, INSN_E
+    | sxt       1, 0x2, PRET1, PRET1           // Sign extend to simplify next work
+    | ldwsm     2, PC, 4, INSN_B
+    | lddsm     3, BASE, -8, T3
+    | lddsm     5, DISPATCH, DISPATCH_J(trace), S0
     | disp      ctpr1, extern lj_err_trace
     | --
-    | cmpbsb    1, PRET1, -LUA_ERRERR, pred0   // Check for error from exit.
-    | lddsm     3, BASE, -8, T2
-    | shld      4, PRET1, 3, T0
+    | ldd       0, STACK, SAVE_L, RB           // Reload, need it only for vm_exit_interp
+    | cmpbdb    1, PRET1, -LUA_ERRERR, pred0   // Check for error from exit.
+    | ldwsm     2, PC, 12, INSN_D
+    | ldd       3, BASE, -16, KBASE
+    | cmpedb    4, PRET1, -17, pred1           // Static dispatch?
+    | ldwsm     5, PC, 16, INSN_S
     | --
-    | cmpesb    0, PRET1, -17, pred1
-    | disp      ctpr2, >5
+    | shld      2, PRET1, 3, S1
+    | ldwsm     3, PC, 8, INSN_L
+    | addd      4, PC, 4, PC
+    | wait_load INSN_E, 2
     | --
-    | addd      1, 0, 0, S1
-    | addd      2, 0x0, ~LJ_VMST_INTERP, S2
+    | andd      0, INSN_E, 0xff, T1
+    | shld      1, INSN_E, 3, OP_E
+    | shldsm    2, INSN_B, 3, OP_B
+    | ldbsm     3, T3, -3,  T3
+    | cmpandedbsm 4, T3, FRAME_TYPE, pred4     // Trace stitching continuation?
+    | shrd      5, INSN_E, 0xd, T0
+    | --
+    | andd      0, OP_E, 0x7f8, OP_E
+    | cmpbsb    1, T1, BC_FUNCF, pred2     // Function header?
+    | cmpbsb    3, T1, BC_FUNCC+2, pred3   // Fast function?
+    | andd      4, T0, 0x7f8, RC_E
+    | andd      5, T0, 0x7fff8, RD_E
     | --
     | subs      0, 0x0, PRET1, PARG2, ~pred0   // Rethrow error from the right C frame.
     | addd      1, RB, 0x0, PARG1, ~pred0
-    | pipe_call_if ctpr1, ~pred0                // lj_err_trace (lua_State *L, int errcode)
-    | --
-    | ldb       0, PC, PC_OP, S0
-    | ldw       2, PC, 0, INSN_E
-    | ldd       3, BASE, -16, KBASE
-    | ldbsm     5, T2, -3,  T3
-    | --
-    | std       2, DISPATCH, DISPATCH_GL(jit_base), S1
-    | stw       5, DISPATCH, DISPATCH_GL(vmstate), S2
-    | --
-    | ldbsm     0, PC, 4, T1
-    | ldwsm     2, PC, 4, INSN_B
-    | ldwsm     3, PC, 8, INSN_L
-    | ldwsm     5, PC,12, INSN_D
-    | wait_load S0, 2
-    | wait_load KBASE, 2
-    | wait_load T3, 2
-    | --
-    | shld      0, S0, 3, S1
-    | extract_value 1, KBASE, KBASE
-    | stw       2, STACK, MULTRES, T0
-    | shldsm    3, T3, 3, T3
-    | --
-    | ldd       0, S1, DISPATCH, S1            // E: Load pointer to insn handler.
-    | cmpbsb    1, S0, BC_FUNCF, pred0         // Function header?
-    | ldd       2, KBASE, LFUNC->pc, KBASE
-    | cmpbsb    3, S0, BC_FUNCC+2, pred2
-    | cmpedbsm  4, T2, FRAME_TYPE, pred3       // Check frame below fast function
-    | subdsm    5, BASE, T3, T3
-    | --
-    | ldwsm     0, PC,16, INSN_S
-    | lddsm     3, T3, -32, T3
-    | wait_load KBASE, 1
-    | wait_load S1, 1
-    | --
-    | ldd       0, KBASE, PC2PROTO(k), KBASE
-    | shldsm    1, T1, 3, OP_B
-    | ct        ctpr2, pred1                   // Static dispatch?
-    | --
-    | movtd     0, S1, ctpr3                   // Prepare an insn handler for stage E.
-    | subd      1, 0, 1, BYPASS_W
-    | addd      2, S1, 0, DISPATCH_E
-    | addd      3, PC, 4, PC
-    | pass      pred0, p0
-    | pass      pred2, p1
-    | pass      pred3, p2
-    | landp     ~p0, ~p1, p4
-    | landp     p4, p2, p5
-    | pass      p5, pred1                      // Trace stitching continuation?
-    | --
-    | lddsm     0, OP_B, DISPATCH, DISPATCH_B
-    | shldsm    1, INSN_E, 3, OP_E
-    | getfdsm   3, T3, 0xbc0, T3               // extract_value spec
-    | --
-    | anddsm    0, OP_E, 0x7f8, OP_E
-    | shrd      1, INSN_E, 0x5, RA_E
-    | shrd      2, INSN_E, 0x15, RB_E
-    | shrd      3, INSN_E, 0xd, T8, pred0
-    | sxt       4, 0x2, T0, T8, ~pred0         // holds (nres + 1)*8.
-    | lddsm     5, T3, LFUNC->pc, T3
-    | --
-    | andd      1, RA_E, 0x7f8, RA_E
-    | andd      2, RB_E, 0x7f8, RB_E
-    | andd      3, T8, 0x7f8, RC_E
-    | andd      4, T8, 0x7fff8, RD_E
-    | shldsm    5, INSN_L, 3, OP_L
+    | ldd       2, OP_E, DISPATCH, DISPATCH_E
+    | ldd       3, S0, RD_E, S0, pred1
+    | extract_value 5, KBASE, KBASE
+    | pipe_call_if ctpr1, ~pred0               // lj_err_trace (lua_State *L, int errcode)
     | --
     | shldsm    0, INSN_D, 3, OP_D
+    | subd      1, 0, 1, BYPASS_W
+    | anddsm    2, OP_B, 0x7f8, OP_B
+    | ldd       3, KBASE, LFUNC->pc, KBASE
+    | shldsm    4, INSN_L, 3, OP_L
+    | wait_load T3, 3
+    | --
+    | pass      pred1, p0
+    | pass      pred2, p1
+    | pass      pred3, p2
+    | pass      pred4, p3
+    | landp     ~p0, ~p1, p4
+    | landp     p4, ~p2, p5
+    | landp     p5, ~p3, p6
+    | pass      p4, pred0
+    | pass      p6, pred2
+    | stw       2, STACK, MULTRES, S1          // scaled multres
+    | shldsm    3, T3, 3, T3
+    | addd      4, 0x0, ~LJ_VMST_INTERP, T2
+    | std       5, RB, L->base, BASE
+    | --
+    | andd      0, S1, 0x7f8, RC_E, pred0      // RC_E/RD_E holds (nres+1)*8
+    | andd      1, S1, 0x7fff8, RD_E, pred0
+    | subdsm    3, BASE, T3, T3
+    | ldw       5, S0, TRACE->startins, INSN_E, pred1
+    | wait_load INSN_E, 0
+    | --
+    | // Dispatch to static entry of original ins replaced by BC_JLOOP. (pred1)
+    | movtd     0, DISPATCH_E, ctpr3
+    | shld      1, INSN_E, 3, OP_E, pred1
+    | addd      2, 0, 0, T4
+    | lddsm     3, T3, -32, T3
+    | --
+    | addd      0, DISPATCH, GG_DISP2STATIC, T1
+    | andd      1, OP_E, 0x7f8, OP_E, pred1
+    | lddsm     2, OP_B, DISPATCH, DISPATCH_B
+    | anddsm    4, OP_L, 0x7f8, OP_L
+    | ldd       5, KBASE, PC2PROTO(k), KBASE
+    | --
+    | ldd       0, OP_E, T1, DISPATCH_E, pred1
     | shrdsm    1, INSN_B, 0x5, RA_B
     | shrdsm    2, INSN_B, 0x15, RB_B
     | shrdsm    3, INSN_B, 0xd, RCD_B
-    | anddsm    5, OP_L, 0x7f8, OP_L
     | --
-    | // Otherwise set KBASE for Lua function below fast function.
-    | ldd       3, T3, PC2PROTO(k), KBASE, pred1
-    | ct        ctpr3
+    | shrd      0, INSN_E, 0x5, RA_E
+    | shrd      1, INSN_E, 0x15, RB_E
+    | std       2, DISPATCH, DISPATCH_GL(jit_base), T4
+    | getfdsm   3, T3, 0xbc0, T3
+    | stw       5, DISPATCH, DISPATCH_GL(vmstate), T2
     | --
-    | // Dispatch to static entry of original ins replaced by BC_JLOOP.
-    |5:
-    | // TODO need some investigation, not sure i understand whats happens with PC
-    | do_fault
+    | andd      1, RA_E, 0x7f8, RA_E
+    | andd      2, RB_E, 0x7f8, RB_E
+    | shrd      4, INSN_E, 0xd, T0, pred1
+    | lddsm     5, T3, LFUNC->pc, T3
+    | wait_load DISPATCH_E, 2
+    | --
+    | movtdsm   0, DISPATCH_E, ctpr2
+    | wait_load T3, 1
+    | --
+    | ldd       3, T3, PC2PROTO(k), KBASE, pred2
+    | andd      4, T0, 0x7f8, RC_E, pred1
+    | andd      5, T0, 0x7fff8, RD_E, pred1
+    | ct        ctpr3, ~pred1
+    | --
+    | ct        ctpr2
+    | --
     |.endif
     |
     |//-----------------------------------------------------------------------
@@ -5020,13 +5028,103 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr1                       // return
     | --
     |
-    |->vm_next:
-    | // Unsupported
-    | do_fault
-    |
     |//-----------------------------------------------------------------------
     |//-- Miscellaneous functions --------------------------------------------
     |//-----------------------------------------------------------------------
+    |
+    |.define NEXT_TAB,     r0
+    |.define NEXT_IDX,     r1
+    |.define NEXT_ASIZE,   r2
+    |.define NEXT_NIL,     r3
+    |.define NEXT_TMP0,    r4
+    |.define NEXT_TMP1,    r5
+    |.define NEXT_TMP2,    r6
+    |.define NEXT_TMP3,    r7
+    |.define NEXT_TMP4,    r8
+    |.define NEXT_TMP5,    r9
+    |.define NEXT_RES_VK,  r0
+    |.define NEXT_RES_IDX, r1
+    |.define NEXT_STACK,   g20
+    |.define NEXT_RES_VAL, 0x0
+    |.define NEXT_RES_KEY, 0x8
+    |
+    |// TValue *lj_vm_next(GCtab *t, uint32_t idx)
+    |// Next idx returned in RRET2.
+    |->vm_next:
+    |.if JIT
+    | setwd wsz = 0x8, nfx = 0x1, dbl = 0x0
+    | ldw       0, NEXT_TAB, TAB->asize, NEXT_ASIZE
+    | addd      1, 0x0, LJ_TNIL, NEXT_NIL
+    | ldd       2, NEXT_TAB, TAB->array, NEXT_TMP0
+    | disp      ctpr2, >1
+    | --
+    | getsp     0, 0x0, NEXT_STACK
+    | sxt       1, 0x6, NEXT_IDX, NEXT_IDX
+    | lddsm     2, NEXT_TAB, TAB->node, NEXT_TMP4
+    | return    ctpr3
+    | --
+    | ldwsm     0, NEXT_TAB, TAB->hmask, NEXT_TMP5
+    | wait_load NEXT_ASIZE, 2
+    | --
+    |1: // Traverse array part.
+    | cmpbdb    0, NEXT_IDX, NEXT_ASIZE, pred0
+    | idtofd    1, NEXT_IDX, NEXT_TMP3
+    | shld      2, NEXT_IDX, 0x3, NEXT_TMP1
+    | --
+    | lddsm     0, NEXT_TMP0, NEXT_TMP1, NEXT_TMP2
+    | wait_load NEXT_TMP2, 0
+    | --
+    | cmpedbsm  0, NEXT_TMP2, LJ_TNIL, pred1
+    | addd      1, NEXT_IDX, 0x1, NEXT_IDX, pred0
+    | wait_pred pred1, 0
+    | --
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     p0, p1, p4
+    | pass      p4, pred1
+    | --
+    | ct        ctpr2, pred1
+    | --
+    | addd      0, NEXT_STACK, 0x0, NEXT_RES_VK, pred0
+    | addd      1, NEXT_IDX, 0x0, NEXT_RES_IDX, pred0
+    | std       2, NEXT_STACK, NEXT_RES_VAL, NEXT_TMP2, pred0
+    | std       5, NEXT_STACK, NEXT_RES_KEY, NEXT_TMP3, pred0
+    | ct        ctpr3, pred0
+    | --
+    | // Traverse hash part.
+    | subd      0, NEXT_IDX, NEXT_ASIZE, NEXT_RES_IDX
+    | addd      1, NEXT_TMP4, 0x0, NEXT_RES_VK
+    | --
+    | shld      0, NEXT_RES_IDX, 0x5, NEXT_TMP2
+    | shld      1, NEXT_RES_IDX, 0x3, NEXT_TMP1
+    | addd      2, NEXT_TMP5, 0x0, NEXT_TMP0
+    | --
+    | subd      0, NEXT_TMP2, NEXT_TMP1, NEXT_TMP1
+    | --
+    | addd      0, NEXT_RES_VK, NEXT_TMP1, NEXT_RES_VK
+    | --
+    |6:
+    | lddsm     0, NEXT_RES_VK, NODE->val, NEXT_TMP2
+    | cmpbdb    1, NEXT_TMP0, NEXT_RES_IDX, pred0
+    | --
+    | cmpedbsm  0, NEXT_TMP2, NEXT_NIL, pred1
+    | ibranch   >8, pred0
+    | --
+    | addd      0, NEXT_RES_IDX, 0x1, NEXT_RES_IDX
+    | ibranch   >9, ~pred1
+    | --
+    | addd      0, NEXT_RES_VK, sizeof(Node), NEXT_RES_VK
+    | ibranch   <6
+    | --
+    |8: // End of iteration. Set the key to nil (not the value).
+    | addd      0, NEXT_STACK, 0x0, NEXT_RES_VK
+    | std       2, NEXT_STACK, NEXT_RES_KEY, NEXT_NIL
+    | --
+    |9:
+    | addd      0, NEXT_RES_IDX, NEXT_ASIZE, NEXT_RES_IDX
+    | ct        ctpr3
+    | --
+    |.endif
     |
     |//-----------------------------------------------------------------------
     |//-- Assertions ---------------------------------------------------------
