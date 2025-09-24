@@ -1044,6 +1044,42 @@ static void asm_tbar(ASMState *as, IRIns *ir)
                  mark, &as->mcp);
 }
 
+static void asm_obar(ASMState *as, IRIns *ir)
+{
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc_barrieruv];
+  IRRef args[2];
+  MCLabel l_end;
+  RegSet allow = RSET_GPR;
+  Reg obj = RID_NONE, val = RID_NONE, tmp1 = RID_NONE, tmp2 = RID_NONE;
+  Reg pred1 = ra_pred(as, RSET_PRED);
+  Reg pred2 = ra_pred(as, rset_exclude(RSET_PRED, pred1));
+  Reg ctpr = ra_ctpr(as, RSET_CTPR);
+  /* No need for other object barriers (yet). */
+  lj_assertA(IR(ir->op1)->o == IR_UREFC, "bad OBAR type");
+  ra_evictset(as, RSET_SCRATCH);
+  l_end = emit_label(as);
+  args[0] = ASMREF_TMP1;  /* global_State *g */
+  args[1] = ir->op1;      /* TValue *tv      */
+  asm_gencall(as, ci, args);
+  emit_loada(as, ra_releasetmp(as, ASMREF_TMP1), J2G(as->J));
+  obj = IR(ir->op1)->r;
+  val = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, obj));
+  tmp1 = ra_scratch(as, rset_clear(allow, obj));
+  tmp2 = ra_scratch(as, rset_clear(allow, tmp1));
+  emit_ct(as, ctpr, pred1, 0, &as->mcp);
+  emit_ct(as, ctpr, pred2, 0, &as->mcp);
+  emit_alopf7_ri(as, 0, E2K_CMPESB, tmp1, 0, pred1, 0);
+  emit_alopf7_ri(as, 0, E2K_CMPESB, tmp2, 0, pred2, &as->mcp);
+  emit_alopf1_ri(as, 0, E2K_ANDS, tmp1, (intptr_t)LJ_GC_BLACK, tmp1, 0);
+  emit_alopf1_ri(as, 0, E2K_ANDS, tmp2, (intptr_t)LJ_GC_WHITES, tmp2, &as->mcp);
+  emit_alopf1_ri(as, 0, E2K_LDB, obj, (intptr_t)offsetof(GCupval, marked) -
+                                      (intptr_t)offsetof(GCupval, tv), tmp1, 0);
+  emit_alopf1_ri(as, 0, E2K_LDB, val, (intptr_t)offsetof(GChead, marked),
+                 tmp2, 0);
+  ptrdiff_t disp = (ptrdiff_t)((void *) l_end - (void *)as->mcp);
+  emit_copf2(as, E2K_DISP, ctpr, disp, &as->mcp);
+}
+
 /* -- FP/int arithmetic and logic operations ------------------------------ */
 
 static void asm_alopf1(ASMState *as, IRIns *ir, int op)
@@ -1583,9 +1619,6 @@ static void asm_min(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_max(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_obar(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_strto(ASMState *as, IRIns *ir)
