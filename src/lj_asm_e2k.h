@@ -908,14 +908,14 @@ static void asm_sload(ASMState *as, IRIns *ir)
              "inconsistent SLOAD variant");
   if ((ir->op2 & IRSLOAD_CONVERT) && irt_isguard(t) && irt_isint(t)) {
     dest = ra_scratch(as, allow);
-    allow = rset_exclude(allow, dest);
+    allow = rset_clear(allow, dest);
     asm_tointg(as, ir, dest);
     t.irt = IRT_NUM; /* Continue with a regular number type check. */
   } else if (ra_used(ir)) {
     lj_assertA(irt_isnum(ir->t) || irt_isint(ir->t) || irt_isaddr(ir->t),
                "bad SLOAD type %d", irt_type(t));
     dest = ra_dest(as, ir, allow);
-    allow = rset_exclude(allow, dest);
+    allow = rset_clear(allow, dest);
     if (ir->op2 & IRSLOAD_CONVERT) {
       emit_alopf2_r(as, 0, irt_isint(t) ? E2K_FDTOISTR : E2K_ISTOFD,
                     dest, dest, &as->mcp);
@@ -925,15 +925,13 @@ static void asm_sload(ASMState *as, IRIns *ir)
       emit_alopf1_ri(as, 0, E2K_GETFD, dest, 0xbc0, dest, &as->mcp);
     } else if (irt_isint(t) && (ir->op2 & IRSLOAD_TYPECHECK)) {
       /* Sign-extend integers. */
-      // TODO SIGN EXTEND ??
-      NIY
+      emit_alopf1_ir(as, 0, E2K_SXT, SXT_WS, dest, dest, &as->mcp);
     }
   }
   base = ra_alloc1(as, REF_BASE, allow);
-  allow = rset_exclude(allow, base);
   if (ir->op2 & IRSLOAD_TYPECHECK) {
     Reg pred = ra_pred(as, RSET_PRED);
-    Reg type = ra_scratch(as, allow);
+    Reg type = ra_scratch(as, rset_clear(allow, base));
     if (!ra_hasreg(dest))
       dest = type;
     if (irt_ispri(t)) {
@@ -941,14 +939,11 @@ static void asm_sload(ASMState *as, IRIns *ir)
       intptr_t k = ~((int64_t)~irt_toitype(t) << 47);
       emit_alopf7_ri(as, 0, E2K_CMPEDB, type, k, pred, &as->mcp);
     } else if (ir->op2 & IRSLOAD_KEYINDEX) {
-      NIY
+      asm_guard(as, pred, 1);
+      intptr_t k = (int32_t)LJ_KEYINDEX;
+      emit_alopf7_ri(as, 0, E2K_CMPESB, type, k, pred, &as->mcp);
+      emit_alopf1_ri(as, 0, E2K_SHRD, dest, 32, type, &as->mcp);
     } else {
-      /*
-        ldd base, ofs, dest
-        sard   dest, 47, type
-        cmpesb type, LJ_TYPE, predN
-        asm_guard(inverted);
-      */
       intptr_t k = irt_isnum(t) ? (int32_t)LJ_TISNUM :
                    (int32_t)irt_toitype(t);
       asm_guard(as, pred, 1);
@@ -1271,6 +1266,24 @@ static void asm_comp(ASMState *as, IRIns *ir)
 
 #define asm_equal(as, ir) asm_comp(as, ir)
 
+/* -- Split register ops -------------------------------------------------- */
+
+/* Hiword op of a split 32/32 or 64/64 bit op. Previous op is the loword op. */
+static void asm_hiop(ASMState *as, IRIns *ir)
+{
+  /* HIOP is marked as a store because it needs its own DCE logic. */
+  int uselo = ra_used(ir-1), usehi = ra_used(ir);  /* Loword/hiword used? */
+  if (LJ_UNLIKELY(!(as->flags & JIT_F_OPT_DCE))) uselo = usehi = 1;
+  if (!usehi) return;  /* Skip unused hiword op for all remaining ops. */
+  switch ((ir-1)->o) {
+  case IR_CALLN: case IR_CALLL: case IR_CALLS: case IR_CALLXS:
+    if (!uselo)
+      ra_allocref(as, ir->op1, RID2RSET(RID_RETLO));  /* Mark lo op as used. */
+    break;
+  default: lj_assertA(0, "bad HIOP for op %d", (ir-1)->o); break;
+  }
+}
+
 /* -- Stack handling ------------------------------------------------------ */
 
 /* Check Lua stack size for overflow. Use exit handler as fallback. */
@@ -1559,9 +1572,6 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 }
 
 // TODO
-static void asm_hiop(ASMState *as, IRIns *ir)
-{  NIY }
-
 static void asm_prof(ASMState *as, IRIns *ir)
 {  NIY }
 
