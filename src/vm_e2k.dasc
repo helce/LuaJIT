@@ -4859,8 +4859,8 @@ static void build_subroutines(BuildCtx *ctx)
     | pass      pred3, p2
     | pass      pred4, p3
     | landp     ~p0, ~p1, p4
-    | landp     p4, ~p2, p5
-    | landp     p5, ~p3, p6
+    | landp     ~p2, p3, p5
+    | landp     p4, p5, p6
     | pass      p4, pred0
     | pass      p6, pred2
     | stw       2, STACK, MULTRES, S1          // scaled multres
