@@ -8645,13 +8645,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | disp      ctpr2, ->vmeta_for
         | --
         | ldb       0, T1, T2, RARG1        // Branch target insn opcode for fast restart.
-        | addd      1, T1, T2, PC           // Set PC to branch target
+        | addd      1, T1, T2, T5           // Set PC to branch target
         | ldd       2, RA, 0x10, RB
         | ldd       3, T0, 0x0, S0
         | ldd       5, T0, 0x8, S1
         | disp      ctpr1, ->vm_restart_pipeline_fast
         | --
-        | ldhsm     0, PC, PREV_PC_RD, RD
+        | ldhsm     0, T5, PREV_PC_RD, RD
         | wait_load RD, 0
         | --
         | shldsm    0, RD, 0x3, RD          // traceno*8
@@ -8685,6 +8685,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | wait_load T3, 1
         | --
         | movtdsm   0, T3, ctpr3
+        | addd      1, T5, 0, PC, pred2     // PC should be original for vmeta_for
         | std       5, RA, 0x18, S0, pred2
         | ct        ctpr2, ~pred2           // vmeta_for(RA)
         | --
