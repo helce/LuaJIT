@@ -3,8 +3,6 @@
 ** Copyright (C) 2005-2025 Mike Pall. See Copyright Notice in luajit.h
 */
 
-#define NIY __builtin_trap();
-
 /* -- Bundling helpers ---------------------------------------------------- */
 
 static uint64_t check_resource(ASMState *as, uint64_t mask)
@@ -678,7 +676,8 @@ static void emit_ibranch(ASMState *as, uintptr_t disp, Reg pred,
 
 static void emit_jmp(ASMState *as,  MCode *target)
 {
-  NIY
+  emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)as->mcp),
+               0, 0, &as->mcp);
 }
 
 /* -- Emit generic operations --------------------------------------------- */
