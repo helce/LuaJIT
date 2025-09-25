@@ -412,6 +412,7 @@ local map_op = {
   andndsm_4 = "ALU2_ALOPF1_1_0x3f_0x3",
   andnd_5 = "ALU2PR_ALOPF1_0_0x3f_0x3",
   ors_4 = "ALU2_ALOPF1_0_0x3f_0x4",
+  ors_5 = "ALU2PR_ALOPF1_0_0x3f_0x4",
   ord_4 = "ALU2_ALOPF1_0_0x3f_0x5",
   ord_5 = "ALU2PR_ALOPF1_0_0x3f_0x5",
   xors_4 = "ALU2_ALOPF1_0_0x3f_0x8",
