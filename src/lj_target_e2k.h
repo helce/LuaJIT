@@ -397,7 +397,7 @@ enum {
   /* ------------------------------------------------- */
   E2K_CMPBSB,   E2K_CMPESB,   E2K_CMPBESB,  E2K_CMPLSB,
   E2K_CMPLESB,  E2K_CMPBDB,   E2K_CMPEDB,   E2K_CMPBEDB,
-  E2K_CMPLDB,   E2K_CMPLEDB,
+  E2K_CMPLDB,   E2K_CMPLEDB,  E2K_CMPANDESB,
   E2K_STB,      E2K_STH,      E2K_STW,      E2K_STD,
   /* ------------------------------------------------- */
   E2K_FCMPEQSB, E2K_FCMPLTSB, E2K_FCMPLESB, E2K_FCMPNLTSB,
@@ -476,6 +476,7 @@ static const E2kOp e2kop[] = {
   { "CMPBEdb",  RES_ALS_0134,   0x21, 0x3,  0,    0    },
   { "CMPLdb",   RES_ALS_0134,   0x21, 0x6,  0,    0    },
   { "CMPLEdb",  RES_ALS_0134,   0x21, 0x7,  0,    0    },
+  { "CMPANDEsb",RES_ALS_0134,   0x22, 0x2,  0,    0    },
   { "STb",      RES_ALS_25,     0x24, 0,    0,    0    },
   { "STh",      RES_ALS_25,     0x25, 0,    0,    0    },
   { "STw",      RES_ALS_25,     0x26, 0,    0,    0    },

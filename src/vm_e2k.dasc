@@ -9247,8 +9247,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_JFUNCV:
-        | // Unsupported
-        | do_fault /* NYI: compiled vararg functions. */
+        | do_fault                          // NYI: compiled vararg functions.
         break;
 
     case BC_IFUNCV:

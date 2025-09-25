@@ -1369,6 +1369,19 @@ static void asm_hiop(ASMState *as, IRIns *ir)
   }
 }
 
+/* -- Profiling ----------------------------------------------------------- */
+
+static void asm_prof(ASMState *as, IRIns *ir)
+{
+  UNUSED(ir);
+  Reg tmp = ra_scratch(as, RSET_GPR);
+  Reg pred = ra_pred(as, RSET_PRED);
+  asm_guard(as, pred, 1);
+  emit_alopf7_ri(as, 0, E2K_CMPANDESB, tmp, HOOK_PROFILE, pred, &as->mcp);
+  emit_alopf1_ri(as, 0, E2K_LDB, RID_DISPATCH,
+                 (int32_t)dispofs(as, &J2G(as->J)->hookmask), tmp, &as->mcp);
+}
+
 /* -- Stack handling ------------------------------------------------------ */
 
 /* Check Lua stack size for overflow. Use exit handler as fallback. */
@@ -1657,8 +1670,5 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 }
 
 // TODO
-static void asm_prof(ASMState *as, IRIns *ir)
-{  NIY }
-
 static void asm_bufhdr_write(ASMState *as, Reg sb)
 { NIY }
