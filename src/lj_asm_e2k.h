@@ -408,6 +408,26 @@ static void asm_conv(ASMState *as, IRIns *ir)
   }
 }
 
+static void asm_strto(ASMState *as, IRIns *ir)
+{
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_strscan_num];
+  IRRef args[2];
+  int32_t ofs = 0;
+  RegSet drop = RSET_SCRATCH;
+  Reg pred = ra_pred(as, RSET_PRED);
+  if (ra_hasreg(ir->r)) rset_set(drop, ir->r);  /* Spill dest reg (if any). */
+  ra_evictset(as, drop);
+  ofs = sps_scale(ir->s);
+  asm_guard(as, pred, 0); /* Test return status. */
+  emit_alopf7_ri(as, 0, E2K_CMPEDB, RID_RET, 0, pred, &as->mcp);
+  args[0] = ir->op1;      /* GCstr *str */
+  args[1] = ASMREF_TMP1;  /* TValue *n  */
+  asm_gencall(as, ci, args);
+  /* Store the result to the spill slot or temp slots. */
+  emit_alopf1_ri(as, 0, E2K_ADDD, RID_SP, ofs,
+                 ra_releasetmp(as, ASMREF_TMP1), &as->mcp);
+}
+
 /* -- Memory references --------------------------------------------------- */
 
 /* Store tagged value for ref at base+ofs. */
@@ -1638,9 +1658,6 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 
 // TODO
 static void asm_prof(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_strto(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_bufhdr_write(ASMState *as, Reg sb)
