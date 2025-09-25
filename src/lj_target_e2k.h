@@ -405,6 +405,7 @@ enum {
   E2K_FCMPNLTDB,E2K_FCMPNLEDB,
   /* ------------------------------------------------- */
   E2K_FADDS,    E2K_FADDD,    E2K_FSUBS,    E2K_FSUBD,
+  E2K_FMINS,    E2K_FMIND,    E2K_FMAXS,    E2K_FMAXD,
   /* ------------------------------------------------- */
   E2K_FMULS,    E2K_FMULD,    E2K_FSTOISTR, E2K_ISTOFS,
   E2K_FDTOIDTR, E2K_IDTOFD,   E2K_FSTOIDTR, E2K_ISTOFD,
@@ -495,6 +496,10 @@ static const E2kOp e2kop[] = {
   { "FADDd",    RES_ALS_0134,   0x31, 0,    0,    0    },
   { "FSUBs",    RES_ALS_0134,   0x32, 0,    0,    0    },
   { "FSUBd",    RES_ALS_0134,   0x33, 0,    0,    0    },
+  { "FMINs",    RES_ALS_0134,   0x34, 0,    0,    0    },
+  { "FMINd",    RES_ALS_0134,   0x35, 0,    0,    0    },
+  { "FMAXs",    RES_ALS_0134,   0x36, 0,    0,    0    },
+  { "FMAXd",    RES_ALS_0134,   0x37, 0,    0,    0    },
 /* --------------------------------------------------- */
   { "FMULs",    RES_ALS_0134,   0x38, 0,    0,    0    },
   { "FMULd",    RES_ALS_0134,   0x39, 0,    0,    0    },

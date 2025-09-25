@@ -1214,8 +1214,28 @@ static void asm_abs(ASMState *as, IRIns *ir)
   emit_alopf1_ri(as, 0, E2K_ANDD, left, 0x7fffffffffffffff, dest, &as->mcp);
 }
 
-#define asm_addov(as, ir) asm_arithov(as, ir)
-#define asm_subov(as, ir) asm_arithov(as, ir)
+static void asm_min_max(ASMState *as, IRIns *ir, int ismax)
+{
+  if (irt_isnum(ir->t)) {
+    asm_alopf1(as, ir, ismax ? E2K_FMAXD : E2K_FMIND);
+  } else {
+    Reg dest = ra_dest(as, ir, RSET_GPR);
+    Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
+    Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
+    // rset can be ignored if register was already allocated
+    if (left == right) {
+      if (dest != left) emit_movrr(as, 0, dest, left);
+    } else {
+      Reg pred = ra_pred(as, RSET_PRED);
+      emit_mrgc(as, emit_alopf1_rr(as, 1, E2K_MERGES, left, right, dest, 0),
+                pred, ismax ? 0 : 1, &as->mcp);
+      emit_alopf7_rr(as, 0, E2K_CMPLSB, left, right, pred, &as->mcp);
+    }
+  }
+}
+
+#define asm_min(as, ir)   asm_min_max(as, ir, 0)
+#define asm_max(as, ir)   asm_min_max(as, ir, 1)
 
 static void asm_mulov(ASMState *as, IRIns *ir)
 {
@@ -1229,6 +1249,9 @@ static void asm_mulov(ASMState *as, IRIns *ir)
   emit_alopf1_ir(as, 0, E2K_SXT, SXT_WS, dest, tmp, &as->mcp);
   emit_alopf11_rr(as, 0, E2K_SMULX, left, right, dest, &as->mcp);
 }
+
+#define asm_addov(as, ir) asm_arithov(as, ir)
+#define asm_subov(as, ir) asm_arithov(as, ir)
 
 #define asm_sub(as, ir)   asm_alopf1(as, ir, irt_isnum(ir->t) ? E2K_FSUBD : \
                                              (irt_is64(ir->t) ? E2K_SUBD : E2K_SUBS))
@@ -1615,12 +1638,6 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 
 // TODO
 static void asm_prof(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_min(ASMState *as, IRIns *ir)
-{  NIY }
-
-static void asm_max(ASMState *as, IRIns *ir)
 {  NIY }
 
 static void asm_strto(ASMState *as, IRIns *ir)
