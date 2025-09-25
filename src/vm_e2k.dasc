@@ -4376,8 +4376,8 @@ static void build_subroutines(BuildCtx *ctx)
     |->cont_hook:                           // Continue from hook yield.
     | do_fault
     |
-    |.if JIT
     |->vm_hotloop:                          // Hot loop counter underflow.
+    |.if JIT
     | ldd       0, BASE, -16, T0            // Same as curr_topL(L).
     | ldd       2, STACK, SAVE_L, RB
     | disp      ctpr1, extern lj_trace_hot
@@ -4513,8 +4513,8 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr3                       // Jump to the insn handler for stage E.
     | --
     |
-    |.if JIT
     |->vm_hotcall:                          // Hot call counter underflow.
+    |.if JIT
     | // RD_E
     | ldd       0, STACK, SAVE_L, RB
     | addd      1, BASE, RD_E, RD
@@ -9074,35 +9074,49 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pipe_bypass_none 1
         | pipe_dispatch_load 2
         | ldd       3, PC, PC2PROTO(k)-4, KBASE
+        |.if JIT
         | shrd      4, PC, 1, T0
+        |.endif
         | ldd       5, STACK, SAVE_L, RB
         | disp      ctpr1, ->vm_growstack_f
         | --
         | pipe_scale 0, 1, 2, 4
-        | andd      3, T0, HOTCOUNT_PCMASK, T0
         | pipe_fetch 5
+        |.if JIT
+        | andd      3, T0, HOTCOUNT_PCMASK, T0
         | disp      ctpr2, ->vm_hotcall
+        |.endif
         | --
         | pipe_extract 0, 1, 2, 3, 4
+        |.if JIT
         | addd      5, T0, GG_DISP2HOT, T0
+        |.endif
         | wait_load RB, 2
         | --
         | addd      0, RD_E, 0, RD
         | ldd       3, RB, L->maxstack, S0
         | addd      4, BASE, RA_E, RA       // Top of frame.
+        |.if JIT
         | ldh       5, DISPATCH, T0, T1
+        |.endif
         | wait_load T1, 0
         | --
         | ldbsm     3, PC, PC2PROTO(numparams)-4, T6
+        |.if JIT
         | subd      4, T1, HOTCOUNT_CALL, T1
+        |.endif
         | --
         | cmpbedb   3, RA, S0, pred0
+        |.if JIT
         | cmpandedb 4, T1, 0x8000, pred1
         | sth       5, DISPATCH, T0, T1
-        | wait_pred_ct pred1, 0
+        |.endif
+        | wait_pred_ct pred0, 0
         | --
+        |.if JIT
         | ct        ctpr2, ~pred1
         | --
+        |.endif
         | shld      3, T6, 0x3, RA, pred0
         | ct        ctpr1, ~pred0           // vm_growstack_f(BASE, RD, RB, PC)
         | --
@@ -9234,7 +9248,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_JFUNCV:
         | // Unsupported
-        | do_fault
+        | do_fault /* NYI: compiled vararg functions. */
         break;
 
     case BC_IFUNCV:
