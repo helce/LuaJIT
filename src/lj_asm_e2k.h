@@ -562,11 +562,11 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
 
   if (irt_isnum(kt)) {
     emit_ibranch(as, (ptrdiff_t)((void *)l_next - (void *)as->mcp),
-                 pred1, 0, &as->mcp);
-    emit_alopf7_ri(as, 0, E2K_CMPBSB, tmp2, (intptr_t)LJ_TISNUM,
-                   pred1, &as->mcp);
+                 pred1, 1, &as->mcp);
+    emit_alopf7_ri(as, 0, E2K_CMPBSB, tmp2, (int32_t)LJ_TISNUM, pred1, 0);
+    emit_alopf7_ri(as, 1, E2K_CMPEDB, tmp3, 0, pred3, &as->mcp);
     emit_alopf7_rr(as, 0, E2K_FCMPEQDB, tmp1, key, pred2, 0);
-    emit_alopf1_ri(as, 0, E2K_SARD, tmp1, 47, tmp2, 0);
+    emit_alopf1_ri(as, 0, E2K_SARD, tmp1, 47, tmp2, &as->mcp);
   } else {
     if (isk) {
       intptr_t k = 0;
@@ -580,8 +580,8 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
     } else {
       emit_alopf7_rr(as, 0, E2K_CMPEDB, tmp1, tmp2, pred2, 0);
     }
+    emit_alopf7_ri(as, 1, E2K_CMPEDB, tmp3, 0, pred3, &as->mcp);
   }
-  emit_alopf7_ri(as, 1, E2K_CMPEDB, tmp3, 0, pred3, &as->mcp);
   emit_alopf1_ri(as, 0, E2K_LDD, dest, (intptr_t)offsetof(Node, key.u64), tmp1, 0);
   emit_alopf1_ri(as, 1, E2K_LDD, dest, (intptr_t)offsetof(Node, next), tmp3, 0);
   emit_copf2(as, E2K_DISP, ctpr, -24 /* HS+CS0+ALS+ALS+LTS+ALIGN */, &as->mcp);
@@ -619,18 +619,17 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
                      tmp1, &as->mcp);
     } else { /*  Must match with hash*() in lj_tab.c. */
       emit_alopf1_rr(as, 0, E2K_SUBS, tmp1, tmp2, tmp1, &as->mcp);
-      emit_alopf1_ri(as, 0, E2K_SCRS, tmp2, HASH_ROT3, tmp2, 0);
+      emit_alopf1_ri(as, 0, E2K_SCLS, tmp2, HASH_ROT3, tmp2, 0);
       emit_alopf1_rr(as, 0, E2K_XORS, tmp1, tmp2, tmp1, &as->mcp);
-      emit_alopf1_ri(as, 0, E2K_SCRS, tmp1, HASH_ROT2, tmp1, 0);
+      emit_alopf1_ri(as, 0, E2K_SCLS, tmp1, HASH_ROT2, tmp1, 0);
       emit_alopf1_rr(as, 0, E2K_SUBS, tmp2, dest, tmp2, &as->mcp);
       emit_alopf1_rr(as, 0, E2K_XORS, tmp2, tmp1, tmp2, 0);
-      emit_alopf1_ri(as, 0, E2K_SCRS, tmp1, HASH_ROT1, dest, &as->mcp);
+      emit_alopf1_ri(as, 0, E2K_SCLS, tmp1, HASH_ROT1, dest, &as->mcp);
       if (irt_isnum(kt)) {
         emit_alopf1_rr(as, 0, E2K_ADDS, tmp1, tmp1, tmp1, &as->mcp);
         emit_alopf1_ri(as, 0, E2K_SHRD, key, 32, tmp1, 0);
         emit_alopf1_ri(as, 0, E2K_ADDS, key, 0, tmp2, &as->mcp);
       } else {
-        checkmclim(as);
         emit_alopf1_ri(as, 0, E2K_SHRD, tmp1, 32, tmp1, &as->mcp);
         emit_alopf1_ri(as, 0, E2K_ADDS, key, 0, tmp2, 0);
         emit_alopf1_ri(as, 0, E2K_ADDD, key, (intptr_t)irt_toitype(kt) << 47,
