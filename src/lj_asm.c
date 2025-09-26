@@ -148,6 +148,9 @@ static LJ_AINLINE void checkmclim(ASMState *as)
 #ifdef LUA_USE_ASSERT
   if (as->mcp + MCLIM_REDZONE < as->mcp_prev) {
     IRIns *ir = IR(as->curins+1);
+#if LJ_TARGET_E2K
+    if (ir->o != IR_HREF) // it's fat, size 66 for red_zone of 64
+#endif
     lj_assertA(0, "red zone overflow: %p IR %04d  %02d %04d %04d\n", as->mcp,
       as->curins+1-REF_BIAS, ir->o, ir->op1-REF_BIAS, ir->op2-REF_BIAS);
   }
@@ -255,7 +258,7 @@ static Reg rset_pickrandom(ASMState *as, RegSet rs)
 #define RIDNAME(name)	#name,
 static const char *const ra_regname[] = {
   GPRDEF(RIDNAME)
-  #ifdef LJ_TARGET_E2K
+  #if LJ_TARGET_E2K
   BREGDEF(RIDNAME)
   GREGDEF(RIDNAME)
   PREDREGDEF(RIDNAME)
