@@ -26,15 +26,6 @@ static int get_sylidx(ASMState *as, uint64_t mask, uint64_t shift)
   return idx;
 }
 
-#define UT(t) u##t
-#define E2K_CONST(t, val, op) \
-  op.type = t; \
-  op.value.UT(t) = val;
-
-#define E2K_REG(t, val, op) \
-  op.type = t; \
-  op.value.regn = val;
-
 #define checku4(x)  ((x) == (int32_t)(uint8_t)(x & 0xf))
 #define checku5(x)  ((x) == (int32_t)(uint8_t)(x & 0x1f))
 
@@ -90,7 +81,7 @@ static void emit_bundle_setup(ASMState *as)
 {
   memset(&as->bundle, 0, sizeof(E2kBundle));
   as->bundle.res = RES_INIT;
-  as->bundle.f1 = 1; // HS itself
+  as->bundle.f1 = 1; /* HS itself */
 }
 
 static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
@@ -114,15 +105,13 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
   hs.fields.mdl = (uint32_t)(f1 + f2 - 1);
   hs.fields.lng = (uint32_t)(hs_lng >> 1) - 1;
   hs.fields.nop = (uint32_t)as->bundle.nop;
-//  hs.fields.lm = (uint32_t)as->bundle.loop;
   hs.fields.x_s_sw = hs_x_s_sw;
   hs.fields.c = hs_c;
   hs.fields.cds = hs_cds >> 1;
-//  hs.fields.pls = (uint32_t)as->bundle.hs_pls;
   hs.fields.ales = hs_ales;
   hs.fields.als = hs_als;
 
-  // cds, 16-bit syls
+  /* CDS[0-5], 16-bit */
   uint16_t *hmxp = (uint16_t *)mxp;
   if (hs_cds > 4) {
     *--hmxp = as->bundle.cds[4];
@@ -137,42 +126,38 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
     *--hmxp = as->bundle.cds[1];
   }
   mxp = (MCode *)hmxp;
-  // pls, 32-bit syls, not used
-  // lts, can be 16-bit, but only 32-bit used here
+  /* LTS[3-0], 32-bit, 16-bit half syls not implemented */
   int used_lts = ((~as->bundle.res & RES_LTS_ALL)  >> RES_LTS_SHIFT);
   for (int i = 0; i < 4; i++) {
     if (used_lts & (1 << i)) {
       *--mxp = as->bundle.lts[i];
     }
   }
-  // aligning
-  if (hs_lng != lng) {
-    *--mxp = 0;
-  }
-  // aas, 16-bit syls, not used
-  // ales 16-bit syls
+
+  if (hs_lng != lng) *--mxp = 0; /* Align */
+  /* ALES[0-1,3-4], 16-bit */
   hmxp = (uint16_t *)mxp;
   if (hs_ales & 0x10) *--hmxp = as->bundle.ales[4];
   if (hs_ales & 0x08) *--hmxp = as->bundle.ales[3];
   if (hs_ales & 0x02) *--hmxp = as->bundle.ales[1];
   if (hs_ales & 0x01) *--hmxp = as->bundle.ales[0];
-  if (half_pad) *--hmxp = 0;
-  // cs, 32-bit syls
+  if (half_pad) *--hmxp = 0; /* Align */
   mxp = (MCode *)hmxp;
+  /* CS[0-1], 32-bit */
   if (hs_c & 0x02) *--mxp = as->bundle.cs[1];
   if (hs_c & 0x01) {
     E2kCopf2 cs0 = { as->bundle.cs[0] };
     cs0.fields.disp = cs0.fields.disp + (hs_lng >> 1);
     *--mxp = cs0.i;
   }
-  // als, 32-bit syls
+  /* ALS[0-5], 32-bit */
   if (hs_als & 0x20) *--mxp = as->bundle.als[5];
   if (hs_als & 0x10) *--mxp = as->bundle.als[4];
   if (hs_als & 0x08) *--mxp = as->bundle.als[3];
   if (hs_als & 0x04) *--mxp = as->bundle.als[2];
   if (hs_als & 0x02) *--mxp = as->bundle.als[1];
   if (hs_als & 0x01) *--mxp = as->bundle.als[0];
-  // ss and hs
+  /* SS and HS */
   if (hs_x_s_sw) *--mxp = as->bundle.ss;
   *--mxp = hs.i; 
 
@@ -182,10 +167,11 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
 
 /* -- Emit basic instructions --------------------------------------------- */
 
-//TODO refactor
 static uint32_t emit_lts(ASMState *as, E2kOpT type, uint64_t val)
 {
-  uint64_t mask = 0;
+  /* 16-bit halfsyls not managed yet, using lo part only */
+  uint64_t mask = 0, lts = 0;
+  int lts_idx = 0;
   if (type == E2K_CONST16) {
     mask = RES_LTS1|RES_LTS0;
   } else if (type == E2K_CONST32) {
@@ -193,19 +179,13 @@ static uint32_t emit_lts(ASMState *as, E2kOpT type, uint64_t val)
   } else {
     mask = RES_LTS2|RES_LTS1|RES_LTS0;
   }
-  // TODO, manage halfsyls, now just lo part.
-  uint64_t lts = check_resource(as, mask);
-  // takes two lts
-  if (type == E2K_CONST64) {
+  lts = check_resource(as, mask);
+  if (type == E2K_CONST64) /* check 2 syls for 64-bit literal */
     check_resource(as, lts << 1);
-  }
-
-  lts >>= 14;
-  // convert to index
-  int lts_idx = 0;
-  while (lts >>= 1) {
+  lts = lts >> RES_LTS_SHIFT;
+  while (lts >>= 1)
     lts_idx++;
-  }
+
   switch (type) {
   case E2K_CONST16:
     as->bundle.lts[lts_idx] = (uint16_t)(val); break;
@@ -416,7 +396,7 @@ static int emit_alopf1(ASMState *as, MCode **p, uint32_t spec, uint32_t op,
 
 static void emit_alef2(ASMState *as, uint32_t op, int als_idx)
 {
-  // No combined operations on 2 and 5 channels
+  /* No combined operations on 2 and 5 channels */
   int res = 1 << (RES_ALES_SHIFT + als_idx);
   check_resource(as, res);
   if (!(res & RES_ALES_25)) {
@@ -431,7 +411,7 @@ static void emit_alef2(ASMState *as, uint32_t op, int als_idx)
 
 static void emit_alef1(ASMState *as, uint32_t op, uint32_t src3, int als_idx)
 {
-   // No combined operations on 2 and 5 channels
+  /* No combined operations on 2 and 5 channels */
   int res = 1 << (RES_ALES_SHIFT + als_idx);
   check_resource(as, res);
   if (!(res & RES_ALES_25)) {
@@ -602,19 +582,17 @@ typedef MCode *MCLabel;
 
 static void emit_ct(ASMState *as, Reg ctpr, Reg pred, int inverted, MCode **p)
 {
-  // TODO it takes not a full syl
-  check_resource(as, RES_SS);
+  check_resource(as, RES_SS); /* Uses only part of RES_SS */
   E2kSS syl;
   syl.i = 0;
   if (pred) { /* RID_PREDX is nonnull  */
-    // do not check loop_end and so on right now
     if (inverted) {
       syl.fields.ctcond = 0x60 + (pred - RID_PRED0);
     } else {
       syl.fields.ctcond = 0x40 + (pred - RID_PRED0);
     }
   } else {
-    syl.fields.ctcond = 0x20; // unconditional
+    syl.fields.ctcond = 0x20; /* unconditional */
   }
   if (ctpr)  /* RID_CTPRX is nonnull */
     syl.fields.ctop = ctpr - RID_CTPR1 + 1;

@@ -9,8 +9,8 @@
 /* -- Registers IDs ------------------------------------------------------- */
 
 /* Use registers from pipeline state to avoid misscomunications */
-/* r0-r15 - direct, b0-b35 - rotating, r52-r59 - scratch(arguments) */
-/* g16-g31 - global, pred1-pred3 - predicates, ctpr1-ctpr3 - cf */
+/* R0-R15 - direct, B0-B35 - rotating, R52-R59 - scratch(arguments) */
+/* G16-G31 - global, PRED1-PRED3 - predicates, CTPR1-CTPR3 - cf */
 
 #define GPRDEF(_) \
    _(R0)  _(R1)  _(R2)  _(R3)  _(R4)  _(R5)  _(R6)  _(R7) \
@@ -29,9 +29,6 @@
 #define PREDREGDEF(_) \
   _(PRED0)  _(PRED1)  _(PRED2)  _(PRED3)
 
-#define LPREGDEF(_) \
-  _(LP0) _(LP1) _(LP2) _(LP3) _(LP4) _(LP5) _(LP6)
-
 #define CTPRDEF(_) \
   _(CTPR1) _(CTPR2) _(CTPR3)
 
@@ -44,7 +41,6 @@ enum {
   BREGDEF(RIDENUM)  /* Rotating registers of the current window */
   GREGDEF(RIDENUM)  /* Global registers */
   PREDREGDEF(RIDENUM) /* Predicates */
-  LPREGDEF(RIDENUM) /* Local predicates */
   CTPRDEF(RIDENUM) /* Control transer preparation registers */
   RID_MAX,
   RID_TMP  = RID_G16,
@@ -204,7 +200,6 @@ typedef struct {
   uint8_t f2;
   uint8_t f3;
   uint8_t f4;
-//  uint8_t hs_pls;
   uint8_t hs_cds;
   uint32_t nop;
   uint64_t res;
@@ -212,9 +207,7 @@ typedef struct {
   uint32_t als[6];
   uint32_t cs[2];
   uint16_t ales[6];
-//  uint16_t aas[6];
   uint32_t lts[4];
-//  uint32_t pls[3];
   uint16_t cds[6];
 } E2kBundle;
 
@@ -357,9 +350,8 @@ typedef enum {
   E2K_REG_B =     0x200,
   E2K_REG_G =     0x400,
   E2K_REG_PRED =  0x800,
-  E2K_REG_LPRED = 0x1000,
-  E2K_REG_CTPR =  0x2000,
-  E2K_REG_RARG =  0x4000
+  E2K_REG_CTPR =  0x1000,
+  E2K_REG_RARG =  0x2000
 } E2kOpT;
 
 /* -- Opcodes ------------------------------------------------------------- */
@@ -382,8 +374,6 @@ typedef struct E2kOp {
   uint32_t opce;
   uint32_t opc2;
   uint32_t opce2;
-  // in_latency?
-  // out_latency?
 } E2kOp;
 
 enum {
@@ -435,7 +425,6 @@ enum {
 
 static const E2kOp e2kop[] = {
 /*  name        resources       opc   opce  opc2 opce2 */
-/* non-combined operations short */
   { "ANDs",     RES_ALS_012345, 0x00, 0,    0,    0    },
   { "ANDd",     RES_ALS_012345, 0x01, 0,    0,    0    },
   { "ANDNs",    RES_ALS_012345, 0x02, 0,    0,    0    },

@@ -298,12 +298,6 @@ static void asm_tointg(ASMState *as, IRIns *ir, Reg left)
   Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, left));
   Reg dest = ra_dest(as, ir, RSET_GPR);
   asm_guard(as, pred, 1);
-  /*
-    fdtoistr left, dest
-    istofd dest, tmp
-    fcmpeqdb left, tmp, predN
-    asm_guard(inverted)
-  */
   emit_alopf7_rr(as, 0, E2K_FCMPEQDB, left, tmp, pred, &as->mcp);
   emit_alopf2_r(as, 0, E2K_ISTOFD, dest, tmp, &as->mcp);
   emit_alopf2_r(as, 0, E2K_FDTOISTR, left, dest, &as->mcp);
@@ -314,7 +308,6 @@ static void asm_tobit(ASMState *as, IRIns *ir)
   Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
   Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
   Reg dest = ra_dest(as, ir, RSET_GPR);
-// TODO
   emit_alopf1_rr(as, 0, E2K_FADDD, left, right, dest, &as->mcp);
 }
 
@@ -677,12 +670,6 @@ static void asm_hrefk(ASMState *as, IRIns *ir)
   } else {
     k = ((int64_t)irt_toitype(irkey->t) << 47) | (int64_t)ir_kgc(irkey);
   }
-  /*
-    ldd node, kofs, key
-    cmpedb key, k, predN
-    asm_guard(inverted)
-    addd node, ofs, dest (if needed)
-  */
   Reg pred = ra_pred(as, RSET_PRED);
   if (ra_hasreg(dest)) {
     emit_alopf1_ri(as, 0, E2K_ADDD, node, ofs, dest, &as->mcp);
@@ -880,13 +867,6 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
   base = asm_fuseahuref(as, ir->op1, &ofs, allow);
   allow = rset_exclude(allow, base);
   if (ir->o == IR_VLOAD) ofs += 8 * ir->op2;
-  /*
-    ldd base, ofs, dest
-    sard   dest, 47, type
-    cmpesb type, LJ_TYPE, predN
-    asm_guard(inverted)
-    sxt/getfd dest
-  */
   type = ra_scratch(as, allow);
   intptr_t k = irt_isnum(t) ? (int32_t)LJ_TISNUM :
                (int32_t)irt_toitype(t);
@@ -1424,7 +1404,6 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
 }
 
 /* Restore Lua stack from on-trace state. */
-// TODO optimize???
 static void asm_stack_restore(ASMState *as, SnapShot *snap)
 {
   RegSet allow = rset_exclude(RSET_GPR, RID_BASE);
@@ -1608,7 +1587,7 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
 static void asm_tail_prep(ASMState *as)
 {
   /* initialized by zero, it counts as nop */
-  as->mcp = as->mctop - 8; // TODO
+  as->mcp = as->mctop - 8;
   as->invmcp = as->loopref ? as->mcp : NULL;
 }
 
