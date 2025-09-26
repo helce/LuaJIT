@@ -27,7 +27,10 @@
   _(G16) _(G17) _(G18) _(G19)
 
 #define PREDREGDEF(_) \
-   _(PRED0)  _(PRED1)  _(PRED2)  _(PRED3)
+  _(PRED0)  _(PRED1)  _(PRED2)  _(PRED3)
+
+#define LPREGDEF(_) \
+  _(LP0) _(LP1) _(LP2) _(LP3) _(LP4) _(LP5) _(LP6)
 
 #define CTPRDEF(_) \
   _(CTPR1) _(CTPR2) _(CTPR3)
@@ -41,6 +44,7 @@ enum {
   BREGDEF(RIDENUM)  /* Rotating registers of the current window */
   GREGDEF(RIDENUM)  /* Global registers */
   PREDREGDEF(RIDENUM) /* Predicates */
+  LPREGDEF(RIDENUM) /* Local predicates */
   CTPRDEF(RIDENUM) /* Control transer preparation registers */
   RID_MAX,
   RID_TMP  = RID_G16,
@@ -342,19 +346,20 @@ typedef union {
 } E2kAlef1;
 
 typedef enum {
-  E2K_CONST = 0,
-  E2K_CONST4 = 4,
-  E2K_CONST5 = 5,
-  E2K_CONST16 = 16,
-  E2K_CONST32 = 32,
-  E2K_CONST64 = 64,
-  E2K_REG = 128,
-  E2K_REG_R = 256,
-  E2K_REG_B = 512,
-  E2K_REG_G = 1024,
-  E2K_REG_PRED = 2048,
-  E2K_REG_CTPR = 4096,
-  E2K_REG_RARG = 8192
+  E2K_CONST =     0x0,
+  E2K_CONST4 =    0x4,
+  E2K_CONST5 =    0x5,
+  E2K_CONST16 =   0x10,
+  E2K_CONST32 =   0x20,
+  E2K_CONST64 =   0x40,
+  E2K_REG =       0x80,
+  E2K_REG_R =     0x100,
+  E2K_REG_B =     0x200,
+  E2K_REG_G =     0x400,
+  E2K_REG_PRED =  0x800,
+  E2K_REG_LPRED = 0x1000,
+  E2K_REG_CTPR =  0x2000,
+  E2K_REG_RARG =  0x4000
 } E2kOpT;
 
 /* -- Opcodes ------------------------------------------------------------- */
