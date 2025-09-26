@@ -3,8 +3,6 @@
 ** Copyright (C) 2005-2025 Mike Pall. See Copyright Notice in luajit.h
 */
 
-#define NIY __builtin_trap();
-
 /* -- Register allocator extensions --------------------------------------- */
 
 static Reg ra_pred(ASMState *as, RegSet allow)
@@ -273,6 +271,24 @@ static void asm_retf(ASMState *as, IRIns *ir)
   emit_alopf7_ri(as, 0, E2K_CMPEDB, tmp, (intptr_t)pc, pred, &as->mcp);
   emit_alopf1_ri(as, 0, E2K_LDD, base, LJ_FR2 ? -8 : -4, tmp, &as->mcp);
 }
+
+/* -- Buffer operations --------------------------------------------------- */
+
+#if LJ_HASBUFFER
+static void asm_bufhdr_write(ASMState *as, Reg sb)
+{
+  RegSet allow = RSET_GPR;
+  Reg tmp1 = ra_scratch(as, rset_clear(allow, sb));
+  Reg tmp2 = ra_scratch(as, rset_clear(allow, tmp1));
+  IRIns irgc;
+  irgc.ot = IRT(0, IRT_PGC);  /* GC type. */
+  emit_storeofs(as, &irgc, tmp2, sb, offsetof(SBuf, L));
+  emit_alopf1_rr(as, 0, E2K_ORD, tmp2, tmp1, tmp2, &as->mcp);
+  emit_alopf1_ri(as, 0, E2K_ANDD, tmp1, SBUF_MASK_FLAG, tmp1, &as->mcp);
+  emit_getgl(as, tmp2, cur_L);
+  emit_loadofs(as, &irgc, tmp1, sb, offsetof(SBuf, L));
+}
+#endif
 
 /* -- Type conversions ---------------------------------------------------- */
 
@@ -1668,6 +1684,3 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   lj_mcode_patch(J, mcarea, 1);
 }
 
-// TODO
-static void asm_bufhdr_write(ASMState *as, Reg sb)
-{ NIY }
