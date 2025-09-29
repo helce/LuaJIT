@@ -524,21 +524,6 @@
 | subd      ch, 0, 1, BYPASS_E
 |.endmacro
 |
-|.macro pipe_next
-| pipe_dispatch_prep 0, ctpr3
-| pipe_fetch 2
-| pipe_dispatch_load 3
-| --
-| pipe_scale 0, 1, 2, 3
-| pipe_bypass_none 4
-| --
-| pipe_extract 0, 1, 2, 3, 4
-| --
-| wait_load OP_L, 3
-| pipe_dispatch 0, ctpr3
-| --
-|.endmacro
-|
 |.macro pipe_restart_fast, dispatch, pc
 | // (BCOp *)
 | // PC
@@ -648,29 +633,6 @@
 #define DISPATCH_GL(field)      (GG_DISP2G + (int)offsetof(global_State, field))
 #define DISPATCH_J(field)       (GG_DISP2J + (int)offsetof(jit_State, field))
 #define PC2PROTO(field)         ((int)offsetof(GCproto, field)-(int)sizeof(GCproto))
-|
-|// Decrement hashed hotcount and trigger trace recorder if zero.
-|// TODO: inline
-|.macro hotloop
-| shrd 0, PC, 1, T0
-| disp ctpr1, ->vm_hotloop
-| --
-| andd 0, T0, HOTCOUNT_PCMASK, T0
-| --
-| addd 0, T0, GG_DISP2HOT, T0
-| --
-| ldh 0, DISPATCH, T0, T1
-| wait_load T1, 0
-| --
-| subd 0, T1, HOTCOUNT_LOOP, T1
-| --
-| cmpandedb 0, T1, 0x8000, pred0
-| sth 2, DISPATCH, T0, T1
-| wait_pred_ct pred0, 0
-| --
-| ct ctpr1, ~pred0
-| --
-|.endmacro
 |//-----------------------------------------------------------------------
 
 /* Generate subroutines used by opcodes and other parts of the VM */
@@ -8091,7 +8053,25 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     case BC_ITERN:
         | // ins_A RA = base*8, (RB = (nresults+1)*8, RC = (nargs+1)*8 (2+1)*8)
         |.if JIT
-        | hotloop
+        | // vm_IITERN is used like BC_IITERN, so hotloop can't be inlined here
+        | shrd 0, PC, 1, T0
+        | disp ctpr1, ->vm_hotloop
+        | --
+        | andd 0, T0, HOTCOUNT_PCMASK, T0
+        | --
+        | addd 0, T0, GG_DISP2HOT, T0
+        | --
+        | ldh 0, DISPATCH, T0, T1
+        | wait_load T1, 0
+        | --
+        | subd 0, T1, HOTCOUNT_LOOP, T1
+        | --
+        | cmpandedb 0, T1, 0x8000, pred0
+        | sth 2, DISPATCH, T0, T1
+        | wait_pred_ct pred0, 0
+        | --
+        | ct ctpr1, ~pred0
+        | --
         |.endif
         | // Unsupported. Just label for compatibility
         |->vm_IITERN:
@@ -8964,9 +8944,49 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_ITERL:
         |.if JIT
-        | hotloop
+        | // ins_AJ RA_E = base*8, RD_E = target*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_dispatch_load 2
+        | shrd      1, RD_E, 1, RD          // RD*4
+        | subd      3, PC, BCBIAS_J*4, T1
+        | shrd      4, PC, 1, T0
+        | ldd       5, BASE, RA_E, RB
+        | disp ctpr2, ->vm_hotloop
+        | --
+        | ldb       0, T1, RD, RARG1        // Branch target insn opcode for fast restart.
+        | andd      1, T0, HOTCOUNT_PCMASK, T0
+        | disp      ctpr1, ->vm_restart_pipeline_fast
+        | --
+        | pipe_scale 1, 2, 3, 4
+        | pipe_fetch 5
+        | addd      0, T0, GG_DISP2HOT, T0
+        | --
+        | pipe_extract 1, 2, 3, 4, 5
+        | ldh       0, DISPATCH, T0, T2
+        | wait_load RB, 3
+        | --
+        | pipe_bypass_none 0
+        | cmpedb    3, RB, LJ_TNIL, pred0
+        | addd      4, BASE, RA_E, RA
+        | --
+        | shld      0, RARG1, 3, RARG1
+        | --
+        | ldd       0, RARG1, DISPATCH, RARG1   // Dispatch for branch target.
+        | subd      1, T2, HOTCOUNT_LOOP, T2
+        | --
+        | cmpandedb 0, T2, 0x8000, pred1
+        | sth       2, DISPATCH, T0, T2
+        | wait_pred_ct pred0, 0
+        | --
+        | ct ctpr2, ~pred1                  // vm_hotloop
+        | --
+        | addd      1, T1, RD, PC, ~pred0   // Otherwise save control var + branch.
+        | std       2, RA, -8, RB, ~pred0
+        | ct        ctpr1, ~pred0           // vm_restart_pipeline_fast(RARG1)
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
         |.endif
-        | // Fall through. Assumes BC_IITERL follows and ins_AJ is a no-op.
         break;
 
     case BC_IITERL:
@@ -9008,14 +9028,49 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // Note: RA/RD is only used by trace recorder to determine scope/extent
         | // This opcode does NOT jump, it's only purpose is to detect a hot loop.
         |.if JIT
-        | hotloop
+        | pipe_dispatch_prep 0, ctpr3
+        | shrd      3, PC, 1, T0
+        | disp ctpr1, ->vm_hotloop
+        | --
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | andd      4, T0, HOTCOUNT_PCMASK, T0
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_none 4
+        | addd      5, T0, GG_DISP2HOT, T0
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | ldh       5, DISPATCH, T0, T1
+        | wait_load T1, 0
+        | --
+        | subd 0, T1, HOTCOUNT_LOOP, T1
+        | --
+        | cmpandedb 4, T1, 0x8000, pred0
+        | sth       5, DISPATCH, T0, T1
+        | wait_pred_ct pred0, 0
+        | --
+        | ct ctpr1, ~pred0
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
         |.endif
-        | //Fall through. Assumes BC_ILOOP follows and ins_A is a no-op.
         break;
 
     case BC_ILOOP:
         | // ins_A RA_E = base*8, RD_E = target*8 (loop extent)
-        | pipe_next
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_none 4
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | --
+        | wait_load OP_L, 3
+        | pipe_dispatch 0, ctpr3
+        | --
         break;
 
     case BC_JLOOP:
