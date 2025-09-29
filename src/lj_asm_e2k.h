@@ -540,7 +540,7 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
   IRType1 kt = irkey->t;
   uint32_t khash;
   MCLabel l_end, l_next, l_exit;
-  if (!isk) {
+  if (!isk || irt_isnum(kt)) {
     key = ra_alloc1(as, refkey, rset_clear(allow, tmp3));
   }
 
