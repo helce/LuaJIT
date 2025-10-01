@@ -5027,6 +5027,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | ldwsm     0, NEXT_TAB, TAB->hmask, NEXT_TMP5
     | wait_load NEXT_ASIZE, 2
+    | disp      ctpr1, >2
     | --
     |1: // Traverse array part.
     | cmpbdb    0, NEXT_IDX, NEXT_ASIZE, pred0
@@ -5038,12 +5039,12 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | cmpedbsm  0, NEXT_TMP2, LJ_TNIL, pred1
     | addd      1, NEXT_IDX, 0x1, NEXT_IDX, pred0
-    | wait_pred pred1, 0
     | --
     | pass      pred0, p0
     | pass      pred1, p1
     | landp     p0, p1, p4
     | pass      p4, pred1
+    | wait_pred_ct pred1, 0
     | --
     | ct        ctpr2, pred1
     | --
@@ -5065,25 +5066,27 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     | addd      0, NEXT_RES_VK, NEXT_TMP1, NEXT_RES_VK
     | --
-    |6:
+    |2:
     | lddsm     0, NEXT_RES_VK, NODE->val, NEXT_TMP2
     | cmpbdb    1, NEXT_TMP0, NEXT_RES_IDX, pred0
+    | wait_load NEXT_TMP2, 0
     | --
     | cmpedbsm  0, NEXT_TMP2, NEXT_NIL, pred1
-    | ibranch   >8, pred0
     | --
-    | addd      0, NEXT_RES_IDX, 0x1, NEXT_RES_IDX
-    | ibranch   >9, ~pred1
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred2
+    | wait_pred_ct pred2, 0
     | --
-    | addd      0, NEXT_RES_VK, sizeof(Node), NEXT_RES_VK
-    | ibranch   <6
+    | addd      0, NEXT_RES_IDX, 0x1, NEXT_RES_IDX, ~pred0
+    | addd      1, NEXT_RES_VK, sizeof(Node), NEXT_RES_VK, pred2
+    | ct        ctpr1, pred2
     | --
-    |8: // End of iteration. Set the key to nil (not the value).
-    | addd      0, NEXT_STACK, 0x0, NEXT_RES_VK
-    | std       2, NEXT_STACK, NEXT_RES_KEY, NEXT_NIL
-    | --
-    |9:
-    | addd      0, NEXT_RES_IDX, NEXT_ASIZE, NEXT_RES_IDX
+    |// End of iteration. Set the key to nil (not the value).
+    | addd      0, NEXT_STACK, 0x0, NEXT_RES_VK, pred0
+    | addd      1, NEXT_RES_IDX, NEXT_ASIZE, NEXT_RES_IDX
+    | std       2, NEXT_STACK, NEXT_RES_KEY, NEXT_NIL, pred0
     | ct        ctpr3
     | --
     |.endif
