@@ -3741,27 +3741,27 @@ static void build_subroutines(BuildCtx *ctx)
     |->ff_string_sub:
     | addd      1, RD_E, 0, RD              // used in ffgccheck
     | ffgccheck
-    | lddsm     3, BASE, 0x10, S0           // ldd,sm j
+    | lddsm     3, BASE, 0x10, S0
     | addd      4, 0x0, 0x0, RA
-    | adds      5, 0x0, -1, S1              // init j with default -1
+    | adds      5, 0x0, -1, S1
     | wait_pred_ct S0, 0
     | --
-    | cmpbedb   3, RD, (1+2)*8, pred0       // ~ #args > 3
-    | cmpedb    4, RD, (1+2)*8, pred1       // #args == 3 
+    | cmpbedb   3, RD, (1+2)*8, pred0
+    | cmpedb    4, RD, (1+2)*8, pred1
     | sardsm    5, S0, 0x2f, S2
     | --
-    | cmpbsbsm  3, S2, LJ_TISNUM, pred2     // j is num
+    | cmpbsbsm  3, S2, LJ_TISNUM, pred2
     | --
     | pass      pred0, p0
     | pass      pred2, p1
     | pass      pred1, p2
-    | landp     ~p0, p1, p4                 // j is ok == #args > 3 && j is num
-    | landp     ~p2, ~p4, p5                // args are bad; args are good == (#args == 3) || (j is ok) == p2 || p4 == ~(~p2 && ~p4)
+    | landp     ~p0, p1, p4
+    | landp     ~p2, ~p4, p5
     | pass      p5, pred0
     | pass      p4, pred1
     | wait_pred_ct pred0, 0
     | --
-    | fdtoistr  3, S0, S1, pred1            // take j from args if j is ok
+    | fdtoistr  3, S0, S1, pred1
     | ct        ctpr3, pred0                // fff_fallback(RD), prepared in ffgccheck
     | --
     | ldd       3, BASE, 0x0, RB
