@@ -3718,8 +3718,8 @@ static void build_subroutines(BuildCtx *ctx)
     | adds      5, 0x0, -1, S1
     | wait_pred_ct S0, 0
     | --
-    | cmpbdb    3, RD, (1+2)*8, pred0
-    | cmpbedb   4, RD, (1+2)*8, pred1
+    | cmpbedb   3, RD, (1+2)*8, pred0
+    | cmpedb    4, RD, (1+2)*8, pred1
     | sardsm    5, S0, 0x2f, S2
     | --
     | cmpbsbsm  3, S2, LJ_TISNUM, pred2
@@ -3728,13 +3728,13 @@ static void build_subroutines(BuildCtx *ctx)
     | pass      pred2, p1
     | pass      pred1, p2
     | landp     ~p0, p1, p4
-    | landp     ~p2, p1, p5
-    | pass      p4, pred0
-    | pass      p5, pred1
+    | landp     ~p2, ~p4, p5
+    | pass      p5, pred0
+    | pass      p4, pred1
     | wait_pred_ct pred0, 0
     | --
     | fdtoistr  3, S0, S1, pred1
-    | ct        ctpr3, ~pred0               // fff_fallback(RD), prepared in ffgccheck
+    | ct        ctpr3, pred0                // fff_fallback(RD), prepared in ffgccheck
     | --
     | ldd       3, BASE, 0x0, RB
     | addd      4, 0x0, U64x(0x00007fff,0xffffffff), T1
