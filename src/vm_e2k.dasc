@@ -4187,11 +4187,10 @@ static void build_subroutines(BuildCtx *ctx)
     |->vm_record:                           // Dispatch target for recording phase.
     |.if JIT
     | ldb       0, DISPATCH, DISPATCH_GL(hookmask), RD
-    | addd      1, RA_E, 0, S2              // Save before changing the window
+    | addd      1, RA_E, 0, S2              // Save before changing the window, when not calling lj_dispatch_ins, RA_E can be reused
     | ldwsm     2, DISPATCH, DISPATCH_GL(hookcount), S0
     | disp      ctpr1, extern lj_dispatch_ins
     | --
-    | ldbsm     0, PC, PREV_PC_RA, S1
     | lddsm     2, STACK, SAVE_L, RB
     | wait_load RD, 1
     | --
@@ -4213,7 +4212,6 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      0, RB, 0, CARG1, pred0
     | addd      1, PC, 0x0, CARG2, pred0
     | stw       2, DISPATCH, DISPATCH_GL(hookcount), S0, pred1
-    | shld      4, S1, 0x3, S2, pred0
     | std       5, RB, L->base, BASE, pred0
     | call      ctpr1, wbs = 0x8, pred0      // lj_dispatch_ins(lua_State *L, const BCIns *pc)
     | --
@@ -4221,6 +4219,7 @@ static void build_subroutines(BuildCtx *ctx)
     | setwd_pipe
     | ldd       0, RB, L->base, BASE, pred0
     | subd      1, PC, 4, PC                // Current PC.
+    | ldb       2, PC, PREV_PC_RA, S1, pred0
     | --
     | ldw       0, PC, 0, INSN_E            // Load insns.
     | ldwsm     2, PC, 4, INSN_B
@@ -4246,6 +4245,7 @@ static void build_subroutines(BuildCtx *ctx)
     | lddsm     2, OP_B, DISPATCH, DISPATCH_B
     | shrd      3, INSN_E, 0x15, RB_E       // Scale other fields for stage E.
     | shrd      4, INSN_E, 0xd, S0
+    | shld      5, S1, 0x3, S2, pred0
     | --
     | subd      0, 0, 1, BYPASS_W
     | addd      1, S2, 0, RA_E              // Extract other fields for stage E.
