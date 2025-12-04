@@ -2609,11 +2609,11 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      3, RD, RA, RD, pred0
     | ct        ctpr2, ~pred0               // >1, Not in array part?
     | --
-    | ldw       3, RD, 0x0, S0
+    | ldd       3, RD, 0x0, S0
     | lddsm     5, RD, 0x0, RB
     | wait_load S0, 0
     | --
-    | cmpesb    3, S0, LJ_TNIL, pred0
+    | cmpedb    3, S0, LJ_TNIL, pred0
     | wait_pred_ct pred0, 0
     | --
     | addd      3, 0x0, (0+1)*8, RD, pred0
