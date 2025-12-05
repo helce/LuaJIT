@@ -265,12 +265,12 @@ enum { LJ_CONT_TAILCALL, LJ_CONT_FFI_CALLBACK };  /* Special continuations. */
 #define CFRAME_OFS_MULTRES	0
 #define CFRAME_SHIFT_MULTRES	3
 #elif LJ_TARGET_E2K
-#define CFRAME_OFS_PREV     96
-#define CFRAME_OFS_PC       88
-#define CFRAME_OFS_L        80
-#define CFRAME_OFS_ERRF     76
-#define CFRAME_OFS_NRES     72
-#define CFRAME_OFS_MULTRES  64
+#define CFRAME_OFS_PREV     104
+#define CFRAME_OFS_PC       96
+#define CFRAME_OFS_L        88
+#define CFRAME_OFS_ERRF     84
+#define CFRAME_OFS_NRES     80
+#define CFRAME_OFS_MULTRES  72
 #define CFRAME_SIZE         112
 #define CFRAME_SHIFT_MULTRES    3
 #else

@@ -742,7 +742,7 @@ static void snap_restoreval(jit_State *J, GCtrace *T, ExitState *ex,
       return;
     } else if (irt_isinteger(t)) {
       setintV(o, (int32_t)ex->gpr[r-RID_MIN_GPR]);
-#if !LJ_SOFTFP
+#if !LJ_SOFTFP && !LJ_TARGET_E2K
     } else if (irt_isnum(t)) {
       setnumV(o, ex->fpr[r-RID_MIN_FPR]);
 #elif LJ_64  /* && LJ_SOFTFP */
@@ -801,7 +801,7 @@ static void snap_restoredata(jit_State *J, GCtrace *T, ExitState *ex,
 	*(lua_Number *)dst = (lua_Number)*(int32_t *)dst;
 	return;
       }
-#if !LJ_SOFTFP
+#if !LJ_SOFTFP && !LJ_TARGET_E2K
       if (r >= RID_MAX_GPR) {
 	src = (int32_t *)&ex->fpr[r-RID_MIN_FPR];
 #if LJ_TARGET_PPC

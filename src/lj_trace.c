@@ -837,7 +837,7 @@ static void trace_exit_regs(lua_State *L, ExitState *ex)
     else
       setnumV(L->top++, (lua_Number)ex->gpr[i]);
   }
-#if !LJ_SOFTFP
+#if !LJ_SOFTFP && !LJ_TARGET_E2K
   for (i = 0; i < RID_NUM_FPR; i++) {
     setnumV(L->top, ex->fpr[i]);
     if (LJ_UNLIKELY(tvisnan(L->top)))

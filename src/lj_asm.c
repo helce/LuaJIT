@@ -54,6 +54,10 @@ typedef struct ASMState {
   x86ModRM mrm;		/* Fused x86 address operand. */
 #endif
 
+#if LJ_TARGET_E2K
+  E2kBundle bundle; /* E2k bundle descripter */
+#endif
+
   RegSet freeset;	/* Set of free registers. */
   RegSet modset;	/* Set of registers modified inside the loop. */
   RegSet weakset;	/* Set of weakly referenced registers. */
@@ -144,6 +148,9 @@ static LJ_AINLINE void checkmclim(ASMState *as)
 #ifdef LUA_USE_ASSERT
   if (as->mcp + MCLIM_REDZONE < as->mcp_prev) {
     IRIns *ir = IR(as->curins+1);
+#if LJ_TARGET_E2K
+    if (ir->o != IR_HREF) // it's fat, size 66 for red_zone of 64
+#endif
     lj_assertA(0, "red zone overflow: %p IR %04d  %02d %04d %04d\n", as->mcp,
       as->curins+1-REF_BIAS, ir->o, ir->op1-REF_BIAS, ir->op2-REF_BIAS);
   }
@@ -227,6 +234,8 @@ static Reg rset_pickrandom(ASMState *as, RegSet rs)
 #include "lj_emit_ppc.h"
 #elif LJ_TARGET_MIPS
 #include "lj_emit_mips.h"
+#elif LJ_TARGET_E2K
+#include "lj_emit_e2k.h"
 #else
 #error "Missing instruction emitter for target CPU"
 #endif
@@ -239,7 +248,7 @@ static Reg rset_pickrandom(ASMState *as, RegSet rs)
 
 /* -- Register allocator debugging ---------------------------------------- */
 
-/* #define LUAJIT_DEBUG_RA */
+//#define LUAJIT_DEBUG_RA
 
 #ifdef LUAJIT_DEBUG_RA
 
@@ -249,6 +258,12 @@ static Reg rset_pickrandom(ASMState *as, RegSet rs)
 #define RIDNAME(name)	#name,
 static const char *const ra_regname[] = {
   GPRDEF(RIDNAME)
+  #if LJ_TARGET_E2K
+  BREGDEF(RIDNAME)
+  GREGDEF(RIDNAME)
+  PREDREGDEF(RIDNAME)
+  CTPRDEF(RIDNAME)
+  #endif
   FPRDEF(RIDNAME)
   VRIDDEF(RIDNAME)
   NULL
@@ -540,7 +555,7 @@ static void ra_evictset(ASMState *as, RegSet drop)
 {
   RegSet work;
   as->modset |= drop;
-#if !LJ_SOFTFP
+#if !LJ_SOFTFP && !LJ_GPRASFPR
   work = (drop & ~as->freeset) & RSET_FPR;
   while (work) {
     Reg r = rset_pickbot(work);
@@ -989,7 +1004,7 @@ static void asm_snap_alloc1(ASMState *as, IRRef ref)
 	return;
       }
     nosink:
-      allow = (!LJ_SOFTFP && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR;
+      allow = (!LJ_SOFTFP && !LJ_GPRASFPR && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR;
       if ((as->freeset & allow) ||
 	       (allow == RSET_FPR && asm_snap_canremat(as))) {
 	/* Get a weak register if we have a free one or can rematerialize. */
@@ -1145,6 +1160,10 @@ static void asm_snew(ASMState *as, IRIns *ir)
   as->gcsteps++;
   asm_setupresult(as, ir, ci);  /* GCstr * */
   asm_gencall(as, ci, args);
+#if LJ_TARGET_E2K
+  IRIns *irl = IR(ir->op2);
+  emit_ext(as, irl->r, irl->r, SXT_WZ);
+#endif
 }
 
 static void asm_tnew(ASMState *as, IRIns *ir)
@@ -1637,7 +1656,7 @@ static void asm_phi_fixup(ASMState *as)
 /* Setup right PHI reference. */
 static void asm_phi(ASMState *as, IRIns *ir)
 {
-  RegSet allow = ((!LJ_SOFTFP && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR) &
+  RegSet allow = ((!LJ_SOFTFP && !LJ_GPRASFPR && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR) &
 		 ~as->phiset;
   RegSet afree = (as->freeset & allow);
   IRIns *irl = IR(ir->op1);
@@ -1708,6 +1727,8 @@ static void asm_loop(ASMState *as)
 #include "lj_asm_ppc.h"
 #elif LJ_TARGET_MIPS
 #include "lj_asm_mips.h"
+#elif LJ_TARGET_E2K
+#include "lj_asm_e2k.h"
 #else
 #error "Missing assembler for target CPU"
 #endif
@@ -2006,7 +2027,7 @@ static void asm_head_side(ASMState *as)
 	  ra_sethint(ir->r, rs);  /* Hint may be gone, set it again. */
 	else if (sps_scale(regsp_spill(rs))+spdelta == sps_scale(ir->s))
 	  continue;  /* Same spill slot, do nothing. */
-	mask = ((!LJ_SOFTFP && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR) & allow;
+	mask = ((!LJ_SOFTFP && !LJ_GPRASFPR && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR) & allow;
 	if (mask == RSET_EMPTY)
 	  lj_trace_err(as->J, LJ_TRERR_NYICOAL);
 	r = ra_allocref(as, i, mask);

@@ -41,6 +41,7 @@
 |.define CARG8,     b7
 |
 |// Used to pass arguments without dropping pipeline state.
+|.define PRET1,     r52
 |.define PARG1,     r52
 |.define PARG2,     r53
 |.define PARG3,     r54
@@ -126,6 +127,8 @@
 | --
 | ldd 0, RARG1, 0x0, RARG1
 | --
+| addd 0, RARG1, 0x0, RARG1
+| --
 |.endmacro
 |
 |// Type definitions. Some of these are only used for documentation.
@@ -148,14 +151,14 @@
 |//-----------------------------------------------------------------------
 |.define CFRAME_SPACE,  0x70                // 8*6 + 8*8
 |.define STACK_SPACE,   -CFRAME_SPACE       // -(8*6 + 8*8)
-|.define STACK_TMP,     0x68
-|.define SAVE_CFRAME,   0x60
-|.define SAVE_PC,       0x58
-|.define SAVE_L,        0x50
-|.define SAVE_ERRF,     0x4c
-|.define SAVE_NRES,     0x48
-|.define MULTRES,       0x40
-|.define RESERVE_CARGS, 0x0                 // 8*8
+|.define SAVE_CFRAME,   0x68
+|.define SAVE_PC,       0x60
+|.define SAVE_L,        0x58
+|.define SAVE_ERRF,     0x54
+|.define SAVE_NRES,     0x50
+|.define MULTRES,       0x48
+|.define SAVE_GPR,      0x8                 // 8*8
+|.define STACK_TMP,     0x0
 |
 |//-----------------------------------------------------------------------
 |// Helper macros.
@@ -268,7 +271,7 @@
 |
 |// Fetch:
 |//   | ldwsm     0, PC, 20, INSN_F             // PC + (NUM_STAGES - 1) * 4
-|//                                             // TODO: use APB for insn loading?
+|//
 |
 |// Scale:
 |//   | shldsm    0, INSN_S, 0x3, OP_S
@@ -389,8 +392,8 @@
 |
 |// Setup register window for the software pipeline.
 |//   r0 ..r15 - window registers
-|//   b0 ..b27 - pipeline (based/rotating) registers
-|//   r44..r52 - callee argument registers
+|//   b0 ..b35 - pipeline (based/rotating) registers
+|//   r52..r59 - callee argument registers
 |.macro setwd_pipe
 | setwd     wsz = 0x1e, nfx = 0x1, dbl = 0x0
 | setbn     rsz = 0x11, rbs = 0x8, rcur = 0x0
@@ -521,21 +524,6 @@
 | subd      ch, 0, 1, BYPASS_E
 |.endmacro
 |
-|.macro pipe_next
-| pipe_dispatch_prep 0, ctpr3
-| pipe_fetch 2
-| pipe_dispatch_load 3
-| --
-| pipe_scale 0, 1, 2, 3
-| pipe_bypass_none 4
-| --
-| pipe_extract 0, 1, 2, 3, 4
-| --
-| wait_load OP_L, 3
-| pipe_dispatch 0, ctpr3
-| --
-|.endmacro
-|
 |.macro pipe_restart_fast, dispatch, pc
 | // (BCOp *)
 | // PC
@@ -643,6 +631,7 @@
 |
 |// Assumes DISPATCH is relative to GL.
 #define DISPATCH_GL(field)      (GG_DISP2G + (int)offsetof(global_State, field))
+#define DISPATCH_J(field)       (GG_DISP2J + (int)offsetof(jit_State, field))
 #define PC2PROTO(field)         ((int)offsetof(GCproto, field)-(int)sizeof(GCproto))
 |//-----------------------------------------------------------------------
 
@@ -2620,11 +2609,10 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      3, RD, RA, RD, pred0
     | ct        ctpr2, ~pred0               // >1, Not in array part?
     | --
-    | ldw       3, RD, 0x0, S0
-    | lddsm     5, RD, 0x0, RB
-    | wait_load S0, 0
+    | ldd       3, RD, 0x0, RB
+    | wait_load RB, 0
     | --
-    | cmpesb    3, S0, LJ_TNIL, pred0
+    | cmpedb    3, RB, LJ_TNIL, pred0
     | wait_pred_ct pred0, 0
     | --
     | addd      3, 0x0, (0+1)*8, RD, pred0
@@ -2651,11 +2639,10 @@ static void build_subroutines(BuildCtx *ctx)
     | // cTValue * or NULL returned.
     | lddsm     0, CRET1, 0x0, RB
     | cmpedb    1, CRET1, 0x0, pred0
-    | ldwsm     2, CRET1, 0x0, S0
     | disp      ctpr3, ->fff_res
-    | wait_load S0, 0
+    | wait_load RB, 0
     | --
-    | cmpesbsm 1, S0, LJ_TNIL, pred1
+    | cmpedbsm 1, RB, LJ_TNIL, pred1
     | --
     | pass      pred0, p0
     | pass      pred1, p1
@@ -2910,6 +2897,7 @@ static void build_subroutines(BuildCtx *ctx)
     | --
     |.endif
     | setwd_call
+    | --
     | ldd       3, RB, L->cframe, S0
     | addd      4, RB, 0x0, S1
     | ldbsm     5, RB, L->status, CARG1
@@ -2923,15 +2911,14 @@ static void build_subroutines(BuildCtx *ctx)
     | lddsm     5, RB, L->base, S0
     | --
     | cmpedb    3, CARG1, LUA_YIELD, pred2
-    | --
     | pass      pred0, p0
     | pass      pred1, p1
     | landp     p0, p1, p4
     | pass      p4, pred0
+    | wait_pred_ct pred0, 0
     | --
     | cmpbedb   3, RA, S0, pred1            // Check for presence of initial func.
     | ct        ctpr1, ~pred0               // fff_fallback(RD)
-    | nop 1
     | --
     | lddsm     0, RB, L->maxstack, S0
     | pass      pred1, p0
@@ -2940,6 +2927,7 @@ static void build_subroutines(BuildCtx *ctx)
     | landp     ~p0, ~p1, p5
     | pass      p4, pred0
     | pass      p5, pred1                   // Status != LUA_YIELD (i.e. 0)?
+    | wait_pred_ct pred0, 0
     | --
     | ldd       3, RA, -8, PC, pred1        // Move initial function up.
     | ct        ctpr1, pred0                // fff_fallback(RD)
@@ -4195,7 +4183,83 @@ static void build_subroutines(BuildCtx *ctx)
     |//-----------------------------------------------------------------------
     |
     |->vm_record:                           // Dispatch target for recording phase.
-    | do_fault
+    |.if JIT
+    | ldb       0, DISPATCH, DISPATCH_GL(hookmask), RD
+    | addd      1, RA_E, 0, S2              // Save before changing the window, when not calling lj_dispatch_ins, RA_E can be reused
+    | ldwsm     2, DISPATCH, DISPATCH_GL(hookcount), S0
+    | disp      ctpr1, extern lj_dispatch_ins
+    | --
+    | lddsm     2, STACK, SAVE_L, RB
+    | wait_load RD, 1
+    | --
+    | cmpandedb 0, RD, HOOK_VMEVENT, pred0  // No recording while in vmevent.
+    | cmpandedb 1, RD, HOOK_ACTIVE, pred1
+    | subdsm    2, S0, 1, S0                //  Decrement the hookcount for consistency, but always do the call.
+    | cmpandedb 3, RD, LUA_MASKLINE|LUA_MASKCOUNT, pred2
+    | --
+    | setwd_call
+    | pass pred0, p0
+    | pass pred1, p1
+    | pass pred2, p2
+    | landp p0, p1, p5
+    | landp ~p2, p5, p6
+    | pass p6, pred1
+    | wait_pred pred1, 0
+    | --
+    | // SAVE_PC must hold the _previous_ PC. The callee updates it with PC.
+    | addd      0, RB, 0, CARG1, pred0
+    | addd      1, PC, 0x0, CARG2, pred0
+    | stw       2, DISPATCH, DISPATCH_GL(hookcount), S0, pred1
+    | std       5, RB, L->base, BASE, pred0
+    | call      ctpr1, wbs = 0x8, pred0      // lj_dispatch_ins(lua_State *L, const BCIns *pc)
+    | --
+    | // PC, RA, restart pipeline static
+    | setwd_pipe
+    | ldd       0, RB, L->base, BASE, pred0
+    | subd      1, PC, 4, PC                // Current PC.
+    | ldb       2, PC, PREV_PC_RA, S1, pred0
+    | --
+    | ldw       0, PC, 0, INSN_E            // Load insns.
+    | ldwsm     2, PC, 4, INSN_B
+    | ldwsm     3, PC, 8, INSN_L
+    | ldwsm     5, PC,12, INSN_D
+    | --
+    | ldwsm     0, PC,16, INSN_S
+    | addd      1, PC, 4, PC                // FIXME: insn hanlders expect it to be NPC but not current PC
+    | wait_load INSN_E, 1
+    | --
+    | shld      0, INSN_E, 3, OP_E          // Scale opcode fields.
+    | shldsm    2, INSN_B, 3, OP_B
+    | shldsm    3, INSN_L, 3, OP_L
+    | shldsm    5, INSN_D, 3, OP_D
+    | --
+    | andd      0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | anddsm    2, OP_B, 0x7f8, OP_B
+    | anddsm    3, OP_L, 0x7f8, OP_L
+    | --
+    | addd      0, OP_E, DISPATCH, DISPATCH_E
+    | --
+    | ldd       0, DISPATCH_E, GG_DISP2STATIC, DISPATCH_E   // Load pointers to insn handlers.
+    | lddsm     2, OP_B, DISPATCH, DISPATCH_B
+    | shrd      3, INSN_E, 0x15, RB_E       // Scale other fields for stage E.
+    | shrd      4, INSN_E, 0xd, S0
+    | shld      5, S1, 0x3, S2, pred0
+    | --
+    | subd      0, 0, 1, BYPASS_W
+    | addd      1, S2, 0, RA_E              // Extract other fields for stage E.
+    | andd      3, RB_E, 0x7f8, RB_E
+    | andd      4, S0, 0x7f8, RC_E
+    | andd      5, S0, 0x7fff8, RD_E
+    | wait_load DISPATCH_E, 1
+    | --
+    | movtd     0, DISPATCH_E, ctpr3        // Prepare an insn handler for stage E.
+    | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
+    | shrdsm    4, INSN_B, 0x15, RB_B
+    | shrdsm    5, INSN_B, 0xd, RCD_B
+    | --
+    | ct        ctpr3                       // Jump to the insn handler for stage E.
+    | --
+    |.endif
     |
     |->vm_rethook:                          // Dispatch target for return hooks.
     | ldb       0, DISPATCH, DISPATCH_GL(hookmask), RD
@@ -4272,20 +4336,91 @@ static void build_subroutines(BuildCtx *ctx)
     |->cont_hook:                           // Continue from hook yield.
     | do_fault
     |
-    |->vm_callhook:                         // Dispatch target for call hooks.
+    |->vm_hotloop:                          // Hot loop counter underflow.
+    |.if JIT
+    | ldd       0, BASE, -16, T0            // Same as curr_topL(L).
+    | ldd       2, STACK, SAVE_L, RB
+    | disp      ctpr1, extern lj_trace_hot
+    | wait_load T0, 0
+    | --
+    | extract_value 0, T0, T0
+    | --
+    | ldd       0, T0, LFUNC->pc, T0
+    | wait_load T0, 0
+    | --
+    | ldb       0, T0, PC2PROTO(framesize), RD
     | std       2, STACK, SAVE_PC, PC
+    | wait_load RD, 0
     | --
+    | shld      0, RD, 3, RD
+    | std       2, DISPATCH, DISPATCH_J(L), RB
+    | --
+    | addd      0, BASE, RD, RD
+    | std       2, RB, L->base, BASE
+    | --
+    | addd      0, DISPATCH, GG_DISP2J, PARG1
+    | addd      1, PC, 0, PARG2
+    | std       2, RB, L->top, RD
+    | pipe_call ctpr1                       // lj_trace_hot(jit_State *J, const BCIns *pc)
+    | --
+    | // PC, RA, restart pipeline static
+    | ldd       0, RB, L->base, BASE
+    | subd      1, PC, 4, PC                // Current PC.
+    | ldb       2, PC, PREV_PC_RA, RA
+    | --
+    | ldw       0, PC, 0, INSN_E            // Load insns.
+    | ldwsm     2, PC, 4, INSN_B
+    | ldwsm     3, PC, 8, INSN_L
+    | ldwsm     5, PC,12, INSN_D
+    | --
+    | ldwsm     0, PC,16, INSN_S
+    | addd      1, PC, 4, PC                // FIXME: insn hanlders expect it to be NPC but not current PC
+    | wait_load INSN_E, 1
+    | --
+    | shld      0, INSN_E, 3, OP_E          // Scale opcode fields.
+    | shldsm    2, INSN_B, 3, OP_B
+    | shldsm    3, INSN_L, 3, OP_L
+    | shldsm    5, INSN_D, 3, OP_D
+    | --
+    | andd      0, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | anddsm    2, OP_B, 0x7f8, OP_B
+    | anddsm    3, OP_L, 0x7f8, OP_L
+    | --
+    | addd      0, OP_E, DISPATCH, DISPATCH_E
+    | --
+    | ldd       0, DISPATCH_E, GG_DISP2STATIC, DISPATCH_E   // Load pointers to insn handlers.
+    | shld      1, RA, 0x3, RA
+    | lddsm     2, OP_B, DISPATCH, DISPATCH_B
+    | shrd      3, INSN_E, 0x15, RB_E       // Scale other fields for stage E.
+    | shrd      4, INSN_E, 0xd, T0
+    | --
+    | subd      0, 0, 1, BYPASS_W
+    | addd      1, RA, 0, RA_E              // Extract other fields for stage E.
+    | andd      3, RB_E, 0x7f8, RB_E
+    | andd      4, T0, 0x7f8, RC_E
+    | andd      5, T0, 0x7fff8, RD_E
+    | wait_load DISPATCH_E, 1
+    | --
+    | movtd     0, DISPATCH_E, ctpr3        // Prepare an insn handler for stage E.
+    | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
+    | shrdsm    4, INSN_B, 0x15, RB_B
+    | shrdsm    5, INSN_B, 0xd, RCD_B
+    | --
+    | ct        ctpr3                       // Jump to the insn handler for stage E.
+    | --
+    |.endif
     |
-    |->vm_hotcall:                          // Hot call counter underflow.
+    |->vm_callhook:                         // Dispatch target for call hooks.
     | // RD_E
-    | disp ctpr1, extern lj_dispatch_call
-    | --
-    | setwd_call
     | ldd       0, STACK, SAVE_L, RB
     | addd      1, BASE, RD_E, RD
+    | disp ctpr1, extern lj_dispatch_call
     | --
+    | std       2, STACK, SAVE_PC, PC
+    | --
+    | setwd_call
     | subd      0, RD, 8, RD
-    | wait_load RB, 1
+    | wait_load RB, 2
     | --
     | addd      0, RB, 0, CARG1
     | addd      1, PC, 0, CARG2
@@ -4335,9 +4470,173 @@ static void build_subroutines(BuildCtx *ctx)
     | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
     | shrdsm    4, INSN_B, 0x15, RB_B
     | shrdsm    5, INSN_B, 0xd, RCD_B
-    | --
     | ct        ctpr3                       // Jump to the insn handler for stage E.
     | --
+    |
+    |->vm_hotcall:                          // Hot call counter underflow.
+    |.if JIT
+    | // RD_E
+    | ldd       0, STACK, SAVE_L, RB
+    | addd      1, BASE, RD_E, RD
+    | disp ctpr1, extern lj_dispatch_call
+    | --
+    | ord       0, PC, 1, PARG2             // Marker for hot call.
+    | std       2, STACK, SAVE_PC, PC
+    | --
+    | subd      0, RD, 8, RD
+    | wait_load RB, 2
+    | --
+    | addd      0, RB, 0, PARG1
+    | addd      3, 0, 0, S0
+    | --
+    | std       2, RB, L->base, BASE
+    | std       5, RB, L->top, RD
+    | pipe_call ctpr1                       // lj_dispatch_call(lua_State *L, const BCIns *pc)
+    | --
+    | // ASMFunction returned.
+    | movtd     0, PRET1, ctpr3             // Prepare an insn handler for stage E.
+    | addd      1, PRET1, 0x0, T0
+    | ldd       2, RB, L->base, BASE
+    | ldd       3, RB, L->top, RD
+    | std       5, STACK, SAVE_PC, S0       // Invalidate for subsequent line hook.
+    | --
+    | ldw       0, PC,-4, INSN_E            // Load insns.
+    | ldwsm     2, PC, 0, INSN_B
+    | ldwsm     3, PC, 4, INSN_L
+    | ldwsm     5, PC, 8, INSN_D
+    | --
+    | ldwsm     0, PC,12, INSN_S
+    | wait_load INSN_B, 1
+    | --
+    | shld      0, INSN_E, 3, OP_E
+    | shldsm    2, INSN_B, 3, OP_B          // Scale opcode fields.
+    | shldsm    3, INSN_L, 3, OP_L
+    | shldsm    5, INSN_D, 3, OP_D
+    | --
+    | anddsm    1, OP_E, 0x7f8, OP_E        // Extract opcode fields.
+    | anddsm    2, OP_B, 0x7f8, OP_B
+    | anddsm    3, OP_L, 0x7f8, OP_L
+    | subd      4, RD, BASE, RD
+    | --
+    | addd      0, T0, 0, DISPATCH_E
+    | lddsm     2, OP_B, DISPATCH, DISPATCH_B
+    | shrd      1, INSN_E, 0x5, RA_E        // Scale other fields for stage E.
+    | shrd      3, INSN_E, 0x15, RB_E
+    | addd      4, RD, 0x8, RD
+    | --
+    | andd      1, RA_E, 0x7f8, RA_E        // Extract other fields for stage E.
+    | andd      3, RB_E, 0x7f8, RB_E
+    | addd      4, 0, 0, RC_E               // FIXME: set to RD???
+    | addd      5, RD, 0, RD_E
+    | --
+    | shrdsm    3, INSN_B, 0x5, RA_B        // Scale other fields for stage B.
+    | shrdsm    4, INSN_B, 0x15, RB_B
+    | shrdsm    5, INSN_B, 0xd, RCD_B
+    | ct        ctpr3                       // Jump to the insn handler for stage E.
+    | --
+    |.endif
+    |
+    |->cont_stitch:                         // Trace stitching.
+    |.if JIT
+    | // BASE = base, CRET1 = result, RB = meta base
+    | ldd       0, RB, -40, S0              // Save previous trace.
+    | ldw       2, STACK, MULTRES, T2
+    | ldb       3, PC, PREV_PC_RA, RA
+    | addd      4, 0x0, LJ_TNIL, T5
+    | disp ctpr1, >1
+    | --
+    | ldb       0, PC, PREV_PC_RA, RC
+    | subd      1, BASE, 0x8, T4
+    | ldb       2, PC, PREV_PC_RB, RB
+    | lddsm     3, DISPATCH, DISPATCH_J(trace), T0
+    | ldd       5, STACK, SAVE_L, T6
+    | wait_load S0, 1
+    | disp ctpr2, >2
+    | --
+    | extract_value 0, S0, S0
+    | subd      1, T2, 0x8, T2
+    | shld      3, RA, 0x3, RA
+    | disp      ctpr3, ->vm_restart_pipeline
+    | --
+    | cmpedb    0, S0, 0x0, pred2
+    | cmpedb    1, T2, 0x0, pred0
+    | addd      2, RC, RB, RC
+    | addd      3, BASE, RA, RA             // Call base.
+    | --
+    | ldh       0, S0, TRACE->traceno, RB
+    | shld      1, RC, 0x3, RC
+    | ldh       2, S0, TRACE->link, RD
+    | wait_load RD, 0
+    | --
+    | cmpedb    0, RD, RB, pred3
+    | cmpedb    1, RD, 0x0, pred4
+    | shld      2, RD, 0x3, RD
+    | addd      3, RC, T4, RC
+    | --
+    | lddsm     0, T0, RD, T4
+    | wait_load T4, 0
+    | --
+    | lddsm     0, T4, TRACE->mcode, T3
+    | ct        ctpr2, pred0
+    | wait_load T3, 0
+    | --
+    |1:                                     // Move results down.
+    | ldd       0, CRET1, 0x0, T1
+    | subd      1, T2, 0x8, T2
+    | --
+    | cmpedb    0, T2, 0x0, pred0
+    | wait_pred_ct, pred0, 0
+    | --
+    | addd      3, CRET1, 0x8, CRET1
+    | addd      4, RA, 0x8, RA
+    | std       5, RA, 0x0, T1
+    | ct        ctpr1, ~pred0               // <1
+    | --
+    |2:
+    | movtdsm   0, T3, ctpr1
+    | cmpbedb   3, RC, RA, pred1
+    | pass      pred2, p0
+    | pass      pred3, p1                   // Blacklisted.
+    | landp     ~p0, ~p1, p4
+    | pass      p4, pred0
+    | wait_pred_ct pred1, 0
+    | --
+    | addd      4, RA, 0x8, RA, ~pred1
+    | std       5, RA, 0x0, T5, ~pred1      // Fill up results with nil.
+    | ct        ctpr2, ~pred1               // More results wanted?
+    | --
+    | ct        ctpr3, ~pred0
+    | --
+    | setwd_pipe                            // Need to setup pipe, here we can enter jit
+    | std       2, DISPATCH, DISPATCH_GL(jit_base), BASE, ~pred4
+    | std       5, DISPATCH, DISPATCH_GL(tmpbuf.L), T6, ~pred4
+    | ct        ctpr1, ~pred4               // Jump to stitched trace.
+    | --
+    | // Stitch a new trace to the previous trace.
+    | disp      ctpr2, extern lj_dispatch_stitch
+    | --
+    | addd      0, PC, 0x0, PARG2
+    | addd      1, DISPATCH, GG_DISP2J, PARG1
+    | stw       2, DISPATCH, DISPATCH_J(exitno), RB
+    | std       5, T6, L->base, BASE
+    | --
+    | addd      1, T6, 0x0, RB
+    | std       2, DISPATCH, DISPATCH_J(L), T6
+    | pipe_call ctpr2                       // (jit_State *J, const BCIns *pc)
+    | --
+    | ldd       0, RB, L->base, BASE
+    | ldb       2, PC, PC_OP, RARG1
+    | wait_load RARG1, 0
+    | --
+    | shld      0, RARG1, 3, RARG1
+    | --
+    | ldd       0, RARG1, DISPATCH, RARG1   // E: Load pointer to insn handler.
+    | wait_load RARG1, 0
+    | --
+    | setwd_pipe
+    | pipe_restart_fast RARG1, PC
+    | --
+    |.endif
     |
     |->vm_profhook:                         // Dispatch target for profiler hook.
 #if LJ_HASPROFILE
@@ -4364,7 +4663,217 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- Trace exit handler -------------------------------------------------
     |//-----------------------------------------------------------------------
     |
-    | // Unsupported
+    |// Called from an exit stub; trace number in T0, exit number in STACK_TMP
+    |// DISPATCH and STACK preserved on-trace
+    |->vm_exit_handler:
+    |.if JIT
+    | getsp     0, -320, T4
+    | ldd       2, DISPATCH, DISPATCH_GL(cur_L), T5
+    | disp      ctpr1, extern lj_trace_exit
+    | --
+    | ldd       0, DISPATCH, DISPATCH_GL(jit_base), T6
+    | addd      1, 0x0, 0x0, T8
+    | ldw       2, STACK, STACK_TMP, T7
+    | addd      3, 0x0, ~LJ_VMST_EXIT, T9
+    | --
+    | stdsm     2, T4, 0x0, r0
+    | stdsm     5, T4, 0x8, r1
+    | --
+    | stdsm     2, T4, 0x10, r2
+    | stdsm     5, T4, 0x18, r3
+    | --
+    | stdsm     2, T4, 0x20, r4
+    | stdsm     5, T4, 0x28, r5
+    | --
+    | stdsm     2, T4, 0x30, r6
+    | stdsm     5, T4, 0x38, r7
+    | --
+    | stdsm     2, T4, 0x40, r8
+    | stdsm     5, T4, 0x48, r9
+    | --
+    | stdsm     2, T4, 0x50, r10
+    | stdsm     5, T4, 0x58, r11
+    | --
+    | stdsm     2, T4, 0x60, r12
+    | stdsm     5, T4, 0x68, r13
+    | --
+    | stdsm     2, T4, 0x70, r14
+    | stdsm     5, T4, 0x78, r15
+    | --
+    | stdsm     2, T4, 0x80, r52
+    | stdsm     5, T4, 0x88, r53
+    | --
+    | stdsm     2, T4, 0x90, r54
+    | stdsm     5, T4, 0x98, r55
+    | --
+    | stdsm     2, T4, 0xa0, r56
+    | stdsm     5, T4, 0xa8, r57
+    | --
+    | stdsm     2, T4, 0xb0, r58
+    | stdsm     5, T4, 0xb8, r59
+    | --
+    | stdsm     2, T4, 0xc0, b0
+    | stdsm     5, T4, 0xc8, b1
+    | --
+    | stdsm     2, T4, 0xd0, b2
+    | stdsm     5, T4, 0xd8, b3
+    | --
+    | stdsm     2, T4, 0xe0, b4
+    | stdsm     5, T4, 0xe8, b5
+    | --
+    | stdsm     2, T4, 0xf0, b6
+    | stdsm     5, T4, 0xf8, b7
+    | --
+    | stdsm     2, T4, 0x100, b8
+    | stdsm     5, T4, 0x108, b9
+    | --
+    | stdsm     2, T4, 0x110, b10
+    | stdsm     5, T4, 0x118, b11
+    | --
+    | stdsm     2, T4, 0x120, b12
+    | stdsm     5, T4, 0x128, b13
+    | --
+    | stdsm     2, T4, 0x130, b14
+    | stdsm     5, T4, 0x138, b15
+    | --
+    | stw       2, DISPATCH, DISPATCH_J(parent), T0 // Store trace number
+    | stw       5, DISPATCH, DISPATCH_GL(vmstate), T9
+    | --
+    | addd      0, DISPATCH, GG_DISP2J, PARG1
+    | addd      1, T4, 0x0, PARG2
+    | stw       2, DISPATCH, DISPATCH_J(exitno), T7 // Store exit number
+    | std       5, DISPATCH, DISPATCH_J(L), T5
+    | --
+    | addd      0, T4, 0x0, S0
+    | addd      1, T5, 0x0, RB
+    | std       2, T5, L->base, T6
+    | std       5, DISPATCH, DISPATCH_GL(jit_base), T8
+    | pipe_call ctpr1                          // lj_trace_exit(jit_State *J, ExitState *ex)
+    | --
+    | // MULTRES(unscaled) or negated error code returned
+    | ldd       2, RB, L->cframe, RA
+    | ldd       3, RB, L->base, BASE
+    | wait_load RA, 0
+    | --
+    | andd      0, RA, CFRAME_RAWMASK, STACK
+    | --
+    | ldd       0, STACK, SAVE_PC, PC          // Get SAVE_PC.
+    | subd      1, STACK, S0, S0
+    | --
+    | getsp     0, S0, S1                      // Release spill stack
+    | std       2, STACK, SAVE_L, RB           // Set SAVE_L (on-trace resume/yield).
+    | --
+    | // Fall through
+    |.endif
+    |->vm_exit_interp:
+    |.if JIT
+    | //  PRET1 = MULTRES(unscaled)(zext) or negated error code, BASE, PC and DISPATCH set.
+    | ldw       0, PC, 0, INSN_E
+    | sxt       1, 0x2, PRET1, PRET1           // Sign extend to simplify next work
+    | ldwsm     2, PC, 4, INSN_B
+    | lddsm     3, BASE, -8, T3
+    | lddsm     5, DISPATCH, DISPATCH_J(trace), S0
+    | disp      ctpr1, extern lj_err_trace
+    | --
+    | ldd       0, STACK, SAVE_L, RB           // Reload, need it only for vm_exit_interp
+    | cmpbdb    1, PRET1, -LUA_ERRERR, pred0   // Check for error from exit.
+    | ldwsm     2, PC, 12, INSN_D
+    | ldd       3, BASE, -16, KBASE
+    | cmpedb    4, PRET1, -17, pred1           // Static dispatch?
+    | ldwsm     5, PC, 16, INSN_S
+    | --
+    | shld      2, PRET1, 3, S1
+    | ldwsm     3, PC, 8, INSN_L
+    | addd      4, PC, 4, PC
+    | wait_load INSN_E, 2
+    | --
+    | andd      0, INSN_E, 0xff, T1
+    | shld      1, INSN_E, 3, OP_E
+    | shldsm    2, INSN_B, 3, OP_B
+    | ldbsm     3, T3, -3,  T3
+    | cmpandedbsm 4, T3, FRAME_TYPE, pred4     // Trace stitching continuation?
+    | shrd      5, INSN_E, 0xd, T0
+    | --
+    | andd      0, OP_E, 0x7f8, OP_E
+    | cmpbsb    1, T1, BC_FUNCF, pred2     // Function header?
+    | cmpbsb    3, T1, BC_FUNCC+2, pred3   // Fast function?
+    | andd      4, T0, 0x7f8, RC_E
+    | andd      5, T0, 0x7fff8, RD_E
+    | --
+    | subs      0, 0x0, PRET1, PARG2, ~pred0   // Rethrow error from the right C frame.
+    | addd      1, RB, 0x0, PARG1, ~pred0
+    | ldd       2, OP_E, DISPATCH, DISPATCH_E
+    | ldd       3, S0, RD_E, S0, pred1
+    | extract_value 5, KBASE, KBASE
+    | pipe_call_if ctpr1, ~pred0               // lj_err_trace (lua_State *L, int errcode)
+    | --
+    | shldsm    0, INSN_D, 3, OP_D
+    | subd      1, 0, 1, BYPASS_W
+    | anddsm    2, OP_B, 0x7f8, OP_B
+    | ldd       3, KBASE, LFUNC->pc, KBASE
+    | shldsm    4, INSN_L, 3, OP_L
+    | wait_load T3, 3
+    | --
+    | pass      pred1, p0
+    | pass      pred2, p1
+    | pass      pred3, p2
+    | pass      pred4, p3
+    | landp     ~p0, ~p1, p4
+    | landp     ~p2, p3, p5
+    | landp     p4, p5, p6
+    | pass      p4, pred0
+    | pass      p6, pred2
+    | stw       2, STACK, MULTRES, S1          // scaled multres
+    | shldsm    3, T3, 3, T3
+    | addd      4, 0x0, ~LJ_VMST_INTERP, T2
+    | std       5, RB, L->base, BASE
+    | --
+    | andd      0, S1, 0x7f8, RC_E, pred0      // RC_E/RD_E holds (nres+1)*8
+    | andd      1, S1, 0x7fff8, RD_E, pred0
+    | subdsm    3, BASE, T3, T3
+    | ldw       5, S0, TRACE->startins, INSN_E, pred1
+    | wait_load INSN_E, 0
+    | --
+    | // Dispatch to static entry of original ins replaced by BC_JLOOP. (pred1)
+    | movtd     0, DISPATCH_E, ctpr3
+    | shld      1, INSN_E, 3, OP_E, pred1
+    | addd      2, 0, 0, T4
+    | lddsm     3, T3, -32, T3
+    | --
+    | addd      0, DISPATCH, GG_DISP2STATIC, T1
+    | andd      1, OP_E, 0x7f8, OP_E, pred1
+    | lddsm     2, OP_B, DISPATCH, DISPATCH_B
+    | anddsm    4, OP_L, 0x7f8, OP_L
+    | ldd       5, KBASE, PC2PROTO(k), KBASE
+    | --
+    | ldd       0, OP_E, T1, DISPATCH_E, pred1
+    | shrdsm    1, INSN_B, 0x5, RA_B
+    | shrdsm    2, INSN_B, 0x15, RB_B
+    | shrdsm    3, INSN_B, 0xd, RCD_B
+    | --
+    | shrd      0, INSN_E, 0x5, RA_E
+    | shrd      1, INSN_E, 0x15, RB_E
+    | std       2, DISPATCH, DISPATCH_GL(jit_base), T4
+    | getfdsm   3, T3, 0xbc0, T3
+    | stw       5, DISPATCH, DISPATCH_GL(vmstate), T2
+    | --
+    | andd      1, RA_E, 0x7f8, RA_E
+    | andd      2, RB_E, 0x7f8, RB_E
+    | shrd      4, INSN_E, 0xd, T0, pred1
+    | lddsm     5, T3, LFUNC->pc, T3
+    | wait_load DISPATCH_E, 2
+    | --
+    | movtdsm   0, DISPATCH_E, ctpr2
+    | wait_load T3, 1
+    | --
+    | ldd       3, T3, PC2PROTO(k), KBASE, pred2
+    | andd      4, T0, 0x7f8, RC_E, pred1
+    | andd      5, T0, 0x7fff8, RD_E, pred1
+    | ct        ctpr3, ~pred1
+    | --
+    | ct        ctpr2
+    | --
+    |.endif
     |
     |//-----------------------------------------------------------------------
     |//-- Math helper functions ----------------------------------------------
@@ -4479,12 +4988,106 @@ static void build_subroutines(BuildCtx *ctx)
     | ct        ctpr1                       // return
     | --
     |
-    |->vm_next:
-    | // Unsupported
-    |
     |//-----------------------------------------------------------------------
     |//-- Miscellaneous functions --------------------------------------------
     |//-----------------------------------------------------------------------
+    |
+    |.define NEXT_TAB,     r0
+    |.define NEXT_IDX,     r1
+    |.define NEXT_ASIZE,   r2
+    |.define NEXT_NIL,     r3
+    |.define NEXT_TMP0,    r4
+    |.define NEXT_TMP1,    r5
+    |.define NEXT_TMP2,    r6
+    |.define NEXT_TMP3,    r7
+    |.define NEXT_TMP4,    r8
+    |.define NEXT_TMP5,    r9
+    |.define NEXT_RES_VK,  r0
+    |.define NEXT_RES_IDX, r1
+    |.define NEXT_STACK,   g20
+    |.define NEXT_RES_VAL, 0x0
+    |.define NEXT_RES_KEY, 0x8
+    |
+    |// TValue *lj_vm_next(GCtab *t, uint32_t idx)
+    |// Next idx returned in RRET2.
+    |->vm_next:
+    |.if JIT
+    | setwd wsz = 0x8, nfx = 0x1, dbl = 0x0
+    | ldw       0, NEXT_TAB, TAB->asize, NEXT_ASIZE
+    | addd      1, 0x0, LJ_TNIL, NEXT_NIL
+    | ldd       2, NEXT_TAB, TAB->array, NEXT_TMP0
+    | disp      ctpr2, >1
+    | --
+    | getsp     0, 0x0, NEXT_STACK
+    | sxt       1, 0x6, NEXT_IDX, NEXT_IDX
+    | lddsm     2, NEXT_TAB, TAB->node, NEXT_TMP4
+    | return    ctpr3
+    | --
+    | ldwsm     0, NEXT_TAB, TAB->hmask, NEXT_TMP5
+    | wait_load NEXT_ASIZE, 2
+    | disp      ctpr1, >2
+    | --
+    |1: // Traverse array part.
+    | cmpbdb    0, NEXT_IDX, NEXT_ASIZE, pred0
+    | idtofd    1, NEXT_IDX, NEXT_TMP3
+    | shld      2, NEXT_IDX, 0x3, NEXT_TMP1
+    | --
+    | lddsm     0, NEXT_TMP0, NEXT_TMP1, NEXT_TMP2
+    | wait_load NEXT_TMP2, 0
+    | --
+    | cmpedbsm  0, NEXT_TMP2, LJ_TNIL, pred1
+    | addd      1, NEXT_IDX, 0x1, NEXT_IDX, pred0
+    | --
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     p0, p1, p4
+    | pass      p4, pred1
+    | wait_pred_ct pred1, 0
+    | --
+    | ct        ctpr2, pred1
+    | --
+    | addd      0, NEXT_STACK, 0x0, NEXT_RES_VK, pred0
+    | addd      1, NEXT_IDX, 0x0, NEXT_RES_IDX, pred0
+    | std       2, NEXT_STACK, NEXT_RES_VAL, NEXT_TMP2, pred0
+    | std       5, NEXT_STACK, NEXT_RES_KEY, NEXT_TMP3, pred0
+    | ct        ctpr3, pred0
+    | --
+    | // Traverse hash part.
+    | subd      0, NEXT_IDX, NEXT_ASIZE, NEXT_RES_IDX
+    | addd      1, NEXT_TMP4, 0x0, NEXT_RES_VK
+    | --
+    | shld      0, NEXT_RES_IDX, 0x5, NEXT_TMP2
+    | shld      1, NEXT_RES_IDX, 0x3, NEXT_TMP1
+    | addd      2, NEXT_TMP5, 0x0, NEXT_TMP0
+    | --
+    | subd      0, NEXT_TMP2, NEXT_TMP1, NEXT_TMP1
+    | --
+    | addd      0, NEXT_RES_VK, NEXT_TMP1, NEXT_RES_VK
+    | --
+    |2:
+    | lddsm     0, NEXT_RES_VK, NODE->val, NEXT_TMP2
+    | cmpbdb    1, NEXT_TMP0, NEXT_RES_IDX, pred0
+    | wait_load NEXT_TMP2, 0
+    | --
+    | cmpedbsm  0, NEXT_TMP2, NEXT_NIL, pred1
+    | --
+    | pass      pred0, p0
+    | pass      pred1, p1
+    | landp     ~p0, p1, p4
+    | pass      p4, pred2
+    | wait_pred_ct pred2, 0
+    | --
+    | addd      0, NEXT_RES_IDX, 0x1, NEXT_RES_IDX, ~pred0
+    | addd      1, NEXT_RES_VK, sizeof(Node), NEXT_RES_VK, pred2
+    | ct        ctpr1, pred2
+    | --
+    |// End of iteration. Set the key to nil (not the value).
+    | addd      0, NEXT_STACK, 0x0, NEXT_RES_VK, pred0
+    | addd      1, NEXT_RES_IDX, NEXT_ASIZE, NEXT_RES_IDX
+    | std       2, NEXT_STACK, NEXT_RES_KEY, NEXT_NIL, pred0
+    | ct        ctpr3
+    | --
+    |.endif
     |
     |//-----------------------------------------------------------------------
     |//-- Assertions ---------------------------------------------------------
@@ -4915,7 +5518,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_ISEQS: case BC_ISNES:
         vk = op == BC_ISEQS;
-        | // ins_AND RA_E = src*8, RD_E = str_const*8, JMP with RD = target
+        | // ins_AND RA_E = src*8, RD_E = str_const*8(~), JMP with RD = target
         | pipe_dispatch_load 0
         | pipe_fetch 5
         | subd      1, PC, BCBIAS_J*4 - 4, T2
@@ -6820,13 +7423,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd      5, RC, T3, RC, pred0
         | ct        ctpr1, ~pred0           // vmeta_tsetv
         | --
-        | ldw       3, RC, 0x0, S0
+        | ldd       3, RC, 0x0, S0
         | lddsm     5, BASE, RA, T0
         | --
         | ldbsm     3, RC, 64, _            // Prefetch next cache line for sequential access.
         | wait_load S0, 1
         | --
-        | cmpesb    4, S0, LJ_TNIL, pred0   // Previous value is nil?
+        | cmpedb    4, S0, LJ_TNIL, pred0   // Previous value is nil?
         | --
         | pass      pred0, p0
         | pass      pred4, p1
@@ -7450,6 +8053,27 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_ITERN:
         | // ins_A RA = base*8, (RB = (nresults+1)*8, RC = (nargs+1)*8 (2+1)*8)
+        |.if JIT
+        | // vm_IITERN is used like BC_IITERN, so hotloop can't be inlined here
+        | shrd 0, PC, 1, T0
+        | disp ctpr1, ->vm_hotloop
+        | --
+        | andd 0, T0, HOTCOUNT_PCMASK, T0
+        | --
+        | addd 0, T0, GG_DISP2HOT, T0
+        | --
+        | ldh 0, DISPATCH, T0, T1
+        | wait_load T1, 0
+        | --
+        | subd 0, T1, HOTCOUNT_LOOP, T1
+        | --
+        | cmpandedb 0, T1, 0x8000, pred0
+        | sth 2, DISPATCH, T0, T1
+        | wait_pred_ct pred0, 0
+        | --
+        | ct ctpr1, ~pred0
+        | --
+        |.endif
         | // Unsupported. Just label for compatibility
         |->vm_IITERN:
         | addd      0, RA_E, 0, RA
@@ -7553,27 +8177,46 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
     case BC_ISNEXT:
         | // ins_AD RA_E = base*8, RD_E = target*8 (points to ITERN)
+        |.if JIT
+        | ldd       0, DISPATCH, DISPATCH_J(trace), T0
+        |.endif
         | addd      1, PC, 0x0, T3
         | subd      2, PC, BCBIAS_J*4, PC
         | shrd      3, RD_E, 0x1, RD
         | addd      4, BASE, RA_E, S0
         | disp      ctpr1, ->vm_restart_pipeline // TODO: inline
         | --
+        |.if JIT
+        | addd      0, 0x0, BC_ITERN, T4
+        |.endif
         | addd      1, PC, RD, PC
         | ldd       2, S0, -8, T2
         | ldd       3, S0, -24, T1
         | ldd       5, S0, -16, S1
-        | wait_load T1, 0
+        | --
+        |.if JIT
+        | ldbsm     0, PC, 0x0, T7
+        | ldhsm     2, PC, 0x2, T8
+        |.endif
+        | wait_load T1, 1
         | --
         | extract_value 3, T1, RB
         | sard      4, T1, 0x2f, S2
         | sard      5, S1, 0x2f, S1
         | --
         | cmpedb    0, T2, LJ_TNIL, pred2
+        |.if JIT
+        | cmpesbsm  1, T7, T4, pred4
+        | shldsm    2, T8, 0x3, T8
+        |.endif
         | cmpesb    3, S2, LJ_TFUNC, pred0
         | cmpesb    4, S1, LJ_TTAB, pred1
         | ldbsm     5, RB, CFUNC->ffid, T6
-        | wait_load T6, 0
+        | --
+        |.if JIT
+        | lddsm     0, T0, T8, T0
+        |.endif
+        | wait_load T6, 1
         | --
         | cmpedbsm  3, T6, FF_next_N, pred3
         | pass      pred0, p0
@@ -7584,21 +8227,46 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p5, pred0
         | --
         | addd      0, 0x0, BC_ITERC, T5
+        |.if JIT
+        | ldwsm     2, T0, TRACE->startins, T0
+        |.endif
         | addd      3, 0x0, U64x(0xfffe7fff,0x00000000), S1
         | pass      pred0, p0
         | pass      pred3, p1
+        |.if JIT
+        | pass      pred4, p2
+        | landp     p0, p1, p4
+        | landp     ~p4, p2, p5
+        | landp     ~p4, ~p2, p6
+        | pass      p4, pred0
+        | pass      p5, pred1
+        | pass      p6, pred2
+        |.else
         | landp     p0, p1, p4
         | pass      p4, pred0
+        |.endif
         | wait_pred pred0, 0
         | --
         | // Despecialize bytecode if any of the checks fail.
         | addd      0, 0x0, BC_JMP, T4
+        |.if JIT
+        | ands      1, T0, -256, T0, pred2
+        | stb       2, PC, 0x0, T5, pred1
+        |.else
         | stb       2, PC, 0x0, T5, ~pred0
+        |.endif
         | std       5, S0, -8, S1, pred0    // Initialize control var.
         | --
+        |.if JIT
+        | ors       0, T0, BC_ITERC, T0, pred2
+        |.endif
         | stb       2, T3, PREV_PC_OP, T4, ~pred0
-        | ct        ctpr1                   // vm_restart_pipeline(PC)
         | --
+        |.if JIT
+        | stw       2, PC, 0x0, T0, pred2
+        |.endif
+        | ct        ctpr1                   // vm_restart_pipeline(PC)
+        |--
         break;
 
     case BC_VARG:
@@ -7912,11 +8580,212 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     /* -- Loops and branches ------------------------------------------------ */
 
     case BC_FORL:
-        | // Fall through. Assumes BC_IFORL follows and ins_AJ is a no-op.
+        | // ins_AJ RA_E = base*8, RD_E = target*8 (after end of loop or start of loop)
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_dispatch_load 3
+        | subd      1, PC, BCBIAS_J*4, T3
+        | shrd      2, RD_E, 1, T2          // RD*4
+        | addd      4, BASE, RA_E, RA
+        |.if JIT
+        | shrd      5, PC, 1, T4
+        |.endif
+        | disp      ctpr1, ->vm_restart_pipeline_fast
+        | --
+        | pipe_fetch 2
+        | ldbsm     0, T3, T2, RARG1        // Branch target insn opcode.
+        | ldd       3, RA, 0x10, RB
+        | ldd       5, RA, 0x0, S0
+        |.if JIT
+        | andd      4, T4, HOTCOUNT_PCMASK, T4
+        | disp      ctpr2, ->vm_hotloop
+        |.endif
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_none 4
+        |.if JIT
+        | addd 5, T4, GG_DISP2HOT, T4
+        |.endif
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        |.if JIT
+        | ldh       5, DISPATCH, T4, T5
+        | wait_load_extra T5, 0, 1
+        |.else
+        | wait_load S0, 2
+        |.endif
+        | --
+        | shld      0, RARG1, 3, RARG1
+        |.if JIT
+        | subd      2, T5, HOTCOUNT_LOOP, T5
+        |.endif
+        | faddd     3, S0, RB, S0
+        | fcmpltdb  4, RB, 0x0, pred2
+        | ldd       5, RA, 0x8, S1
+        | --
+        | ldd       0, RARG1, DISPATCH, RARG1   // Load dispath for branch target.
+        |.if JIT
+        | cmpandedb 1, T5, 0x8000, pred3
+        | sth       2, DISPATCH, T4, T5
+        | wait_pred_ct pred3, 0
+        |.else
+        | wait_load S1, 1
+        | wait      S0, 1, 4
+        |.endif
+        | --
+        | fcmpltdb  3, S1, S0, pred0
+        | fcmpltdb  4, S0, S1, pred1        // Invert comparison if step is negative.
+        | wait      pred0, 0, 3
+        |.if JIT
+        | ct        ctpr2, ~pred3
+        |.endif
+        | --
+        | std       2, RA, 0x0, S0
+        | std       5, RA, 0x18, S0
+        | pass      pred0, p0
+        | pass      pred2, p1
+        | pass      pred1, p2
+        | landp     ~p0, ~p1, p4
+        | landp     ~p2, p1, p5
+        | landp     ~p4, ~p5, p6
+        | pass      p6, pred0
+        | wait_pred pred0, 0
+        | --
+        | addd      0, T3, T2, PC, ~pred0   // Set PC to branch target if taken.
+        | --
+        | ct        ctpr1, ~pred0           // vm_restart_pipeline_fast(RARG1)
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
         break;
 
-    case BC_JFORI: case BC_JFORL:
-        | // Unsupported
+    case BC_JFORI:
+        |.if JIT
+        | // ins_AJ RA_E = base*8, RD_E = target*8
+        | lddsm     0, DISPATCH, DISPATCH_J(trace), T3
+        | addd      1, BASE, RA_E, RA
+        | ldd       2, STACK, SAVE_L, T4
+        | shrd      3, RD_E, 1, T2          // RD*4
+        | addd      4, BASE, RA_E, T0
+        | subd      5, PC, BCBIAS_J*4, T1
+        | disp      ctpr2, ->vmeta_for
+        | --
+        | ldb       0, T1, T2, RARG1        // Branch target insn opcode for fast restart.
+        | addd      1, T1, T2, T5           // Set PC to branch target
+        | ldd       2, RA, 0x10, RB
+        | ldd       3, T0, 0x0, S0
+        | ldd       5, T0, 0x8, S1
+        | disp      ctpr1, ->vm_restart_pipeline_fast
+        | --
+        | ldhsm     0, T5, PREV_PC_RD, RD
+        | wait_load RD, 0
+        | --
+        | shldsm    0, RD, 0x3, RD          // traceno*8
+        | --
+        | lddsm     0, T3, RD, T3
+        | --
+        | sard      1, RB, 47, S2
+        | sard      3, S0, 47, T0
+        | sard      4, S1, 47, T1
+        | --
+        | cmplsb    0, S2, LJ_TISNUM, pred3
+        | shld      2, RARG1, 3, RARG1
+        | cmpbsb    1, S2, LJ_TISNUM, pred0
+        | cmpbsb    3, T0, LJ_TISNUM, pred1
+        | cmpbsb    4, T1, LJ_TISNUM, pred2
+        | wait_load T3, 2
+        | --
+        | ldd       0, RARG1, DISPATCH, RARG1   // Dispatch for branch target.
+        | lddsm     2, T3, TRACE->mcode, T3
+        | pass      pred0, p0
+        | pass      pred1, p1
+        | pass      pred2, p2
+        | landp     p0, p1, p4
+        | landp     p4, p2, p5
+        | pass      p4, pred0               // FIXME: unused?
+        | pass      p5, pred2
+        | --
+        | fcmpltdb  3, S1, S0, pred0
+        | fcmpltdb  4, S0, S1, pred1        // Invert comparison if step is negative.
+        | wait_pred_ct pred2, 1
+        | wait_load T3, 1
+        | --
+        | movtdsm   0, T3, ctpr3
+        | addd      1, T5, 0, PC, pred2     // PC should be original for vmeta_for
+        | std       5, RA, 0x18, S0, pred2
+        | ct        ctpr2, ~pred2           // vmeta_for(RA)
+        | --
+        | pass      pred0, p0
+        | pass      pred3, p1
+        | pass      pred1, p2
+        | landp     ~p0, ~p1, p4
+        | landp     ~p2, p1, p5
+        | landp     ~p4, ~p5, p6
+        | pass      p6, pred0
+        | wait_pred_ct pred0, 0
+        | --
+        | ct        ctpr1, pred0            // vm_restart_pipeline_fast(RARG1)
+        | --
+        | std       2, DISPATCH, DISPATCH_GL(jit_base), BASE
+        | std       5, DISPATCH, DISPATCH_GL(tmpbuf.L), T4
+        | ct        ctpr3
+        | --
+        |.endif
+        break;
+
+    case BC_JFORL:
+        |.if JIT
+        | // ins_AJ RA_E = base*8, RD_E = traceno*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_dispatch_load 3
+        | lddsm     2, DISPATCH, DISPATCH_J(trace), T0
+        | addd      4, BASE, RA_E, RA
+        | ldd       5, STACK, SAVE_L, T3
+        | --
+        | pipe_fetch 2
+        | ldd       3, RA, 0x10, RB
+        | ldd       5, RA, 0x0, S0
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_none 4
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load S0, 2
+        | wait_load T0, 3
+        | --
+        | lddsm     2, T0, RD_E, T1
+        | faddd     3, S0, RB, S0
+        | fcmpltdb  4, RB, 0x0, pred2
+        | ldd       5, RA, 0x8, S1
+        | --
+        | wait_load S1, 1
+        | wait_load T1, 1
+        | wait      S0, 1, 4
+        | --
+        | lddsm     2, T1, TRACE->mcode, T2
+        | fcmpltdb  3, S1, S0, pred0
+        | fcmpltdb  4, S0, S1, pred1        // Invert comparison if step is negative.
+        | wait      pred0, 0, 3
+        | wait_load T2, 0
+        | --
+        | movtdsm   0, T2, ctpr1
+        | std       2, RA, 0x0, S0
+        | std       5, RA, 0x18, S0
+        | pass      pred0, p0
+        | pass      pred2, p1
+        | pass      pred1, p2
+        | landp     ~p0, ~p1, p4
+        | landp     ~p2, p1, p5
+        | landp     ~p4, ~p5, p6
+        | pass      p6, pred0
+        | wait_pred pred0, 0
+        | --
+        | std       2, DISPATCH, DISPATCH_GL(jit_base), BASE, ~pred0
+        | std       5, DISPATCH, DISPATCH_GL(tmpbuf.L), T3, ~pred0
+        | ct        ctpr1, ~pred0
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
+        |.endif
         break;
 
     case BC_IFORL:
@@ -8036,12 +8905,89 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | --
         break;
 
-    case BC_ITERL:
-        | // Fall through. Assumes BC_IITERL follows and ins_AJ is a no-op.
+    case BC_JITERL:
+        |.if JIT
+        | // ins_AJ RA_E = base*8, RD_E = target*8
+        | pipe_dispatch_prep 0, ctpr3
+        | lddsm     2, DISPATCH, DISPATCH_J(trace), T0
+        | pipe_dispatch_load 3
+        | addd      4, BASE, RA_E, RA
+        | ldd       5, BASE, RA_E, RB
+        | disp      ctpr1, ->vm_restart_pipeline_fast
+        | wait_load T0, 0
+        | --
+        | lddsm     0, T0, RD_E, T1
+        | pipe_scale 1, 2, 3, 4
+        | pipe_fetch 5
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | wait_load T1, 1
+        | --
+        | lddsm     0, T1, TRACE->mcode, T2
+        | ldd       2, STACK, SAVE_L, T3
+        | wait_load T2, 0
+        | --
+        | movtdsm     0, T2, ctpr2
+        | pipe_bypass_none 1
+        | cmpedb    3, RB, LJ_TNIL, pred0
+        | wait_pred pred0, 0
+        | --
+        | std       2, DISPATCH, DISPATCH_GL(jit_base), BASE, ~pred0
+        | std       5, RA, -8, RB, ~pred0
+        | --
+        | std       2, DISPATCH, DISPATCH_GL(tmpbuf.L), T3, ~pred0
+        | ct        ctpr2, ~pred0
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
+        |.endif
         break;
 
-    case BC_JITERL:
-        | // Unsupported
+    case BC_ITERL:
+        |.if JIT
+        | // ins_AJ RA_E = base*8, RD_E = target*8
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_dispatch_load 2
+        | shrd      1, RD_E, 1, RD          // RD*4
+        | subd      3, PC, BCBIAS_J*4, T1
+        | shrd      4, PC, 1, T0
+        | ldd       5, BASE, RA_E, RB
+        | disp ctpr2, ->vm_hotloop
+        | --
+        | ldb       0, T1, RD, RARG1        // Branch target insn opcode for fast restart.
+        | andd      1, T0, HOTCOUNT_PCMASK, T0
+        | disp      ctpr1, ->vm_restart_pipeline_fast
+        | --
+        | pipe_scale 1, 2, 3, 4
+        | pipe_fetch 5
+        | addd      0, T0, GG_DISP2HOT, T0
+        | --
+        | pipe_extract 1, 2, 3, 4, 5
+        | ldh       0, DISPATCH, T0, T2
+        | wait_load RB, 3
+        | --
+        | pipe_bypass_none 0
+        | cmpedb    3, RB, LJ_TNIL, pred0
+        | addd      4, BASE, RA_E, RA
+        | --
+        | shld      0, RARG1, 3, RARG1
+        | --
+        | ldd       0, RARG1, DISPATCH, RARG1   // Dispatch for branch target.
+        | subd      1, T2, HOTCOUNT_LOOP, T2
+        | --
+        | cmpandedb 0, T2, 0x8000, pred1
+        | sth       2, DISPATCH, T0, T2
+        | wait_pred_ct pred0, 0
+        | --
+        | ct ctpr2, ~pred1                  // vm_hotloop
+        | --
+        | addd      1, T1, RD, PC, ~pred0   // Otherwise save control var + branch.
+        | std       2, RA, -8, RB, ~pred0
+        | ct        ctpr1, ~pred0           // vm_restart_pipeline_fast(RARG1)
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
+        |.endif
         break;
 
     case BC_IITERL:
@@ -8082,16 +9028,72 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_A RA_E = base*8, RD_E = target*8 (loop extent)
         | // Note: RA/RD is only used by trace recorder to determine scope/extent
         | // This opcode does NOT jump, it's only purpose is to detect a hot loop.
-        | //Fall through. Assumes BC_ILOOP follows and ins_A is a no-op.
+        |.if JIT
+        | pipe_dispatch_prep 0, ctpr3
+        | shrd      3, PC, 1, T0
+        | disp ctpr1, ->vm_hotloop
+        | --
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | andd      4, T0, HOTCOUNT_PCMASK, T0
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_none 4
+        | addd      5, T0, GG_DISP2HOT, T0
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | ldh       5, DISPATCH, T0, T1
+        | wait_load T1, 0
+        | --
+        | subd 0, T1, HOTCOUNT_LOOP, T1
+        | --
+        | cmpandedb 4, T1, 0x8000, pred0
+        | sth       5, DISPATCH, T0, T1
+        | wait_pred_ct pred0, 0
+        | --
+        | ct ctpr1, ~pred0
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
+        |.endif
         break;
 
     case BC_ILOOP:
         | // ins_A RA_E = base*8, RD_E = target*8 (loop extent)
-        | pipe_next
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_fetch 2
+        | pipe_dispatch_load 3
+        | --
+        | pipe_scale 0, 1, 2, 3
+        | pipe_bypass_none 4
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        | --
+        | wait_load OP_L, 3
+        | pipe_dispatch 0, ctpr3
+        | --
         break;
 
     case BC_JLOOP:
-        | // Unsupported
+        |.if JIT
+        | // ins_AD RA_E = src1*8 (ignored), RD_E = traceno*8
+        | ldd       2, DISPATCH, DISPATCH_J(trace), T0
+        | ldd       0, STACK, SAVE_L, T3
+        | wait_load T0, 0
+        | --
+        | ldd       0, T0, RD_E, T1
+        | wait_load T1, 0
+        | --
+        | ldd       0, T1, TRACE->mcode, T2
+        | wait_load T2, 0
+        | --
+        | movtd     0, T2, ctpr1
+        | std       2, DISPATCH, DISPATCH_GL(jit_base), BASE
+        | --
+        | std       2, DISPATCH, DISPATCH_GL(tmpbuf.L), T3
+        | ct        ctpr1
+        | --
+        |.endif
         break;
 
     case BC_JMP:
@@ -8122,12 +9124,134 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     */
 
     case BC_FUNCF:
-    case BC_FUNCV: /* NYI: compiled vararg functions. */
-        | // Fall through. Assumes BC_IFUNCF/BC_IFUNCV follow and ins_AD is a no-op.
+        | // ins_AD BASE = new_base*8, RA_E = framesize*8, RD_E = (nargs+1)*8
+        | --
+        | pipe_dispatch_prep 0, ctpr3
+        | pipe_bypass_none 1
+        | pipe_dispatch_load 2
+        | ldd       3, PC, PC2PROTO(k)-4, KBASE
+        |.if JIT
+        | shrd      4, PC, 1, T0
+        |.endif
+        | ldd       5, STACK, SAVE_L, RB
+        | disp      ctpr1, ->vm_growstack_f
+        | --
+        | pipe_scale 0, 1, 2, 4
+        | pipe_fetch 5
+        |.if JIT
+        | andd      3, T0, HOTCOUNT_PCMASK, T0
+        | disp      ctpr2, ->vm_hotcall
+        |.endif
+        | --
+        | pipe_extract 0, 1, 2, 3, 4
+        |.if JIT
+        | addd      5, T0, GG_DISP2HOT, T0
+        |.endif
+        | wait_load RB, 2
+        | --
+        | addd      0, RD_E, 0, RD
+        | ldd       3, RB, L->maxstack, S0
+        | addd      4, BASE, RA_E, RA       // Top of frame.
+        |.if JIT
+        | ldh       5, DISPATCH, T0, T1
+        |.endif
+        | wait_load T1, 0
+        | --
+        | ldbsm     3, PC, PC2PROTO(numparams)-4, T6
+        |.if JIT
+        | subd      4, T1, HOTCOUNT_CALL, T1
+        |.endif
+        | --
+        | cmpbedb   3, RA, S0, pred0
+        |.if JIT
+        | cmpandedb 4, T1, 0x8000, pred1
+        | sth       5, DISPATCH, T0, T1
+        |.endif
+        | wait_pred_ct pred0, 0
+        | --
+        |.if JIT
+        | ct        ctpr2, ~pred1
+        | --
+        |.endif
+        | shld      3, T6, 0x3, RA, pred0
+        | ct        ctpr1, ~pred0           // vm_growstack_f(BASE, RD, RB, PC)
+        | --
+        | cmpbedb   3, RD, RA, pred1        // Check for missing parameters.
+        | disp      ctpr2, >1
+        | wait_pred_ct pred1, 0
+        | --
+        | addd      1, 0x0, LJ_TNIL, S1, pred1
+        | pipe_dispatch_if 0, ctpr3, ~pred1
+        | --
+        |1: // Clear missing parameters.
+        | subd      3, RD, 0x8, S0
+        | addd      4, RD, 0x8, RD
+        | --
+        | cmpbedb   3, RD, RA, pred0
+        | wait_pred_ct pred0, 0
+        | --
+        | std       5, BASE, S0, S1
+        | ct        ctpr2, pred0            // <1
+        | --
+        | pipe_dispatch 0, ctpr3
+        | --
         break;
 
     case BC_JFUNCF:
-        | // Unsupported
+        |.if JIT
+        | // ins_AD BASE = new_base*8, RA_E = framesize*8, RD_E = (nargs+1)*8
+        | ldhsm     0, PC, PREV_PC_RD, T4
+        | lddsm     2, DISPATCH, DISPATCH_J(trace), T0
+        | ldd       3, PC, PC2PROTO(k)-4, KBASE
+        | addd      4, BASE, RA_E, RA       // Top of frame.
+        | ldd       5, STACK, SAVE_L, RB
+        | disp      ctpr1, ->vm_growstack_f
+        | wait_load T4, 0
+        | --
+        | shldsm    0, T4, 0x3, T4          // traceno*8
+        | addd      1, RD_E, 0, RD
+        | --
+        | lddsm     0, T0, T4, T1
+        | ldbsm     3, PC, PC2PROTO(numparams)-4, T3
+        | disp      ctpr2, >1
+        | wait_load T1, 0
+        | --
+        | lddsm     0, T1, TRACE->mcode, T2
+        | ldd       3, RB, L->maxstack, S0
+        | wait_load T2, 0
+        | --
+        | movtdsm   0, T2, ctpr3
+        | cmpbedb   3, RA, S0, pred0
+        | wait_pred_ct pred0, 0
+        | --
+        | shld      3, T3, 0x3, RA, pred0
+        | ct        ctpr1, ~pred0           // vm_growstack_f(BASE, RD, RB, PC)
+        | --
+        | cmpbedb   3, RD, RA, pred1        // Check for missing parameters.
+        | wait_pred_ct pred1, 0
+        | --
+        | addd      0, 0x0, LJ_TNIL, S1
+        | std       2, DISPATCH, DISPATCH_GL(tmpbuf.L), RB
+        | std       5, DISPATCH, DISPATCH_GL(jit_base), BASE
+        | ct        ctpr3, ~pred1
+        | --
+        |1: // Clear missing parameters.
+        | subd      3, RD, 0x8, S0
+        | addd      4, RD, 0x8, RD
+        | --
+        | cmpbedb   3, RD, RA, pred0
+        | wait_pred_ct pred0, 0
+        | --
+        | std       5, BASE, S0, S1
+        | ct        ctpr2, pred0            // <1
+        | --
+        | ct        ctpr3
+        | --
+        |.endif
+        break;
+
+    case BC_FUNCV: /* NYI: compiled vararg functions. */
+        | // Fall through. Assumes BC_IFUNCF/BC_IFUNCV follow and ins_AD is a no-op.
         break;
 
     case BC_IFUNCF:
@@ -8179,7 +9303,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         break;
 
     case BC_JFUNCV:
-        | // Unsupported
+        | do_fault                          // NYI: compiled vararg functions.
         break;
 
     case BC_IFUNCV:
