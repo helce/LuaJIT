@@ -2609,11 +2609,10 @@ static void build_subroutines(BuildCtx *ctx)
     | addd      3, RD, RA, RD, pred0
     | ct        ctpr2, ~pred0               // >1, Not in array part?
     | --
-    | ldd       3, RD, 0x0, S0
-    | lddsm     5, RD, 0x0, RB
-    | wait_load S0, 0
+    | ldd       3, RD, 0x0, RB
+    | wait_load RB, 0
     | --
-    | cmpedb    3, S0, LJ_TNIL, pred0
+    | cmpedb    3, RB, LJ_TNIL, pred0
     | wait_pred_ct pred0, 0
     | --
     | addd      3, 0x0, (0+1)*8, RD, pred0
@@ -2640,11 +2639,10 @@ static void build_subroutines(BuildCtx *ctx)
     | // cTValue * or NULL returned.
     | lddsm     0, CRET1, 0x0, RB
     | cmpedb    1, CRET1, 0x0, pred0
-    | ldwsm     2, CRET1, 0x0, S0
     | disp      ctpr3, ->fff_res
-    | wait_load S0, 0
+    | wait_load RB, 0
     | --
-    | cmpesbsm 1, S0, LJ_TNIL, pred1
+    | cmpedbsm 1, RB, LJ_TNIL, pred1
     | --
     | pass      pred0, p0
     | pass      pred1, p1
@@ -7425,13 +7423,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | addd      5, RC, T3, RC, pred0
         | ct        ctpr1, ~pred0           // vmeta_tsetv
         | --
-        | ldw       3, RC, 0x0, S0
+        | ldd       3, RC, 0x0, S0
         | lddsm     5, BASE, RA, T0
         | --
         | ldbsm     3, RC, 64, _            // Prefetch next cache line for sequential access.
         | wait_load S0, 1
         | --
-        | cmpesb    4, S0, LJ_TNIL, pred0   // Previous value is nil?
+        | cmpedb    4, S0, LJ_TNIL, pred0   // Previous value is nil?
         | --
         | pass      pred0, p0
         | pass      pred4, p1
