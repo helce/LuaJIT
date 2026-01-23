@@ -370,6 +370,7 @@ local map_op = {
   adds_5 = "ALU2PR_ALOPF1_0_0x3f_0x10",
   addd_4 = "ALU2_ALOPF1_0_0x3f_0x11",
   adddsm_4 = "ALU2_ALOPF1_1_0x3f_0x11",
+  adddsm_5 = "ALU2PR_ALOPF1_1_0x3f_0x11",
   addd_5 = "ALU2PR_ALOPF1_0_0x3f_0x11",
   subs_4 = "ALU2_ALOPF1_0_0x3f_0x12",
   subs_5 = "ALU2PR_ALOPF1_0_0x3f_0x12",

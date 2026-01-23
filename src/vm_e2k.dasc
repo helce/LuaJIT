@@ -7280,7 +7280,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | pass      p4, pred0
         | wait_pred_ct pred0, 0
         | --
-        | addd      3, 0, 0, T5, pred3      // Break RAW dependency on load, saves ~8 cycle penalty.
+        | adddsm    3, 0, 0, T5, pred3      // Break RAW dependency on load, saves ~8 cycle penalty.
         | ct        ctpr1, ~pred0           // vmeta_tgetb(TODO)
         | --
         | wait_load T5, LATENCY_PRED_CT
