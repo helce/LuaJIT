@@ -101,6 +101,7 @@ local map_arch = {
   mips64el =	{ e = "le", b = 64, m = 8, f = 0x80000007, },
   mips64r6 =	{ e = "be", b = 64, m = 8, f = 0xa0000407, },
   mips64r6el =	{ e = "le", b = 64, m = 8, f = 0xa0000407, },
+  e2k =	{ e = "le", b = 64, m = 175, f = 0x2000000},
 }
 
 local map_os = {
