@@ -454,14 +454,14 @@ static void asm_tvstore64(ASMState *as, Reg base, int32_t ofs, IRRef ref)
   } else {
     Reg src = ra_alloc1(as, ref, allow);
     allow = rset_exclude(allow, src);
-    Reg type = ra_allock(as, (int64_t)irt_toitype(ir->t) << 47, allow);
+    intptr_t type = (intptr_t)irt_toitype(ir->t) << 47;
     Reg tmp = ra_scratch(as, allow);
     emit_alopf3_ri(as, 0, E2K_STD, base, ofs, tmp, &as->mcp);
     if (irt_isinteger(ir->t)) {
-      emit_alopf1_rr(as, 0, E2K_ADDD, tmp, type, tmp, &as->mcp);
+      emit_alopf1_ri(as, 0, E2K_ADDD, tmp, type, tmp, &as->mcp);
       emit_alopf1_ir(as, 0, E2K_SXT, SXT_WZ, src, tmp, &as->mcp);
     } else {
-      emit_alopf1_rr(as, 0, E2K_ADDD, src, type, tmp, &as->mcp);
+      emit_alopf1_ri(as, 0, E2K_ADDD, src, type, tmp, &as->mcp);
     }
   }
 }
@@ -881,7 +881,8 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
 static void asm_ahustore(ASMState *as, IRIns *ir)
 {
   RegSet allow = RSET_GPR;
-  Reg base, src = RID_NONE, type = RID_NONE;
+  Reg base, src = RID_NONE;
+  intptr_t type = 0;
   int32_t ofs = 0;
   if (ir->r == RID_SINK)
     return;
@@ -900,17 +901,16 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
       allow = rset_exclude(allow, tmp);
       src = ra_alloc1(as, ir->op2, allow);
       allow = rset_exclude(allow, src);
-      type = ra_allock(as, (int64_t)irt_toitype(ir->t) << 47, allow);
-      allow = rset_exclude(allow, type);
+      type = (intptr_t)irt_toitype(ir->t) << 47;
     }
     base = asm_fuseahuref(as, ir->op1, &ofs, allow);
     emit_alopf3_ri(as, 0, E2K_STD, base, ofs, tmp, &as->mcp);
     if (ra_hasreg(src)) {
       if (irt_isinteger(ir->t)) {
-        emit_alopf1_rr(as, 0, E2K_ADDD, tmp, type, tmp, &as->mcp);
+        emit_alopf1_ri(as, 0, E2K_ADDD, tmp, type, tmp, &as->mcp);
         emit_alopf1_ir(as, 0, E2K_SXT, SXT_WZ, src, tmp, &as->mcp);
       } else {
-        emit_alopf1_rr(as, 0, E2K_ADDD, src, type, tmp, &as->mcp);
+        emit_alopf1_ri(as, 0, E2K_ADDD, src, type, tmp, &as->mcp);
       }
     }
   }
@@ -1427,11 +1427,9 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
       } else {
         Reg src = ra_alloc1(as, ref, allow);
         allow = rset_exclude(allow, src);
-        Reg rki = ra_allock(as, kki, allow);
-        allow = rset_exclude(allow, rki);
         Reg tmp = ra_scratch(as, allow);
         emit_alopf3_ri(as, 0, E2K_STD, RID_BASE, ofs, tmp, &as->mcp);
-        emit_alopf1_rr(as, 0, E2K_ADDD, src, rki, tmp, &as->mcp);
+        emit_alopf1_ri(as, 0, E2K_ADDD, src, kki, tmp, &as->mcp);
       }
     } else if (irt_isnum(ir->t)) {
       Reg src = ra_alloc1(as, ref, allow);
@@ -1447,15 +1445,14 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
       } else {
         Reg src = ra_alloc1(as, ref, allow);
         allow = rset_exclude(allow, src);
-        Reg type = ra_allock(as, (int64_t)irt_toitype(ir->t) << 47, allow);
-        allow = rset_exclude(allow, type);
+        int64_t type = (int64_t)irt_toitype(ir->t) << 47;
         Reg tmp = ra_scratch(as, allow);
         emit_alopf3_ri(as, 0, E2K_STD, RID_BASE, ofs, tmp, &as->mcp);
         if (irt_isinteger(ir->t)) {
-          emit_alopf1_rr(as, 0, E2K_ADDD, tmp, type, tmp, &as->mcp);
+          emit_alopf1_ri(as, 0, E2K_ADDD, tmp, type, tmp, &as->mcp);
           emit_alopf1_ir(as, 0, E2K_SXT, SXT_WZ, src, tmp, &as->mcp);
         } else {
-          emit_alopf1_rr(as, 0, E2K_ADDD, src, type, tmp, &as->mcp);
+          emit_alopf1_ri(as, 0, E2K_ADDD, src, type, tmp, &as->mcp);
         }
       }
     }
