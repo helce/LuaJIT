@@ -931,7 +931,7 @@ local function gen_code_src1(opnd)
   local value = 0
   local src1 = check_operand(opnd)
   if src1.t == "BREG" then
-    -- 0, reg_num(7), 0
+    -- 0, reg_num(7)
     value = 0x0
     value = shl(value,7) + src1.n
   elseif src1.t == "RREG" then
