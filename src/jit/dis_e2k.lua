@@ -136,10 +136,15 @@ local map_cmp = {
 }
 
 local map_cs0 = {
- [0] = { "ibranch", "pref",  "puttsd", "done"   },
- [1] = { "disp",    nil,     "sdisp",  "gettsd" },
- [2] = { "disp",    "ldisp", "sdisp",  "gettsd" },
- [3] = { "disp",    nil,     "sdisp",  "return" },
+  [0] = { "ibranch", "pref",  "puttsd", "done"   },
+  [1] = { "disp",    nil,     "sdisp",  "gettsd" },
+  [2] = { "disp",    "ldisp", "sdisp",  "gettsd" },
+  [3] = { "disp",    nil,     "sdisp",  "return" },
+}
+
+local map_cs1 = {
+  [0] = "setr0", [1] = "setr1", [2] = "setei", [3] = "wait", [4] = "setbr",
+  [5] = "call",  [6] = "mas",   [7] = "flushr", [8] = "bg",
 }
 
 local function get_halfword(ctx, pos)
@@ -157,6 +162,11 @@ end
 local function get_word(ctx, pos)
   local b0, b1, b2, b3 = byte(ctx.code, pos+1, pos+4)
   return bor(lshift(b3, 24), lshift(b2, 16), lshift(b1, 8), b0) 
+end
+
+local function shex(val)
+  local res = tohex(val):gsub("^0+", "")
+  if res == "" then return "0" else return res end
 end
 
 -- Output operands.
@@ -194,12 +204,12 @@ local function print_src2(ctx, src2)
   elseif band(src2, 0xfc) == 0xd8 then
     local lts_n = band(src2, 0x3)
     local code = ctx:get(ctx.lts_pos - lshift(lts_n + 1, 2))
-    return format("lts%d 0x%x", lts_n, code)
+    return format("lts%d 0x%s", lts_n, shex(code))
   elseif band(src2, 0xfc) == 0xdc then
     local lts_n = band(src2, 0x3)
     local code_lo = ctx:get(ctx.lts_pos - lshift(lts_n + 1, 2))
     local code_hi = ctx:get(ctx.lts_pos - lshift(lts_n + 2, 2))
-    return format("lts%d-%d 0x%x%08x", lts_n, lts_n+1, code_hi, code_lo)
+    return format("lts%d-%d 0x%s%s", lts_n, lts_n+1, shex(code_hi), tohex(code_lo))
   else
     error("unrecognized src2")
   end
@@ -343,7 +353,7 @@ end
 
 -- Output control operations.
 local function print_cs(ctx)
-  local ct, ss_ctpr, pred, inv = false, nil, nil, ""
+  local ct, ss_ctpr, pred  = false, nil, ""
   if ctx.ss ~= 0 then
     -- ignore most format of ss, we need here only control transfer
     local code = ctx:get(ctx.ss_pos)
@@ -351,8 +361,8 @@ local function print_cs(ctx)
     local psrc = band(code, 0x1f)
     if ctop ~= 0 then
       ct, ss_ctpr = true, band(rshift(code, 10), 0x3)
-      if ctop == 2 then pred = psrc
-      elseif ctop == 3 then pred, inv  = psrc, "~"
+      if ctop == 2 then pred = format(" ? %%pred%d", psrc)
+      elseif ctop == 3 then pred = format(" ? ~%%pred%d", psrc)
       end
     end
   end
@@ -368,11 +378,11 @@ local function print_cs(ctx)
     end
     local op = map_cs0[ctpr][opc + 1]
     if ctpr == 0 then
-      local p = ""
-      local sym = ctx.symtab[ctx.addr + ctx.pos + disp]
+      local addr = ctx.addr + ctx.pos + disp
+      local sym = ctx.symtab[addr]
+      if not sym then sym = format("0x%x", addr) end
       if op == "ibranch" then ct = false end
-      if pred then p = format(", %s%%pred%d", inv, pred) end
-      ctx.out(format("        %s ->%s%s\n", op, sym, p))
+      ctx.out(format("        %s ->%s%s\n", op, sym, pred))
     else
       if op == "sdisp" then
         ctx.out(format("        %s %%ctpr%d, %s\n", op, ctpr, band(code, 0x1f)))
@@ -390,11 +400,17 @@ local function print_cs(ctx)
     local code = ctx:get(pos)
     local opc = band(rshift(code, 28), 0xf)
     local wbs = band(code, 0x7f)
-    -- ctpr is in SS
-    -- TODO predicates from SS ctpr from SS
-    -- TODO case for SS ct only
-    error("NIY")
+    local name = map_cs1[opc]
+    if name == "call" then
+      ct = false
+      ctx.out(format("        %s %%ctpr%d, wbs = %d%s\n", name, ss_ctpr, wbs, pred))
+    else
+      ctx.out("        unrecognized\n")
+    end
   end
+
+  -- if neither ibranch nor call, but ctop than print ct
+  if ct == true then ctx.out(format("        ct %%ctpr%d%s\n", ss_ctpr, pred)) end
 end
 
 -- Disassemble  a single wide instruction.
@@ -430,6 +446,9 @@ local function disass_ins(ctx)
     ctx.cs_pos = print_als(ctx)
   end
   if ctx.cs ~= 0 then print_cs(ctx) end
+  if ctx.nop ~= 0 then print_nop(ctx) end
+  -- if instrunction is empty its nop
+  if hs == 0x0 then ctx.out("        nop\n") end
   ctx.pos = ctx.epos 
 end
 
