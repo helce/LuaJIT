@@ -62,6 +62,13 @@ local map_op = {
   [0x21] = { "cmpdb",    "ALOPF7" },
   [0x22] = { "cmpandsb", "ALOPF7" },
   [0x23] = { "cmpanddb", "ALOPF7" },
+  [0x24] = { "stb",      "ALOPF3" },
+  [0x25] = { "sth",      "ALOPF3" },
+  [0x26] = { "stw",      "ALOPF3" },
+  [0x27] = { "std",      "ALOPF3" },
+  ----------------------------------
+  [0x2e] = { "fcmpsb",   "ALOPF7" },
+  [0x2f] = { "fcmpdb",   "ALOPF7" },
   ----------------------------------
   [0x30] = { "fadds",    "ALOPF1" },
   [0x31] = { "faddd",    "ALOPF1" },
@@ -79,6 +86,10 @@ local map_op = {
   [0x3e] = { "fstod",    "ALOPF2" },
   [0x3f] = { "fdtos",    "ALOPF2" },
   ----------------------------------
+  [0x61] = { "movtd",    "ALOPF2" },
+  [0x64] = { "ldb",      "ALOPF1" },
+  [0x65] = { "ldh",      "ALOPF1" },
+  [0x66] = { "ldw",      "ALOPF1" },
   [0x67] = { "ldd",      "ALOPF1" },
 }
 
@@ -89,11 +100,12 @@ local map_opext = {
              [0x21] = { "muld",    "ALOPF11", 0xc0 },
              [0x22] = { "umulx",   "ALOPF11", 0xc0 },
              [0x23] = { "smulx",   "ALOPF11", 0xc0 },
+-----------------------------------------------------
              [0x49] = { "fdivd",   "ALOPF11", 0xc0 },
              [0x4d] = { "fsqrtid", "ALOPF12", 0xc0 }, -- ignore opce
-             [0x51] = { "fsqrttd", "ALOPF11", 0xc0 },
+             [0x51] = { "fsqrttd", "ALOPF11", 0xc0 }, -- ignore opce
              [0x58] = { "getsp",   "ALOPF12", 0xc0 }, -- ignore opce
-             [0x6d] = { "fdtoifd", "ALOPF11", 0xc0 },
+             [0x6d] = { "fdtoifd", "ALOPF11", 0xc0 }, -- ignore opce
   },
 -- PFCMB1
   [0x0f] = {
@@ -215,7 +227,7 @@ local function print_src2(ctx, src2)
   end
 end
 
-local function print_src3(ctx, src1)
+local function print_src3(ctx, src3)
   if band(src3, 0x80) == 0 then
     return format("%%b%d", band(src3, 0x7f))
   elseif band(src3, 0xc0) == 0x80 then
@@ -276,10 +288,12 @@ local function print_alf7(ctx, code)
   return src1, src2, opce, pdst
 end
 
+local function print_alef1(ctx, code)
+  return print_src3(ctx, band(code, 0xff))
+end
+
 local function print_alef2(ctx, code)
-  local opc2 = band(rshift(code, 8), 0xff)
-  local opce2 = band(code, 0xff)
-  return opc2, opce2
+  return band(code, 0xff)
 end
 
 -- Output ALU operations.
@@ -296,15 +310,27 @@ local function print_als(ctx)
       local cop = band(rshift(code, 24), 0x7f)
       if band(ales, 1) ~= 0 then
         local ales_code = ctx:geth(ales_pos)
-        local opc2 = band(rshift(ales_code, 8), 0xff)
+        local opc2 = 0x01 -- default opc2 for ALES2/ALES5
+        if als_n ~= 2 and als_n ~= 5 then
+          opc2 = band(rshift(ales_code, 8), 0xff)
+        end
         if map_opext[opc2] and map_opext[opc2][cop] then
           local fmt = map_opext[opc2][cop][2]
           if fmt == "ALOPF11" then
+            local src1, src2, dst = print_alf1(ctx, code)
+            local opce2 = print_alef2(ctx, ales_code)
+            name = map_opext[opc2][cop][1]
+            ops = format("%s, %s, %s", src1, src2, dst)
           elseif fmt == "ALOPF12" then
             local opce, src2, dst = print_alf2(ctx, code)
-            local opc2, opce2 = print_alef2(ctx, ales_code)
+            local opce2 = print_alef2(ctx, ales_code)
             name = map_opext[opc2][cop][1]
             ops = format("%s, %s", src2, dst)
+          elseif fmt == "ALOPF21" then
+            local src1, src2, dst = print_alf1(ctx, code)
+            local src3 = print_alef1(ctx, ales_code)
+            name = map_opext[opc2][cop][1]
+            ops = format("%s, %s, %s, %s", src1, src2, src3, dst)
           end
         end
         if ctx.half_hi then ales_pos = ales_pos + 4 end
@@ -329,7 +355,7 @@ local function print_als(ctx)
             local src1, src2, opce, pdst = print_alf7(ctx, code)
             if cop >= 0x20 and cop <= 0x23 then
               name = map_cmp[opce][cop - 0x20 + 1]
-            elseif cop >= 0x2e and cop <= 0x2e then
+            elseif cop >= 0x2e and cop <= 0x2f then
               name = map_cmp[opce][cop - 0x2e + 5]
             else
               name = map_op[cop][1]
@@ -341,10 +367,10 @@ local function print_als(ctx)
       if not name then name = "unrecognized" end
       name = name..","..als_n
       if spec == 1 then name = name..",sm" end
+      als_pos = als_pos + 4
       ctx.out(format("        %s %s\n", name, ops))
     end
     als_n = als_n + 1
-    als_pos = als_pos + 4
     als = rshift(als, 1)
     ales = rshift(ales, 1)
   end
