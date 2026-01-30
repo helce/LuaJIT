@@ -460,15 +460,15 @@ static void emit_cds(ASMState *as, int opc, int als, Reg pred, int inverted, MCo
   switch (1 << als) {
   case 0x1: case 0x8:
      if (inverted) syl.fields.neg = 1;
-     syl.fields.mask = 1;
+     else syl.fields.mask = 1;
      break;
   case 0x2: case 0x10:
      if (inverted) syl.fields.neg = 2;
-     syl.fields.mask = 2;
+     else syl.fields.mask = 2;
      break;
   case 0x4: case 0x20:
      if (inverted) syl.fields.neg = 4;
-     syl.fields.mask = 4;
+     else syl.fields.mask = 4;
      break;
   }
   if (als >= 3) opc++;
