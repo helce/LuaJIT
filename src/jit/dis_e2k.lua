@@ -207,7 +207,7 @@ local function print_src2(ctx, src2)
     return format("0x%x", band(src2, 0x0f))
   elseif band(src2, 0xf8) == 0xd0 then
     local lts_n = band(src2, 0x3)
-    local code = ctx:get(ctx.lts_pos - lshift(lts_n + 1, 2))
+    local code = ctx:get(ctx.lts_pos - lshift(lts_n, 2))
     if band(src2, 0x4) == 0 then
       return format("lts%d_lo 0x%x", lts_n, band(code, 0xffff))
     else
@@ -215,12 +215,12 @@ local function print_src2(ctx, src2)
     end
   elseif band(src2, 0xfc) == 0xd8 then
     local lts_n = band(src2, 0x3)
-    local code = ctx:get(ctx.lts_pos - lshift(lts_n + 1, 2))
+    local code = ctx:get(ctx.lts_pos - lshift(lts_n, 2))
     return format("lts%d 0x%s", lts_n, shex(code))
   elseif band(src2, 0xfc) == 0xdc then
     local lts_n = band(src2, 0x3)
-    local code_lo = ctx:get(ctx.lts_pos - lshift(lts_n + 1, 2))
-    local code_hi = ctx:get(ctx.lts_pos - lshift(lts_n + 2, 2))
+    local code_lo = ctx:get(ctx.lts_pos - lshift(lts_n, 2))
+    local code_hi = ctx:get(ctx.lts_pos - lshift(lts_n + 1, 2))
     return format("lts%d-%d 0x%s%s", lts_n, lts_n+1, shex(code_hi), tohex(code_lo))
   else
     error("unrecognized src2")
@@ -300,8 +300,42 @@ end
 local function print_als(ctx)
   local als, als_pos = ctx.als, ctx.als_pos
   local ales, ales_pos = ctx.ales, ctx.ales_pos
-  local als_n = 0
-  ctx.half_hi = true -- start with hi
+  local als_n, cds, cds_pos = 0, ctx.cds, ctx.cds_pos
+  -- get pridicates
+  local pred = { nil, nil, nil, nil, nil, nil }
+  ctx.half_hi = true
+  while cds ~= 0 do
+    local code = ctx:geth(cds_pos)
+    if code ~= 0 then
+      local opc = band(rshift(code, 14), 0x3)
+      local mask = band(rshift(code, 10), 0xf)
+      local neg = band(rshift(code, 7), 0x7)
+      local pr = band(code, 0x1f) -- only psrc
+      local n, c = 0, 0
+      if opc == 1 or opc == 3 then c = 3 end
+      while mask ~= 0 do
+        if band(mask, 0x1) ~= 0 then
+          pred[n + 1 + c] = format("%%pred%d", pr)
+        end
+        mask = rshift(mask, 1)
+        n = n + 1
+      end
+      n = 0
+      -- yee it can use the same pred with alternative
+      while neg ~= 0 do
+        if band(neg, 0x1) ~= 0 then
+          pred[n + 1 + c] = format("~%%pred%d", pr)
+        end
+        neg = rshift(neg, 1)
+        n = n + 1
+      end
+    end
+    if ctx.half_hi == true then
+      cds_pos = cds_pos - 4
+      cds = cds - 1
+    end
+  end
+  ctx.half_hi = true
   while als ~= 0 do
     local name, ops = nil, nil
     if band(als, 1) ~= 0 then
@@ -368,6 +402,7 @@ local function print_als(ctx)
       name = name..","..als_n
       if spec == 1 then name = name..",sm" end
       als_pos = als_pos + 4
+      if pred[als_n + 1] then ops = ops.." ? "..pred[als_n + 1] end
       ctx.out(format("        %s %s\n", name, ops))
     end
     als_n = als_n + 1
@@ -439,6 +474,10 @@ local function print_cs(ctx)
   if ct == true then ctx.out(format("        ct %%ctpr%d%s\n", ss_ctpr, pred)) end
 end
 
+local function print_nop(ctx)
+  ctx.out("        nop %d\n", ctx.nop)
+end
+
 -- Disassemble  a single wide instruction.
 local function disass_ins(ctx)
   local hex, ofs= "", 0
@@ -467,7 +506,9 @@ local function disass_ins(ctx)
   ctx.als_pos = ctx.ss_pos + lshift(ctx.ss, 2)
   ctx.cs_pos = ctx.als_pos
   ctx.ales_pos = ctx.pos + lshift(ctx.mdl, 2)
-  ctx.lts_pos = ctx.epos - lshift(ctx.cds + ctx.pl , 2)
+  -- pos from the end
+  ctx.cds_pos = ctx.epos - 4
+  ctx.lts_pos = ctx.epos - 4 - lshift(ctx.cds + ctx.pl, 2)
   if ctx.als ~= 0 then
     ctx.cs_pos = print_als(ctx)
   end
@@ -486,10 +527,10 @@ local function disass_block(ctx, ofs, len)
   local stop = len and ofs+len or #ctx.code
   ctx.pos = ofs
   while ctx.pos < stop do
-    ctx.epos = nil
     ctx.als, ctx.ales, ctx.pl, ctx.cds = nil, nil, nil, nil
     ctx.ss, ctx.nop, ctx.lng, ctx.mdl = nil, nil, nil, nil
-    ctx.cs_pos = nil
+    ctx.epos, ctx.ss_pos, ctx.als_pos, ctx.cs_pos  = nil, nil, nil, nil
+    ctx.ales_pos, ctx.cds_pos, ctx.lts_pos = nil, nil, nil
     disass_ins(ctx)
   end
 end
