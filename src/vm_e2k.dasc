@@ -690,8 +690,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_return:
     | // BASE = base, RA = resultofs, RD/MULTRES = (nresults+1)*8, PC = return
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | --
     | xord 1, PC, FRAME_C, PC
     | subd 2, 0x0, 0x8, S1
@@ -836,8 +835,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_unwind_c:                         // Unwind C stack, return from vm_pcall.
     | // (void *cframe, int errcode)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | addd 0, RARG1, 0x0, STACK
     | addd 1, RARG2, 0x0, CRET1             // Error return status for vm_pcall.
     | --
@@ -857,8 +855,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_unwind_ff:                        // Unwind C stack, return from ff pcall.
     | // (void *cframe)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | andd 0, RARG1, CFRAME_RAWMASK, RARG1
     | --
     | addd 0, RARG1, 0x0, STACK
@@ -991,8 +988,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_resume:                           // Setup C frame and resume thread.
     | // (lua_State *L, TValue *base, int nres1 = 0, ptrdiff_t ef = 0)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | disp ctpr1, >2
     | --
     | getsp 0, STACK_SPACE, STACK
@@ -1051,8 +1047,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_pcall:                            // Setup protected C frame and enter VM.
     | // (lua_State *L, TValue *base, int news1, ptrdiff_t ef)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | disp ctpr1, >1
     | --
     | getsp 0, STACK_SPACE, STACK
@@ -1065,8 +1060,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_call:                             // Setup C frame and enter VM.
     | // (lua_State *L, TValue *base, int nres1)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | --
     | getsp 0, STACK_SPACE, STACK
     | addd 1, 0x0, FRAME_C, PC
@@ -1294,8 +1288,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_cpcall:                           // Setup protected C frame, call C.
     | // (lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | --
     | getsp 0, STACK_SPACE, STACK
     | addd 1, RARG1, 0x0, RB
@@ -5160,122 +5153,120 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->cont_ffi_callback:                   // Return from FFI callback.
     |.if FFI
-    | disp ctpr1, extern lj_ccallback_leave // (CTState *cts, TValue *o)
+    | disp      ctpr1, extern lj_ccallback_leave // (CTState *cts, TValue *o)
+    | ldd       0, STACK, SAVE_L, RA
+    | addd      1, CRET1, 0x0, CARG2
+    | ldd       2, DISPATCH, DISPATCH_GL(ctype_state), PC
+    | wait_load RA, 0
     | --
-    | ldd 0, STACK, SAVE_L, RA
-    | addd 1, CRET1, 0x0, CARG2
-    | ldd 2, DISPATCH, DISPATCH_GL(ctype_state), PC
-    | nop 2
+    | std       2, RA, L->base, BASE
+    | std       5, PC, CTSTATE->L, RA
     | --
-    | std 2, RA, L->base, BASE
-    | std 5, PC, CTSTATE->L, RA
+    | addd      1, PC, 0x0, CARG1
+    | std       2, RA, L->top, RB
+    | call      ctpr1, wbs = 0x8
     | --
-    | addd 1, PC, 0x0, CARG1
-    | std 2, RA, L->top, RB
-    | call ctpr1, wbs = 0x8
+    | ldd       0, PC, CTSTATE->cb.gpr[0], RRET1
+    | return    ctpr3
     | --
-    | ldd 0, PC, CTSTATE->cb.gpr[0], RRET1
-    | return ctpr3
-    | --
-    | ct ctpr3
+    | ct        ctpr3
     | --
     |.endif
     |
     |->vm_ffi_call:                         // Call C function via FFI.
     |.if FFI
-    | setwd wsz = 0x8, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x4, rcur = 0x0
-    | disp ctpr1, >2
+    | setwd_call
+    | disp      ctpr1, >2
     | --
-    | ldw 0, RARG1, CCSTATE->spadj, RARG3
-    | ldb 2, RARG1, CCSTATE->nsp, RARG5
-    | disp ctpr2, >1
-    | nop 2
+    | ldw       0, RARG1, CCSTATE->spadj, S0
+    | ldb       2, RARG1, CCSTATE->nsp, S1
+    | disp      ctpr2, >1
+    | wait_load S0, 0
     | --
-    | subd 0, 0x0, RARG3, RARG3
+    | subd      0, 0x0, S0, S0
     | --
-    | getsp 0, RARG3, RARG4                 // allocate stack for parameters and return value
-    | cmpedb 1, RARG5, 0x0, pred0
-    | nop 2
+    | getsp     0, S0, T0                   // allocate stack for parameters and return value
+    | cmpedb    1, S1, 0x0, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | addd 0, RARG4, 0x40, RARG2            // skip register parameters
-    | addd 1, RARG1, offsetof(CCallState, stack), RARG6 // start of stack slots
-    | subd 2, RARG5, 0x8, RARG5
-    | ct ctpr1, pred0
+    | addd      0, T0, 0x40, T1             // skip register parameters
+    | addd      1, RARG1, offsetof(CCallState, stack), T2 // start of stack slots
+    | subd      2, S1, 0x8, S1
+    | ct        ctpr1, pred0
     | --
     |1:
     | // Copy stack slots.
-    | ldd 0, RARG6, 0x0, RARG3              // read stack parameters
-    | cmpedb 1, RARG5, 0x0, pred0
-    | subd 2, RARG5, 0x8, RARG5
-    | nop 2
+    | ldd       0, T2, 0x0, T3              // read stack parameters
+    | cmpedb    1, S1, 0x0, pred0
+    | subd      2, S1, 0x8, S1
+    | wait_load T3, 0
     | --
-    | addd 0, RARG6, 0x8, RARG6
-    | addd 1, RARG2, 0x8, RARG2
-    | std 2, RARG2, 0x0, RARG3              // write to allocated stack
-    | ct ctpr2, ~pred0
+    | addd      0, T2, 0x8, T2
+    | addd      1, T1, 0x8, T1
+    | std       2, T1, 0x0, T3              // write to allocated stack
+    | ct        ctpr2, ~pred0
     | --
     |2: // wrire register parameters on stack too
-    | ldd 0, RARG1, CCSTATE->gpr[0], CARG1
-    | ldd 2, RARG1, CCSTATE->func, RARG2
-    | ldd 3, RARG1, CCSTATE->gpr[1], CARG2
-    | ldd 5, RARG1, CCSTATE->gpr[2], CARG3
+    | ldd       0, RARG1, CCSTATE->gpr[0], CARG1
+    | ldd       2, RARG1, CCSTATE->func, T1
+    | ldd       3, RARG1, CCSTATE->gpr[1], CARG2
+    | ldd       5, RARG1, CCSTATE->gpr[2], CARG3
     | --
-    | ldd 0, RARG1, CCSTATE->gpr[3], CARG4
-    | ldd 2, RARG1, CCSTATE->gpr[4], CARG5
-    | ldd 3, RARG1, CCSTATE->gpr[5], CARG6
+    | ldd       0, RARG1, CCSTATE->gpr[3], CARG4
+    | ldd       2, RARG1, CCSTATE->gpr[4], CARG5
+    | ldd       3, RARG1, CCSTATE->gpr[5], CARG6
     | --
-    | ldd 0, RARG1, CCSTATE->gpr[7], CARG8
-    | ldd 2, RARG1, CCSTATE->gpr[6], CARG7
+    | ldd       0, RARG1, CCSTATE->gpr[7], CARG8
+    | ldd       2, RARG1, CCSTATE->gpr[6], CARG7
     | --
-    | movtd 0, RARG2, ctpr1
-    | std 2, RARG4, 0x0, CARG1
-    | std 5, RARG4, 0x8, CARG2
+    | movtd     0, T1, ctpr1
+    | std       2, T0, 0x0, CARG1
+    | std       5, T0, 0x8, CARG2
     | --
-    | std 2, RARG4, 0x10, CARG3
-    | std 5, RARG4, 0x18, CARG4
+    | std       2, T0, 0x10, CARG3
+    | std       5, T0, 0x18, CARG4
     | --
-    | std 2, RARG4, 0x20, CARG5
-    | std 5, RARG4, 0x28, CARG6
+    | std       2, T0, 0x20, CARG5
+    | std       5, T0, 0x28, CARG6
     | --
-    | std 2, RARG4, 0x30, CARG7
-    | std 5, RARG4, 0x38, CARG8
-    | call ctpr1, wbs = 0x4
+    | std       2, T0, 0x30, CARG7
+    | std       5, T0, 0x38, CARG8
+    | call      ctpr1, wbs = 0x8
     | --
     | // speculatively write from return regs, if result > 8*8 bytes, read all from stack
-    | ldw 0, RARG1, CCSTATE->ret_size, RARG2
-    | disp ctpr2, >3
-    | nop 1
+    | ldw       0, RARG1, CCSTATE->ret_size, T1
+    | disp      ctpr2, >3
+    | wait_load T1, 0
     | --
-    | disp ctpr1, extern memcpy
+    | disp      ctpr1, extern memcpy
+    | cmpedb    0, T1, 0x0, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | cmpedb 0, RARG2, 0x0, pred0
-    | nop 2
+    | ldd       0, RARG1, CCSTATE->ret_stack, CARG1, ~pred0
+    | addd      1, T1, 0x0, CARG3, ~pred0
+    | addd      2, T0, 0x0, CARG2, ~pred0
+    | ct        ctpr2, pred0
     | --
-    | ldd 0, RARG1, CCSTATE->ret_stack, CARG1, ~pred0
-    | addd 1, RARG2, 0x0, CARG3, ~pred0
-    | addd 2, RARG4, 0x0, CARG2, ~pred0
-    | ct ctpr2, pred0
+    | call      ctpr1, wbs = 0x8
     | --
-    | call ctpr1, wbs = 0x4
+    | return    ctpr3
     | --
-    | return ctpr3
+    | ct        ctpr3
     | --
-    | ct ctpr3
     |3:
-    | stdsm 2, RARG1, CCSTATE->gpr[0], CRET1
-    | stdsm 5, RARG1, CCSTATE->gpr[1], CRET2
-    | return ctpr3
+    | stdsm     2, RARG1, CCSTATE->gpr[0], CRET1
+    | stdsm     5, RARG1, CCSTATE->gpr[1], CRET2
+    | return    ctpr3
     | --
-    | stdsm 2, RARG1, CCSTATE->gpr[2], CRET3
-    | stdsm 5, RARG1, CCSTATE->gpr[3], CRET4
+    | stdsm     2, RARG1, CCSTATE->gpr[2], CRET3
+    | stdsm     5, RARG1, CCSTATE->gpr[3], CRET4
     | --
-    | stdsm 2, RARG1, CCSTATE->gpr[4], CRET5
-    | stdsm 5, RARG1, CCSTATE->gpr[5], CRET6
+    | stdsm     2, RARG1, CCSTATE->gpr[4], CRET5
+    | stdsm     5, RARG1, CCSTATE->gpr[5], CRET6
     | --
-    | stdsm 2, RARG1, CCSTATE->gpr[6], CRET7
-    | stdsm 5, RARG1, CCSTATE->gpr[7], CRET8
-    | ct ctpr3
+    | stdsm     2, RARG1, CCSTATE->gpr[6], CRET7
+    | stdsm     5, RARG1, CCSTATE->gpr[7], CRET8
+    | ct        ctpr3
     | --
     |.endif
     |//-----------------------------------------------------------------------
