@@ -146,6 +146,8 @@
 |.type NARGS,       int
 |.type TRACE,       GCtrace
 |.type SBUF,        SBuf
+|.type CCSTATE,     CCallState
+|.type CTSTATE,     CTState
 |
 |// Stack layout while in interpreter. Must match with lj_frame.h.
 |//-----------------------------------------------------------------------
@@ -5105,15 +5107,59 @@ static void build_subroutines(BuildCtx *ctx)
     |//-- FFI helper functions -----------------------------------------------
     |//-----------------------------------------------------------------------
     |
-    |// Handler for callback functions.
+    |// Handler for callback functions. Callback slot number in T2, g in T1.
     |->vm_ffi_callback:
     |.if FFI
-    | do_fault
+    | setwd_call
+    | ldd       0, T1, GL->ctype_state, T0
+    | disp      ctpr1, extern lj_ccallback_enter
+    | wait_load T0, 0
+    | --
+    | // don't use frame registers until parameters saved
+    | stdsm     2, T0, CTSTATE->cb.gpr[0], RARG1
+    | stdsm     5, T0, CTSTATE->cb.gpr[1], RARG2
+    | --
+    | stdsm     2, T0, CTSTATE->cb.gpr[2], RARG3
+    | stdsm     5, T0, CTSTATE->cb.gpr[3], RARG4
+    | --
+    | stdsm     2, T0, CTSTATE->cb.gpr[4], RARG5
+    | stdsm     5, T0, CTSTATE->cb.gpr[5], RARG6
+    | --
+    | stdsm     2, T0, CTSTATE->cb.gpr[6], RARG7
+    | stdsm     5, T0, CTSTATE->cb.gpr[7], RARG8
+    | --
+    | getsp     0, STACK_SPACE, STACK
+    | addd      1, T0, 0x0, PC
+    | stw       2, T0, CTSTATE->cb.slot, T2
+    | --
+    | addd      0, T1, GG_G2DISP, DISPATCH
+    | addd      1, STACK, CFRAME_SPACE, S0
+    | addd      2, STACK, 0x0, CARG2
+    | --
+    | addd      0, PC, 0x0, CARG1
+    | std       2, PC, CTSTATE->cb.stack, S0
+    | std       5, STACK, SAVE_PC, PC       // Any value outside of bytecode is ok.
+    | call      ctpr1, wbs = 0x8            // lj_ccallback_enter (CTState *cts, void *cf)
+    | --
+    | // lua_State * returned.
+    | ldd       0, CRET1, L->base, BASE
+    | addd      1, 0x0, ~LJ_VMST_INTERP, S0
+    | ldd       2, CRET1, L->top, RD
+    | wait_load BASE, 0
+    | --
+    | ldd       0, BASE, -16, RB
+    | subd      1, RD, BASE, RD
+    | wait_load RB, 0
+    | --
+    | extract_value 0, RB, RB
+    | addd      1, RD, 0x8, RD
+    | stw       2, DISPATCH, DISPATCH_GL(vmstate), S0
+    | --
+    | ins_callt
     |.endif
     |
     |->cont_ffi_callback:                   // Return from FFI callback.
     |.if FFI
-    | .type CTSTATE, CTState
     | disp ctpr1, extern lj_ccallback_leave // (CTState *cts, TValue *o)
     | --
     | ldd 0, STACK, SAVE_L, RA
@@ -5137,7 +5183,6 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_ffi_call:                         // Call C function via FFI.
     |.if FFI
-    | .type CCSTATE, CCallState
     | setwd wsz = 0x8, nfx = 0x1, dbl = 0x0
     | setbn rsz = 0x3, rbs = 0x4, rcur = 0x0
     | disp ctpr1, >2
@@ -5148,26 +5193,28 @@ static void build_subroutines(BuildCtx *ctx)
     | nop 2
     | --
     | subd 0, 0x0, RARG3, RARG3
-    | subd 1, RARG5, 0x8, RARG5
     | --
     | getsp 0, RARG3, RARG4                 // allocate stack for parameters and return value
-    | cmpldb 1, RARG5, 0x0, pred0
+    | cmpedb 1, RARG5, 0x0, pred0
     | nop 2
     | --
-    | // Copy stack slots.
+    | addd 0, RARG4, 0x40, RARG2            // skip register parameters
+    | addd 1, RARG1, offsetof(CCallState, stack), RARG6 // start of stack slots
+    | subd 2, RARG5, 0x8, RARG5
     | ct ctpr1, pred0
+    | --
     |1:
-    | addd 0, RARG5, 0x40, RARG2
-    | addd 1, RARG1, offsetof(CCallState, stack), RARG6
-    | --
-    | ldd 0, RARG6, RARG5, RARG6            // read stack parameters
-    | subd 1, RARG5, 0x8, RARG5
-    | --
-    | cmpldb 0, RARG5, 0x0, pred0
+    | // Copy stack slots.
+    | ldd 0, RARG6, 0x0, RARG3              // read stack parameters
+    | cmpedb 1, RARG5, 0x0, pred0
+    | subd 2, RARG5, 0x8, RARG5
     | nop 2
     | --
-    | std 2, RARG4, RARG2, RARG6            // write to allocated stack
+    | addd 0, RARG6, 0x8, RARG6
+    | addd 1, RARG2, 0x8, RARG2
+    | std 2, RARG2, 0x0, RARG3              // write to allocated stack
     | ct ctpr2, ~pred0
+    | --
     |2: // wrire register parameters on stack too
     | ldd 0, RARG1, CCSTATE->gpr[0], CARG1
     | ldd 2, RARG1, CCSTATE->func, RARG2
