@@ -59,16 +59,15 @@ enum {
   RID_FPRET = RID_R52,
 
   RID_MIN_GPR = RID_R0,
-  RID_MAX_GPR = RID_CTPR3+1,
+  RID_MAX_GPR = RID_B15 + 1,
   RID_MIN_FPR = 0,
   RID_MAX_FPR = RID_MIN_FPR,
 
-  RID_NUM_R   = RID_B15 + 1 - RID_R0,
   RID_NUM_GPR = RID_MAX_GPR - RID_MIN_GPR,
   RID_NUM_FPR = RID_MAX_FPR - RID_MIN_FPR
 };
 
-#define RID_NUM_KREF		RID_NUM_R
+#define RID_NUM_KREF		RID_NUM_GPR
 #define RID_MIN_KREF		RID_R0
 
 /* -- Register sets ------------------------------------------------------- */
@@ -115,7 +114,7 @@ enum {
 
 /* This definition must match with the *.dasc file(s). */
 typedef struct {
-  intptr_t gpr[RID_NUM_R];
+  intptr_t gpr[RID_NUM_GPR];
   int32_t spill[256];
 } ExitState;
 
