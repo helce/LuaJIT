@@ -151,15 +151,14 @@
 |
 |// Stack layout while in interpreter. Must match with lj_frame.h.
 |//-----------------------------------------------------------------------
-|.define CFRAME_SPACE,  0x70                // 8*6 + 8*8
-|.define STACK_SPACE,   -CFRAME_SPACE       // -(8*6 + 8*8)
-|.define SAVE_CFRAME,   0x68
-|.define SAVE_PC,       0x60
-|.define SAVE_L,        0x58
-|.define SAVE_ERRF,     0x54
-|.define SAVE_NRES,     0x50
-|.define MULTRES,       0x48
-|.define SAVE_GPR,      0x8                 // 8*8
+|.define CFRAME_SPACE,  0x30                // 8*6
+|.define STACK_SPACE,   -CFRAME_SPACE       // -(8*6)
+|.define SAVE_CFRAME,   0x28
+|.define SAVE_PC,       0x20
+|.define SAVE_L,        0x18
+|.define SAVE_ERRF,     0x14
+|.define SAVE_NRES,     0x10
+|.define MULTRES,       0x8
 |.define STACK_TMP,     0x0
 |
 |//-----------------------------------------------------------------------
