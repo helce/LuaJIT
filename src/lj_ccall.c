@@ -596,8 +596,7 @@
 
 #define CCALL_HANDLE_REGARG \
   if (ngpr < maxgpr) { \
-    /* align 16 if arguments needs more than 1 slot */ \
-    if (n > 1) ngpr += (ngpr % 2); \
+    if (n > 1) ngpr =  (ngpr + 1u) & ~1u; \
     dp = &cc->gpr[ngpr]; \
     if (ngpr + n > maxgpr) { \
       nsp += (ngpr + n - maxgpr) * CTSIZE_PTR; \
@@ -1091,7 +1090,6 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
       nsp = (nsp + align) & ~align;
     }
 #ifdef LJ_TARGET_E2K
-    /* align 16 if arguments needs more than 1 slot */
     MSize align = CTSIZE_PTR*2 - 1;
     if (n > 1) nsp = (nsp + align) & ~align;
 #endif
