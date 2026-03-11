@@ -136,7 +136,12 @@ typedef struct ASMState {
    (o) == IR_FLOAD || (o) == IR_XLOAD || (o) == IR_SLOAD || (o) == IR_VLOAD)
 
 /* Sparse limit checks using a red zone before the actual limit. */
+/* HREFK on e2k is 66 bytes, increase redzone twice */
+#ifdef __e2k__
+#define MCLIM_REDZONE 128
+#else
 #define MCLIM_REDZONE	64
+#endif
 
 static LJ_NORET LJ_NOINLINE void asm_mclimit(ASMState *as)
 {
@@ -148,9 +153,6 @@ static LJ_AINLINE void checkmclim(ASMState *as)
 #ifdef LUA_USE_ASSERT
   if (as->mcp + MCLIM_REDZONE < as->mcp_prev) {
     IRIns *ir = IR(as->curins+1);
-#if LJ_TARGET_E2K
-    if (ir->o != IR_HREF) // it's fat, size 66 for red_zone of 64
-#endif
     lj_assertA(0, "red zone overflow: %p IR %04d  %02d %04d %04d\n", as->mcp,
       as->curins+1-REF_BIAS, ir->o, ir->op1-REF_BIAS, ir->op2-REF_BIAS);
   }
