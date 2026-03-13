@@ -159,6 +159,19 @@ local map_cs1 = {
   [5] = "call",  [6] = "mas",   [7] = "flushr", [8] = "bg",
 }
 
+local map_ridregname = {
+  [0] = "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+  "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
+  "r52", "r53", "r54", "r55", "r56", "r57", "r58", "r59",
+  "b0", "b1", "b2", "b3", "b4", "b5", "b6", "b7",
+  "b8", "b9", "b10", "b11", "b12", "b13", "b14", "b15",
+  "g16", "g17", "g18", "g19",
+  "pred0", "pred1", "pred2", "pred3",
+  "ctpr1", "ctpr2", "ctpr3",
+}
+
+------------------------------------------------------------------------------
+
 local function get_halfword(ctx, pos)
   if ctx.half_hi then
     local b3, b4 = byte(ctx.code, pos+3, pos+4)
@@ -556,8 +569,14 @@ local function disass(code, addr, out)
   create(code, addr, out):disass()
 end
 
+-- Return register name for RID.
+local function regname(r)
+  return map_ridregname[r]
+end
+
 -- Public module functions.
 return {
   create = create,
   disass = disass,
+  regname = regname,
 }
