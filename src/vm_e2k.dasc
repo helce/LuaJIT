@@ -1345,55 +1345,48 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->cont_dispatch:
     | // BASE = meta base, RA = resultofs, RD = (nresults+1)*8 (also in MULTRES)
-    | andd 2, PC, raw(0xfff8), PC
-    | addd 3, BASE, RA, RA
-    | addd 4, BASE, 0x0, RB
-    | addd 5, 0x0, LJ_TNIL, S0
-    | disp ctpr2, >1
+    | andd      2, PC, raw(0xfff8), PC
+    | addd      3, BASE, RA, RA
+    | addd      4, BASE, 0x0, RB
+    | addd      5, 0x0, LJ_TNIL, S0
+    | disp      ctpr1, ->cont_ffi_callback
     | --
-    | subd 3, BASE, PC, BASE                // Restore caller BASE.
-    | addd 4, RA, RD, S1
-    | addd 5, RA, 0x0, CRET1
-    | disp ctpr1, ->cont_ffi_callback
+    | ldd       0, RB, -24, PC              // Restore PC from [cont|PC].
+    | ldd       2, RB, -32, RA
+    | subd      3, BASE, PC, BASE           // Restore caller BASE.
+    | addd      4, RA, RD, S1
+    | addd      5, RA, 0x0, CRET1
+    | disp      ctpr2, ->vm_call_tail
     | --
-    | ldd 0, RB, -24, PC                    // Restore PC from [cont|PC].
-    | ldd 2, RB, -32, RA
-    | disp ctpr3, ->vm_call_tail
+    | lddsm     3, BASE, -16, S2
+    | wait_load RA, 1
     | --
-    | lddsm 3, BASE, -16, CARG2
-    | --
-    | cmpbedb 0, RA, 0x1, pred0
-    | cmpedb 1, RA, 0x1, pred1
-    | std 5, S1, -8, S0                     // Ensure one valid arg.
-    | nop 2
+    | movtdsm   0, RA, ctpr3
+    | std       5, S1, -8, S0               // Ensure one valid arg.
     | --
     |.if FFI
-    | ct ctpr2, pred0
+    | cmpbdb    0, RA, 0x1, pred0
+    | cmpedb    1, RA, 0x1, pred1
+    | wait_pred_ct pred0, 0
     | --
-    |.endif
-    | movtd 0, RA, ctpr1
-    | extract_value 3, CARG2, KBASE
-    | --
-    | ldd 3, KBASE, LFUNC->pc, KBASE
-    | nop 2
-    | --
-    | ldd 3, KBASE, PC2PROTO(k), KBASE
-    | nop 1
-    | --
-    | ct ctpr1                              // Jump to continuation.
-    | --
-    | // BASE = base, CRET1 = result, RB = meta base
-    |
-    |.if FFI
-    |1:
-    | subd 0, RB, BASE, RB, ~pred1
-    | ct ctpr1, pred1                       // cont = 1: return from FFI callback.
+    | // cont = 1: return from FFI callback.
+    | subd      0, RB, BASE, RB, pred0
+    | ct        ctpr1, pred1
     | --
     | // cont = 0: Tail call from C function.
-    | subd 0, RB, 0x18, RD
-    | ct ctpr3
+    | subd      0, RB, 0x18, RD, pred0
+    | ct        ctpr2, pred0
     | --
     |.endif
+    | extract_value 3, S2, KBASE
+    | --
+    | ldd       3, KBASE, LFUNC->pc, KBASE
+    | wait_load KBASE, 0
+    | --
+    | // BASE = base, CRET1 = result, RB = meta base
+    | ldd       3, KBASE, PC2PROTO(k), KBASE
+    | ct        ctpr3                       // Jump to continuation.
+    | --
     |
     |->cont_cat:                            // BASE = base, CRET1 = result, RB = mbase
     | setwd_call
