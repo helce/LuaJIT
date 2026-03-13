@@ -260,12 +260,6 @@ static Reg rset_pickrandom(ASMState *as, RegSet rs)
 #define RIDNAME(name)	#name,
 static const char *const ra_regname[] = {
   GPRDEF(RIDNAME)
-  #if LJ_TARGET_E2K
-  BREGDEF(RIDNAME)
-  GREGDEF(RIDNAME)
-  PREDREGDEF(RIDNAME)
-  CTPRDEF(RIDNAME)
-  #endif
   FPRDEF(RIDNAME)
   VRIDDEF(RIDNAME)
   NULL

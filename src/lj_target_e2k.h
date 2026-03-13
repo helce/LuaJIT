@@ -15,33 +15,22 @@
 #define GPRDEF(_) \
    _(R0)  _(R1)  _(R2)  _(R3)  _(R4)  _(R5)  _(R6)  _(R7) \
    _(R8)  _(R9) _(R10) _(R11) _(R12) _(R13) _(R14) _(R15) \
-  _(R52) _(R53) _(R54) _(R55) _(R56) _(R57) _(R58) _(R59)
-
-#define FPRDEF(_)
-
-#define BREGDEF(_) \
-   _(B0)  _(B1) _(B2)  _(B3)  _(B4)  _(B5)  _(B6)  _(B7) _(B8)  _(B9) \
-  _(B10) _(B11) _(B12) _(B13) _(B14) _(B15)
-
-#define GREGDEF(_) \
+  _(R52) _(R53) _(R54) _(R55) _(R56) _(R57) _(R58) _(R59) \
+   _(B0)  _(B1)  _(B2)  _(B3)  _(B4)  _(B5)  _(B6)  _(B7) \
+   _(B8)  _(B9) _(B10) _(B11) _(B12) _(B13) _(B14) _(B15) \
   _(G16) _(G17) _(G18) _(G19)
 
-#define PREDREGDEF(_) \
-  _(PRED0)  _(PRED1)  _(PRED2)  _(PRED3)
-
-#define CTPRDEF(_) \
+#define NGPRDEF(_) \
+  _(PRED0)  _(PRED1)  _(PRED2)  _(PRED3) \
   _(CTPR1) _(CTPR2) _(CTPR3)
 
+#define FPRDEF(_)
 #define VRIDDEF(_)
-
 #define RIDENUM(name) RID_##name,
 
 enum {
-  GPRDEF(RIDENUM)  /* Directly addressable registers of the current window */
-  BREGDEF(RIDENUM)  /* Rotating registers of the current window */
-  GREGDEF(RIDENUM)  /* Global registers */
-  PREDREGDEF(RIDENUM) /* Predicates */
-  CTPRDEF(RIDENUM) /* Control transer preparation registers */
+  GPRDEF(RIDENUM)  /* Directly addressable, rotating and global registers */
+  NGPRDEF(RIDENUM) /* Predicates and control flow registers */
   RID_MAX,
   RID_TMP  = RID_G16,
   RID_TMP1 = RID_G16,
@@ -76,10 +65,8 @@ enum {
 #define RSET_FIXED \
     (RID2RSET(RID_SP)|RID2RSET(RID_DISPATCH)|RID2RSET(RID_LPC))
 #define RSET_GPR    (RSET_RANGE(RID_R0, RID_B15+1) - RSET_FIXED)
-#define RSET_PRED   (RSET_RANGE(RID_PRED0, RID_PRED3+1))
-#define RSET_CTPR   (RSET_RANGE(RID_CTPR1, RID_CTPR3+1))
 #define RSET_FPR    0
-#define RSET_ALL    (RSET_GPR|RSET_PRED|RSET_CTPR)
+#define RSET_ALL    RSET_GPR
 #define RSET_INIT   RSET_ALL
 
 /* In pipe state scratch registers are r52-r59 */
