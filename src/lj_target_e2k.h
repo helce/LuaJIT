@@ -30,8 +30,8 @@
 
 enum {
   GPRDEF(RIDENUM)  /* Directly addressable, rotating and global registers */
-  NGPRDEF(RIDENUM) /* Predicates and control flow registers */
   RID_MAX,
+  NGPRDEF(RIDENUM) /* Predicates and control flow registers */
   RID_TMP  = RID_G16,
   RID_TMP1 = RID_G16,
   RID_TMP2 = RID_G17,
