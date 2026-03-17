@@ -603,7 +603,7 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
       emit_alopf1_rr(as, 0, E2K_SUBS, tmp1, tmp2, tmp1, &as->mcp);
       emit_alopf1_ri(as, 0, E2K_SCLS, tmp2, HASH_ROT3, tmp2, 0);
       emit_alopf1_rr(as, 0, E2K_XORS, tmp1, tmp2, tmp1, &as->mcp);
-      emit_alopf1_ri(as, 0, E2K_SCLS, tmp1, HASH_ROT2, tmp1, 0);
+      emit_alopf1_ri(as, 0, E2K_SCLS, tmp1, (HASH_ROT2+HASH_ROT1), tmp1, 0);
       emit_alopf1_rr(as, 0, E2K_SUBS, tmp2, dest, tmp2, &as->mcp);
       emit_alopf1_rr(as, 0, E2K_XORS, tmp2, tmp1, tmp2, 0);
       emit_alopf1_ri(as, 0, E2K_SCLS, tmp1, HASH_ROT1, dest, &as->mcp);
