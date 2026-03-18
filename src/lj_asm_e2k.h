@@ -72,17 +72,17 @@ static int noconflict(ASMState *as, IRRef ref, IROp conflict)
 }
 
 /* Fuse the array base of colocated arrays. */
-static int32_t asm_fuseabase(ASMState *as, IRRef ref)
+static intptr_t asm_fuseabase(ASMState *as, IRRef ref)
 {
   IRIns *ir = IR(ref);
   if (ir->o == IR_TNEW && ir->op1 <= LJ_MAX_COLOSIZE &&
       !neverfuse(as) && noconflict(as, ref, IR_NEWREF))
-    return (int32_t)sizeof(GCtab);
+    return (intptr_t)sizeof(GCtab);
   return 0;
 }
 
 /* Fuse array/hash/upvalue reference into register+offset operand. */
-static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
+static Reg asm_fuseahuref(ASMState *as, IRRef ref, intptr_t *ofsp, RegSet allow)
 {
   IRIns *ir = IR(ref);
   if (ra_noreg(ir->r)) {
@@ -90,7 +90,7 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
       if (mayfuse(as, ref)) {
         if (irref_isk(ir->op2)) {
           IRRef tab = IR(ir->op1)->op1;
-          int32_t ofs = asm_fuseabase(as, tab);
+          intptr_t ofs = asm_fuseabase(as, tab);
           IRRef refa = ofs ? tab : ir->op1;
           ofs += 8*IR(ir->op2)->i;
           *ofsp = ofs;
@@ -99,20 +99,18 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow)
       }
     } else if (ir->o == IR_HREFK) {
       if (mayfuse(as, ref)) {
-        int32_t ofs = (int32_t)(IR(ir->op2)->op2 * sizeof(Node));
-        *ofsp = ofs;
+        *ofsp = (intptr_t)(IR(ir->op2)->op2 * sizeof(Node));
         return ra_alloc1(as, ir->op1, allow);
       }
     } else if (ir->o == IR_UREFC) {
       if (irref_isk(ir->op1)) {
         GCfunc *fn = ir_kfunc(IR(ir->op1));
         GCupval *uv = &gcref(fn->l.uvptr[(ir->op2 >> 8)])->uv;
-        intptr_t ofs = dispofs(as, &uv->tv);
-        *ofsp = ofs;
+        *ofsp = dispofs(as, &uv->tv);
         return RID_DISPATCH;
       }
     } else if (ir->o == IR_TMPREF) {
-      *ofsp = (int32_t)dispofs(as, &J2G(as->J)->tmptv);
+      *ofsp = dispofs(as, &J2G(as->J)->tmptv);
       return RID_DISPATCH;
     }
   }
@@ -415,7 +413,7 @@ static void asm_strto(ASMState *as, IRIns *ir)
 /* -- Memory references --------------------------------------------------- */
 
 /* Store tagged value for ref at base+ofs. */
-static void asm_tvstore64(ASMState *as, Reg base, int32_t ofs, IRRef ref)
+static void asm_tvstore64(ASMState *as, Reg base, intptr_t ofs, IRRef ref)
 {
   RegSet allow = rset_exclude(RSET_GPR, base);
   IRIns *ir = IR(ref);
@@ -469,7 +467,7 @@ static void asm_aref(ASMState *as, IRIns *ir)
   Reg idx, base, tmp;
   if (irref_isk(ir->op2)) {
     IRRef tab = IR(ir->op1)->op1;
-    int32_t ofs = asm_fuseabase(as, tab);
+    intptr_t ofs = asm_fuseabase(as, tab);
     IRRef refa = ofs ? tab : ir->op1;
     ofs += 8*IR(ir->op2)->i;
     base = ra_alloc1(as, refa, allow);
@@ -702,9 +700,9 @@ static void asm_strref(ASMState *as, IRIns *ir)
   Reg dest = ra_dest(as, ir, allow);
   Reg base = ra_alloc1(as, ir->op1, rset_clear(allow, dest));
   IRIns *irr = IR(ir->op2);
-  int32_t ofs = sizeof(GCstr);
+  intptr_t ofs = sizeof(GCstr);
   if (irref_isk(ir->op2)) {
-    emit_alopf1_ri(as, 0, E2K_ADDD, base, (intptr_t)(ofs + irr->i),
+    emit_alopf1_ri(as, 0, E2K_ADDD, base, ofs + irr->i,
                    dest, &as->mcp);
   } else {
     /* base + ofs + right(32-bit) */
@@ -761,9 +759,9 @@ static void asm_fload(ASMState *as, IRIns *ir)
   Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg base = RID_NONE;
   uint32_t op = asm_loadins(as, ir, dest);
-  int32_t ofs = 0;
+  intptr_t ofs = 0;
   if (ir->op1 == REF_NIL) { /* FLOAD from GG_State with offset. */
-    ofs = (int32_t)(ir->op2 << 2) - GG_OFS(dispatch);
+    ofs = (intptr_t)(ir->op2 << 2) - GG_OFS(dispatch);
     base = RID_DISPATCH;
   } else if (irref_isk(ir->op1)) {
     IRIns *op1 = IR(ir->op1);
@@ -787,7 +785,7 @@ static void asm_fstore(ASMState *as, IRIns *ir)
     Reg src = ra_alloc1(as, ir->op2, RSET_GPR);
     IRIns *irf = IR(ir->op1);
     Reg base = ra_alloc1(as, irf->op1, rset_exclude(RSET_GPR, src));
-    int32_t ofs = field_ofs[irf->op2];
+    intptr_t ofs = field_ofs[irf->op2];
     lj_assertA(!irt_isfp(ir->t), "bad FP FSTORE");
     emit_alopf3_ri(as, 0, asm_storeins(as, ir), base, ofs, src, &as->mcp);
   }
@@ -822,7 +820,7 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
   RegSet allow = RSET_GPR;
   Reg base, dest = RID_NONE, type = RID_NONE;
   IRType1 t = ir->t;
-  int32_t ofs = 0;
+  intptr_t ofs = 0;
   lj_assertA(irt_isnum(t) || irt_ispri(t) || irt_isaddr(t) ||
              irt_isint(t), "bad load type %d", irt_type(t));
   if (ra_used(ir)) {
@@ -853,7 +851,7 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
   RegSet allow = RSET_GPR;
   Reg base, src = RID_NONE;
   intptr_t type = 0;
-  int32_t ofs = 0;
+  intptr_t ofs = 0;
   if (ir->r == RID_SINK)
     return;
   if (irt_isnum(ir->t)) {
@@ -891,7 +889,7 @@ static void asm_sload(ASMState *as, IRIns *ir)
   Reg dest = RID_NONE, base;
   RegSet allow = RSET_GPR;
   IRType1 t = ir->t;
-  int32_t ofs = 8*((int32_t)ir->op1-2);
+  intptr_t ofs = 8*((intptr_t)ir->op1-2);
   int op = 0;
   lj_assertA(!(ir->op2 & IRSLOAD_PARENT),
              "bad parent SLOAD");  /* Handled by asm_head_side(). */
@@ -1334,7 +1332,7 @@ static void asm_prof(ASMState *as, IRIns *ir)
   asm_guard(as, RID_PRED0, 1);
   emit_alopf7_ri(as, 0, E2K_CMPANDESB, tmp, HOOK_PROFILE, RID_PRED0, &as->mcp);
   emit_alopf1_ri(as, 0, E2K_LDB, RID_DISPATCH,
-                 (int32_t)dispofs(as, &J2G(as->J)->hookmask), tmp, &as->mcp);
+                 dispofs(as, &J2G(as->J)->hookmask), tmp, &as->mcp);
 }
 
 /* -- Stack handling ------------------------------------------------------ */
@@ -1372,7 +1370,7 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
   for (n = 0; n < nent; n++) {
     SnapEntry sn = map[n];
     BCReg s = snap_slot(sn);
-    int32_t ofs = 8*((int32_t)s-1-LJ_FR2);
+    intptr_t ofs = 8*((intptr_t)s-1-LJ_FR2);
     IRRef ref = snap_ref(sn);
     IRIns *ir = IR(ref);
     if ((sn & SNAP_NORESTORE))
