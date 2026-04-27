@@ -488,7 +488,7 @@ local function print_cs(ctx)
 end
 
 local function print_nop(ctx)
-  ctx.out("        nop %d\n", ctx.nop)
+  ctx.out(format("        nop %d\n", ctx.nop))
 end
 
 -- Disassemble  a single wide instruction.
