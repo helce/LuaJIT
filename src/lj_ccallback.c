@@ -71,6 +71,14 @@ static MSize CALLBACK_OFS2SLOT(MSize ofs)
 
 #define CALLBACK_MCODE_HEAD		52
 
+#elif LJ_TARGET_E2K
+
+// one slot is 24, cos slot number always takes 8 bytes if it's >= 0x1f
+#define CALLBACK_MCODE_HEAD   40
+#define CALLBACK_SLOT2OFS(slot)		(CALLBACK_MCODE_HEAD + 24*(slot))
+#define CALLBACK_OFS2SLOT(ofs)		(((ofs)-CALLBACK_MCODE_HEAD)/24)
+#define CALLBACK_MAX_SLOT		(CALLBACK_OFS2SLOT(CALLBACK_MCODE_SIZE))
+
 #else
 
 /* Missing support for this architecture. */
@@ -235,6 +243,31 @@ static void *callback_mcode_init(global_State *g, uint32_t *page)
     *p = MIPSI_B | ((page-p-1) & 0x0000ffffu);
     p++;
     *p++ = MIPSI_LI | MIPSF_T(RID_R1) | slot;
+  }
+  return p;
+}
+#elif LJ_TARGET_E2K
+static void *callback_mcode_init(global_State *g, uint32_t *page)
+{
+  uint32_t *p = page;
+  uintptr_t target = (uintptr_t)(void *)lj_vm_ffi_callback;
+  uintptr_t ug = (uintptr_t)(void *)g;
+  MSize slot;
+  // movtd,0 _f64 target, %ctpr1
+  *p++ = 0x4000011; *p++ = 0x61c0dcd1;
+  *p++ = (uint32_t)(target >> 32); *p++ = (uint32_t)(target & 0xffffffff);
+  // addd,0 0x0, _f64 0x12345678deadbeaf, %dg17
+  *p++ = 0x4000011; *p++ = 0x11c0dcf1;
+  *p++ = (uint32_t)(ug >> 32); *p++ = (uint32_t)(ug & 0xffffffff);
+  // ct %ctpr1; ipd 3
+  *p++ = 0x1001; *p++ = 0xc0000420;
+  for (slot = 0; slot < CALLBACK_MAX_SLOT; slot++) {
+    // addd,0 0x0, _f32s slot, %dg18
+    // ibranch page_start
+    ptrdiff_t disp = ((void *)page - (void *)p) >> 3;
+    *p++ = 0x4005023; *p++ = 0xc0000020;
+    *p++ = 0x11c0d8f2; *p++ = disp & 0xfffffff;
+    *p++ = 0; *p++ = slot;
   }
   return p;
 }
@@ -533,8 +566,13 @@ void lj_ccallback_mcode_free(CTState *cts)
 
 #elif LJ_TARGET_E2K
 
-#define CALLBACK_HANDLE_REGARG
-/* Unsupported yet. */
+#define CALLBACK_HANDLE_REGARG \
+  if (n > 1) ngpr =  (ngpr + 1u) & ~1u; \
+  if (ngpr + n <= maxgpr) { \
+    sp = (void*) &cts->cb.gpr[ngpr]; \
+    ngpr += n; \
+    goto done; \
+  }
 
 #else
 #error "Missing calling convention definitions for this architecture"
@@ -597,6 +635,8 @@ static void callback_conv_args(CTState *cts, lua_State *L)
   case CTCC_THISCALL: maxgpr = 1; break;
   default: maxgpr = 0; break;
   }
+#elif LJ_TARGET_E2K
+  nsp = 8; // skip reserved space for regparams
 #endif
 
   fid = ct->sib;
@@ -619,6 +659,9 @@ static void callback_conv_args(CTState *cts, lua_State *L)
       /* Otherwise pass argument on stack. */
       if (CCALL_ALIGN_STACKARG && LJ_32 && sz == 8)
 	nsp = (nsp + 1) & ~1u;  /* Align 64 bit argument on stack. */
+#ifdef LJ_TARGET_E2K
+      if (n > 1) nsp = (nsp + 1u) & ~1u;
+#endif
       sp = &stack[nsp];
       nsp += n;
 

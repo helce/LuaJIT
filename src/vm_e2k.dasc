@@ -146,18 +146,19 @@
 |.type NARGS,       int
 |.type TRACE,       GCtrace
 |.type SBUF,        SBuf
+|.type CCSTATE,     CCallState
+|.type CTSTATE,     CTState
 |
 |// Stack layout while in interpreter. Must match with lj_frame.h.
 |//-----------------------------------------------------------------------
-|.define CFRAME_SPACE,  0x70                // 8*6 + 8*8
-|.define STACK_SPACE,   -CFRAME_SPACE       // -(8*6 + 8*8)
-|.define SAVE_CFRAME,   0x68
-|.define SAVE_PC,       0x60
-|.define SAVE_L,        0x58
-|.define SAVE_ERRF,     0x54
-|.define SAVE_NRES,     0x50
-|.define MULTRES,       0x48
-|.define SAVE_GPR,      0x8                 // 8*8
+|.define CFRAME_SPACE,  0x30                // 8*6
+|.define STACK_SPACE,   -CFRAME_SPACE       // -(8*6)
+|.define SAVE_CFRAME,   0x28
+|.define SAVE_PC,       0x20
+|.define SAVE_L,        0x18
+|.define SAVE_ERRF,     0x14
+|.define SAVE_NRES,     0x10
+|.define MULTRES,       0x8
 |.define STACK_TMP,     0x0
 |
 |//-----------------------------------------------------------------------
@@ -688,8 +689,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_return:
     | // BASE = base, RA = resultofs, RD/MULTRES = (nresults+1)*8, PC = return
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | --
     | xord 1, PC, FRAME_C, PC
     | subd 2, 0x0, 0x8, S1
@@ -834,8 +834,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_unwind_c:                         // Unwind C stack, return from vm_pcall.
     | // (void *cframe, int errcode)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | addd 0, RARG1, 0x0, STACK
     | addd 1, RARG2, 0x0, CRET1             // Error return status for vm_pcall.
     | --
@@ -855,8 +854,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_unwind_ff:                        // Unwind C stack, return from ff pcall.
     | // (void *cframe)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | andd 0, RARG1, CFRAME_RAWMASK, RARG1
     | --
     | addd 0, RARG1, 0x0, STACK
@@ -989,8 +987,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_resume:                           // Setup C frame and resume thread.
     | // (lua_State *L, TValue *base, int nres1 = 0, ptrdiff_t ef = 0)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | disp ctpr1, >2
     | --
     | getsp 0, STACK_SPACE, STACK
@@ -1049,8 +1046,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_pcall:                            // Setup protected C frame and enter VM.
     | // (lua_State *L, TValue *base, int news1, ptrdiff_t ef)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | disp ctpr1, >1
     | --
     | getsp 0, STACK_SPACE, STACK
@@ -1063,8 +1059,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_call:                             // Setup C frame and enter VM.
     | // (lua_State *L, TValue *base, int nres1)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | --
     | getsp 0, STACK_SPACE, STACK
     | addd 1, 0x0, FRAME_C, PC
@@ -1292,8 +1287,7 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->vm_cpcall:                           // Setup protected C frame, call C.
     | // (lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
-    | setwd wsz = 0xc, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x8, rcur = 0x0
+    | setwd_call
     | --
     | getsp 0, STACK_SPACE, STACK
     | addd 1, RARG1, 0x0, RB
@@ -1351,55 +1345,48 @@ static void build_subroutines(BuildCtx *ctx)
     |
     |->cont_dispatch:
     | // BASE = meta base, RA = resultofs, RD = (nresults+1)*8 (also in MULTRES)
-    | andd 2, PC, raw(0xfff8), PC
-    | addd 3, BASE, RA, RA
-    | addd 4, BASE, 0x0, RB
-    | addd 5, 0x0, LJ_TNIL, S0
-    | disp ctpr2, >1
+    | andd      2, PC, raw(0xfff8), PC
+    | addd      3, BASE, RA, RA
+    | addd      4, BASE, 0x0, RB
+    | addd      5, 0x0, LJ_TNIL, S0
+    | disp      ctpr1, ->cont_ffi_callback
     | --
-    | subd 3, BASE, PC, BASE                // Restore caller BASE.
-    | addd 4, RA, RD, S1
-    | addd 5, RA, 0x0, CRET1
-    | disp ctpr1, ->cont_ffi_callback
+    | ldd       0, RB, -24, PC              // Restore PC from [cont|PC].
+    | ldd       2, RB, -32, RA
+    | subd      3, BASE, PC, BASE           // Restore caller BASE.
+    | addd      4, RA, RD, S1
+    | addd      5, RA, 0x0, CRET1
+    | disp      ctpr2, ->vm_call_tail
     | --
-    | ldd 0, RB, -24, PC                    // Restore PC from [cont|PC].
-    | ldd 2, RB, -32, RA
-    | disp ctpr3, ->vm_call_tail
+    | lddsm     3, BASE, -16, S2
+    | wait_load RA, 1
     | --
-    | lddsm 3, BASE, -16, CARG2
-    | --
-    | cmpbedb 0, RA, 0x1, pred0
-    | cmpedb 1, RA, 0x1, pred1
-    | std 5, S1, -8, S0                     // Ensure one valid arg.
-    | nop 2
+    | movtdsm   0, RA, ctpr3
+    | std       5, S1, -8, S0               // Ensure one valid arg.
     | --
     |.if FFI
-    | ct ctpr2, pred0
+    | cmpbdb    0, RA, 0x1, pred0
+    | cmpedb    1, RA, 0x1, pred1
+    | wait_pred_ct pred0, 0
     | --
-    |.endif
-    | movtd 0, RA, ctpr1
-    | extract_value 3, CARG2, KBASE
-    | --
-    | ldd 3, KBASE, LFUNC->pc, KBASE
-    | nop 2
-    | --
-    | ldd 3, KBASE, PC2PROTO(k), KBASE
-    | nop 1
-    | --
-    | ct ctpr1                              // Jump to continuation.
-    | --
-    | // BASE = base, CRET1 = result, RB = meta base
-    |
-    |.if FFI
-    |1:
-    | subd 0, RB, BASE, RB, ~pred1
-    | ct ctpr1, pred1                       // cont = 1: return from FFI callback.
+    | // cont = 1: return from FFI callback.
+    | subd      0, RB, BASE, RB, pred0
+    | ct        ctpr1, pred1
     | --
     | // cont = 0: Tail call from C function.
-    | subd 0, RB, 0x18, RD
-    | ct ctpr3
+    | subd      0, RB, 0x18, RD, pred0
+    | ct        ctpr2, pred0
     | --
     |.endif
+    | extract_value 3, S2, KBASE
+    | --
+    | ldd       3, KBASE, LFUNC->pc, KBASE
+    | wait_load KBASE, 0
+    | --
+    | // BASE = base, CRET1 = result, RB = meta base
+    | ldd       3, KBASE, PC2PROTO(k), KBASE
+    | ct        ctpr3                       // Jump to continuation.
+    | --
     |
     |->cont_cat:                            // BASE = base, CRET1 = result, RB = mbase
     | setwd_call
@@ -4882,21 +4869,21 @@ static void build_subroutines(BuildCtx *ctx)
     |// FP value rounding. Called by math.floor/math.ceil fast functions.
     |.macro vm_round, name, mode
     |->name:
-    | setwd wsz = 0x4, nfx = 0x1, dbl = 0x0
-    | return ctpr3
+    | setwd     wsz = 0x4, nfx = 0x1, dbl = 0x0
+    | return    ctpr3
     | nop 4
     | --
     |.if mode == 2                          // trunc(x)?
-    | fdtoifd 3, 0x3, RARG1, RRET1
+    | fdtoifd   3, 0x3, RARG1, RRET1
     | --
     |.elif mode == 1                        // ceil(x)?
-    | fdtoifd 3, 0x2, RARG1, RRET1
+    | fdtoifd   3, 0x2, RARG1, RRET1
     | --
     |.else                                  // floor(x)
-    | fdtoifd 3, 0x1, RARG1, RRET1
+    | fdtoifd   3, 0x1, RARG1, RRET1
     | --
     |.endif
-    | ct ctpr3
+    | ct        ctpr3
     | --
     |.endmacro
     |
@@ -5012,7 +4999,7 @@ static void build_subroutines(BuildCtx *ctx)
     |// Next idx returned in RRET2.
     |->vm_next:
     |.if JIT
-    | setwd wsz = 0x8, nfx = 0x1, dbl = 0x0
+    | setwd     wsz = 0x8, nfx = 0x1, dbl = 0x0
     | ldw       0, NEXT_TAB, TAB->asize, NEXT_ASIZE
     | addd      1, 0x0, LJ_TNIL, NEXT_NIL
     | ldd       2, NEXT_TAB, TAB->array, NEXT_TMP0
@@ -5090,145 +5077,176 @@ static void build_subroutines(BuildCtx *ctx)
     |.endif
     |
     |//-----------------------------------------------------------------------
-    |//-- Assertions ---------------------------------------------------------
-    |//-----------------------------------------------------------------------
-    |
-    |->assert_bad_for_arg_type:
-    | disp ctpr1, extern raise              // sigtrap
-    | --
-    | addd 0, 0x5, 0x0, CARG1
-    | --
-    | call ctpr1, wbs = 0x8
-    | --
-    |
-    |//-----------------------------------------------------------------------
     |//-- FFI helper functions -----------------------------------------------
     |//-----------------------------------------------------------------------
     |
-    |// Handler for callback functions.
+    |// Handler for callback functions. Callback slot number in T2, g in T1.
     |->vm_ffi_callback:
     |.if FFI
-    | do_fault
+    | setwd_call
+    | ldd       0, T1, GL->ctype_state, T0
+    | disp      ctpr1, extern lj_ccallback_enter
+    | wait_load T0, 0
+    | --
+    | // don't use frame registers until parameters saved
+    | stdsm     2, T0, CTSTATE->cb.gpr[0], RARG1
+    | stdsm     5, T0, CTSTATE->cb.gpr[1], RARG2
+    | --
+    | stdsm     2, T0, CTSTATE->cb.gpr[2], RARG3
+    | stdsm     5, T0, CTSTATE->cb.gpr[3], RARG4
+    | --
+    | stdsm     2, T0, CTSTATE->cb.gpr[4], RARG5
+    | stdsm     5, T0, CTSTATE->cb.gpr[5], RARG6
+    | --
+    | stdsm     2, T0, CTSTATE->cb.gpr[6], RARG7
+    | stdsm     5, T0, CTSTATE->cb.gpr[7], RARG8
+    | --
+    | getsp     0, STACK_SPACE, STACK
+    | addd      1, T0, 0x0, PC
+    | stw       2, T0, CTSTATE->cb.slot, T2
+    | --
+    | addd      0, T1, GG_G2DISP, DISPATCH
+    | addd      1, STACK, CFRAME_SPACE, S0
+    | addd      2, STACK, 0x0, CARG2
+    | --
+    | addd      0, PC, 0x0, CARG1
+    | std       2, PC, CTSTATE->cb.stack, S0
+    | std       5, STACK, SAVE_PC, PC       // Any value outside of bytecode is ok.
+    | call      ctpr1, wbs = 0x8            // lj_ccallback_enter (CTState *cts, void *cf)
+    | --
+    | // lua_State * returned.
+    | ldd       0, CRET1, L->base, BASE
+    | addd      1, 0x0, ~LJ_VMST_INTERP, S0
+    | ldd       2, CRET1, L->top, RD
+    | wait_load BASE, 0
+    | --
+    | ldd       0, BASE, -16, RB
+    | subd      1, RD, BASE, RD
+    | wait_load RB, 0
+    | --
+    | extract_value 0, RB, RB
+    | addd      1, RD, 0x8, RD
+    | stw       2, DISPATCH, DISPATCH_GL(vmstate), S0
+    | --
+    | ins_callt
     |.endif
     |
     |->cont_ffi_callback:                   // Return from FFI callback.
     |.if FFI
-    | .type CTSTATE, CTState
-    | disp ctpr1, extern lj_ccallback_leave // (CTState *cts, TValue *o)
+    | disp      ctpr1, extern lj_ccallback_leave // (CTState *cts, TValue *o)
+    | ldd       0, STACK, SAVE_L, RA
+    | addd      1, CRET1, 0x0, CARG2
+    | ldd       2, DISPATCH, DISPATCH_GL(ctype_state), PC
+    | wait_load RA, 0
     | --
-    | ldd 0, STACK, SAVE_L, RA
-    | addd 1, CRET1, 0x0, CARG2
-    | ldd 2, DISPATCH, DISPATCH_GL(ctype_state), PC
-    | nop 2
+    | std       2, RA, L->base, BASE
+    | std       5, PC, CTSTATE->L, RA
     | --
-    | std 2, RA, L->base, BASE
-    | std 5, PC, CTSTATE->L, RA
+    | addd      1, PC, 0x0, CARG1
+    | std       2, RA, L->top, RB
+    | call      ctpr1, wbs = 0x8
     | --
-    | addd 1, PC, 0x0, CARG1
-    | std 2, RA, L->top, RB
-    | call ctpr1, wbs = 0x8
+    | ldd       0, PC, CTSTATE->cb.gpr[0], RRET1
+    | return    ctpr3
     | --
-    | ldd 0, PC, CTSTATE->cb.gpr[0], RRET1
-    | return ctpr3
-    | --
-    | ct ctpr3
+    | ct        ctpr3
     | --
     |.endif
     |
     |->vm_ffi_call:                         // Call C function via FFI.
     |.if FFI
-    | .type CCSTATE, CCallState
-    | setwd wsz = 0x8, nfx = 0x1, dbl = 0x0
-    | setbn rsz = 0x3, rbs = 0x4, rcur = 0x0
-    | disp ctpr1, >2
+    | setwd_call
+    | disp      ctpr1, >2
     | --
-    | ldw 0, RARG1, CCSTATE->spadj, RARG3
-    | ldb 2, RARG1, CCSTATE->nsp, RARG5
-    | disp ctpr2, >1
-    | nop 2
+    | ldw       0, RARG1, CCSTATE->spadj, S0
+    | ldb       2, RARG1, CCSTATE->nsp, S1
+    | disp      ctpr2, >1
+    | wait_load S0, 0
     | --
-    | subd 0, 0x0, RARG3, RARG3
-    | subd 1, RARG5, 0x8, RARG5
+    | subd      0, 0x0, S0, S0
     | --
-    | getsp 0, RARG3, RARG4                 // allocate stack for parameters and return value
-    | cmpldb 1, RARG5, 0x0, pred0
-    | nop 2
+    | getsp     0, S0, T0                   // allocate stack for parameters and return value
+    | cmpedb    1, S1, 0x0, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | // Copy stack slots.
-    | ct ctpr1, pred0
+    | addd      0, T0, 0x40, T1             // skip register parameters
+    | addd      1, RARG1, offsetof(CCallState, stack), T2 // start of stack slots
+    | subd      2, S1, 0x8, S1
+    | ct        ctpr1, pred0
+    | --
     |1:
-    | addd 0, RARG5, 0x40, RARG2
-    | addd 1, RARG1, offsetof(CCallState, stack), RARG6
+    | // Copy stack slots.
+    | ldd       0, T2, 0x0, T3              // read stack parameters
+    | cmpedb    1, S1, 0x0, pred0
+    | subd      2, S1, 0x8, S1
+    | wait_load T3, 0
     | --
-    | ldd 0, RARG6, RARG5, RARG6            // read stack parameters
-    | subd 1, RARG5, 0x8, RARG5
+    | addd      0, T2, 0x8, T2
+    | addd      1, T1, 0x8, T1
+    | std       2, T1, 0x0, T3              // write to allocated stack
+    | ct        ctpr2, ~pred0
     | --
-    | cmpldb 0, RARG5, 0x0, pred0
-    | nop 2
-    | --
-    | std 2, RARG4, RARG2, RARG6            // write to allocated stack
-    | ct ctpr2, ~pred0
     |2: // wrire register parameters on stack too
-    | ldd 0, RARG1, CCSTATE->gpr[0], CARG1
-    | ldd 2, RARG1, CCSTATE->func, RARG2
-    | ldd 3, RARG1, CCSTATE->gpr[1], CARG2
-    | ldd 5, RARG1, CCSTATE->gpr[2], CARG3
+    | ldd       0, RARG1, CCSTATE->gpr[0], CARG1
+    | ldd       2, RARG1, CCSTATE->func, T1
+    | ldd       3, RARG1, CCSTATE->gpr[1], CARG2
+    | ldd       5, RARG1, CCSTATE->gpr[2], CARG3
     | --
-    | ldd 0, RARG1, CCSTATE->gpr[3], CARG4
-    | ldd 2, RARG1, CCSTATE->gpr[4], CARG5
-    | ldd 3, RARG1, CCSTATE->gpr[5], CARG6
+    | ldd       0, RARG1, CCSTATE->gpr[3], CARG4
+    | ldd       2, RARG1, CCSTATE->gpr[4], CARG5
+    | ldd       3, RARG1, CCSTATE->gpr[5], CARG6
     | --
-    | ldd 0, RARG1, CCSTATE->gpr[7], CARG8
-    | ldd 2, RARG1, CCSTATE->gpr[6], CARG7
+    | ldd       0, RARG1, CCSTATE->gpr[7], CARG8
+    | ldd       2, RARG1, CCSTATE->gpr[6], CARG7
     | --
-    | movtd 0, RARG2, ctpr1
-    | std 2, RARG4, 0x0, CARG1
-    | std 5, RARG4, 0x8, CARG2
+    | movtd     0, T1, ctpr1
+    | std       2, T0, 0x0, CARG1
+    | std       5, T0, 0x8, CARG2
     | --
-    | std 2, RARG4, 0x10, CARG3
-    | std 5, RARG4, 0x18, CARG4
+    | std       2, T0, 0x10, CARG3
+    | std       5, T0, 0x18, CARG4
     | --
-    | std 2, RARG4, 0x20, CARG5
-    | std 5, RARG4, 0x28, CARG6
+    | std       2, T0, 0x20, CARG5
+    | std       5, T0, 0x28, CARG6
     | --
-    | std 2, RARG4, 0x30, CARG7
-    | std 5, RARG4, 0x38, CARG8
-    | call ctpr1, wbs = 0x4
+    | std       2, T0, 0x30, CARG7
+    | std       5, T0, 0x38, CARG8
+    | call      ctpr1, wbs = 0x8
     | --
     | // speculatively write from return regs, if result > 8*8 bytes, read all from stack
-    | ldw 0, RARG1, CCSTATE->ret_size, RARG2
-    | disp ctpr2, >3
-    | nop 1
+    | ldw       0, RARG1, CCSTATE->ret_size, T1
+    | disp      ctpr2, >3
+    | wait_load T1, 0
     | --
-    | disp ctpr1, extern memcpy
+    | disp      ctpr1, extern memcpy
+    | cmpedb    0, T1, 0x0, pred0
+    | wait_pred_ct pred0, 0
     | --
-    | cmpedb 0, RARG2, 0x0, pred0
-    | nop 2
+    | ldd       0, RARG1, CCSTATE->ret_stack, CARG1, ~pred0
+    | addd      1, T1, 0x0, CARG3, ~pred0
+    | addd      2, T0, 0x0, CARG2, ~pred0
+    | ct        ctpr2, pred0
     | --
-    | ldd 0, RARG1, CCSTATE->ret_stack, CARG1, ~pred0
-    | addd 1, RARG2, 0x0, CARG3, ~pred0
-    | addd 2, RARG4, 0x0, CARG2, ~pred0
-    | ct ctpr2, pred0
+    | call      ctpr1, wbs = 0x8
     | --
-    | call ctpr1, wbs = 0x4
+    | return    ctpr3
     | --
-    | return ctpr3
+    | ct        ctpr3
     | --
-    | ct ctpr3
     |3:
-    | stdsm 2, RARG1, CCSTATE->gpr[0], CRET1
-    | stdsm 5, RARG1, CCSTATE->gpr[1], CRET2
-    | return ctpr3
+    | stdsm     2, RARG1, CCSTATE->gpr[0], CRET1
+    | stdsm     5, RARG1, CCSTATE->gpr[1], CRET2
+    | return    ctpr3
     | --
-    | stdsm 2, RARG1, CCSTATE->gpr[2], CRET3
-    | stdsm 5, RARG1, CCSTATE->gpr[3], CRET4
+    | stdsm     2, RARG1, CCSTATE->gpr[2], CRET3
+    | stdsm     5, RARG1, CCSTATE->gpr[3], CRET4
     | --
-    | stdsm 2, RARG1, CCSTATE->gpr[4], CRET5
-    | stdsm 5, RARG1, CCSTATE->gpr[5], CRET6
+    | stdsm     2, RARG1, CCSTATE->gpr[4], CRET5
+    | stdsm     5, RARG1, CCSTATE->gpr[5], CRET6
     | --
-    | stdsm 2, RARG1, CCSTATE->gpr[6], CRET7
-    | stdsm 5, RARG1, CCSTATE->gpr[7], CRET8
-    | ct ctpr3
+    | stdsm     2, RARG1, CCSTATE->gpr[6], CRET7
+    | stdsm     5, RARG1, CCSTATE->gpr[7], CRET8
+    | ct        ctpr3
     | --
     |.endif
     |//-----------------------------------------------------------------------
@@ -8055,23 +8073,23 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | // ins_A RA = base*8, (RB = (nresults+1)*8, RC = (nargs+1)*8 (2+1)*8)
         |.if JIT
         | // vm_IITERN is used like BC_IITERN, so hotloop can't be inlined here
-        | shrd 0, PC, 1, T0
-        | disp ctpr1, ->vm_hotloop
+        | shrd      0, PC, 1, T0
+        | disp      ctpr1, ->vm_hotloop
         | --
-        | andd 0, T0, HOTCOUNT_PCMASK, T0
+        | andd      0, T0, HOTCOUNT_PCMASK, T0
         | --
-        | addd 0, T0, GG_DISP2HOT, T0
+        | addd      0, T0, GG_DISP2HOT, T0
         | --
-        | ldh 0, DISPATCH, T0, T1
+        | ldh       0, DISPATCH, T0, T1
         | wait_load T1, 0
         | --
-        | subd 0, T1, HOTCOUNT_LOOP, T1
+        | subd      0, T1, HOTCOUNT_LOOP, T1
         | --
         | cmpandedb 0, T1, 0x8000, pred0
-        | sth 2, DISPATCH, T0, T1
+        | sth       2, DISPATCH, T0, T1
         | wait_pred_ct pred0, 0
         | --
-        | ct ctpr1, ~pred0
+        | ct        ctpr1, ~pred0
         | --
         |.endif
         | // Unsupported. Just label for compatibility
@@ -8979,7 +8997,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | sth       2, DISPATCH, T0, T2
         | wait_pred_ct pred0, 0
         | --
-        | ct ctpr2, ~pred1                  // vm_hotloop
+        | ct        ctpr2, ~pred1           // vm_hotloop
         | --
         | addd      1, T1, RD, PC, ~pred0   // Otherwise save control var + branch.
         | std       2, RA, -8, RB, ~pred0
@@ -9051,7 +9069,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
         | sth       5, DISPATCH, T0, T1
         | wait_pred_ct pred0, 0
         | --
-        | ct ctpr1, ~pred0
+        | ct        ctpr1, ~pred0
         | --
         | pipe_dispatch 0, ctpr3
         | --
