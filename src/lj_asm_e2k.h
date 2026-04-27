@@ -345,6 +345,7 @@ static void asm_conv(ASMState *as, IRIns *ir)
                                     dest, 0), RID_PRED0, 1, 0);
         emit_rlp(as, emit_alopf2_r(as, 0, op, left, dest, 0), RID_PRED0, 0, &as->mcp);
         emit_alopf2_r(as, 1, op, tmp, tmp, &as->mcp);
+        emit_nop(as, 2);
         emit_alopf7_ri(as, 0, (st == IRT_NUM) ? E2K_FCMPLTDB : E2K_FCMPLTSB,
                        left, k, RID_PRED0, 0);
         emit_alopf1_ri(as, 1, (st == IRT_NUM) ? E2K_FSUBD : E2K_FSUBS,
@@ -1205,6 +1206,7 @@ static void asm_min_max(ASMState *as, IRIns *ir, int ismax)
     } else {
       emit_mrgc(as, emit_alopf1_rr(as, 1, E2K_MERGES, left, right, dest, 0),
                 RID_PRED0, ismax ? 0 : 1, &as->mcp);
+      emit_nop(as, 2);
       emit_alopf7_rr(as, 0, E2K_CMPLSB, left, right, RID_PRED0, &as->mcp);
     }
   }
