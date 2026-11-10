@@ -111,21 +111,10 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
   hs.fields.ales = hs_ales;
   hs.fields.als = hs_als;
 
-  /* CDS[0-5], 16-bit */
-  uint16_t *hmxp = (uint16_t *)mxp;
-  if (hs_cds > 4) {
-    *--hmxp = as->bundle.cds[4];
-    *--hmxp = as->bundle.cds[5];
-  }
-  if (hs_cds > 2) {
-    *--hmxp = as->bundle.cds[2];
-    *--hmxp = as->bundle.cds[3];
-  }
-  if (hs_cds > 0) {
-    *--hmxp = as->bundle.cds[0];
-    *--hmxp = as->bundle.cds[1];
-  }
-  mxp = (MCode *)hmxp;
+  /* CDS[2-0], 16-bit-pairs */
+  if (hs_cds > 0) *--mxp = (as->bundle.cds[0] << 16) | as->bundle.cds[1];
+  if (hs_cds > 2) *--mxp = (as->bundle.cds[2] << 16) | as->bundle.cds[3];
+  if (hs_cds > 4) *--mxp = (as->bundle.cds[4] << 16) | as->bundle.cds[5];
   /* LTS[3-0], 32-bit, 16-bit half syls not implemented */
   int used_lts = ((~as->bundle.res & RES_LTS_ALL)  >> RES_LTS_SHIFT);
   for (int i = 0; i < 4; i++) {
@@ -136,13 +125,22 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
 
   if (hs_lng != lng) *--mxp = 0; /* Align */
   /* ALES[0-1,3-4], 16-bit */
-  hmxp = (uint16_t *)mxp;
-  if (hs_ales & 0x10) *--hmxp = as->bundle.ales[4];
-  if (hs_ales & 0x08) *--hmxp = as->bundle.ales[3];
-  if (hs_ales & 0x02) *--hmxp = as->bundle.ales[1];
-  if (hs_ales & 0x01) *--hmxp = as->bundle.ales[0];
-  if (half_pad) *--hmxp = 0; /* Align */
-  mxp = (MCode *)hmxp;
+  uint32_t tmp_syl = 0;
+  int hi = half_pad ? 1 : 0;
+  for (int i = 5; i >= 0; i--) {
+    if (i == 2 || i == 5) continue; // skip in v3
+    if (hs_ales & (1 << i)) {
+      if (hi) {
+        *--mxp = ((uint32_t)as->bundle.ales[i] << 16) | tmp_syl;
+        tmp_syl = 0;
+        hi = 0;
+      } else {
+        tmp_syl = (uint32_t)as->bundle.ales[i];
+        hi = 1;
+      }
+    }
+  }
+
   /* CS[0-1], 32-bit */
   if (hs_c & 0x02) *--mxp = as->bundle.cs[1];
   if (hs_c & 0x01) {
@@ -473,7 +471,7 @@ static void emit_cds(ASMState *as, int opc, int als, Reg pred, int inverted, MCo
   }
   if (als >= 3) opc++;
   syl.fields.opc = opc;
-  as->bundle.cds[cds_idx] = syl.i;
+  as->bundle.cds[cds_idx] = (uint32_t)syl.i;
   as->bundle.hs_cds++;
   if (p) *p = emit_bundle_finalize(as, *p);
 }
