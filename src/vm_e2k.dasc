@@ -4758,24 +4758,27 @@ static void build_subroutines(BuildCtx *ctx)
     |.endif
     |->vm_exit_interp:
     |.if JIT
-    | //  CRET1 = MULTRES(unscaled)(zext) or negated error code, BASE, PC and DISPATCH set.
+    | // CRET1 = MULTRES(unscaled)(zext) or negated error code, BASE, PC and DISPATCH set.
+    | // tricky moment with jit window and pipe window: setwd works for current instruction,
+    | // but setbn on the next one, so we can fix CRET1 to PRET1 in this instruction
     | setwd_pipe
+    | addd      0, CRET1, 0x0, PRET1
     | --
     | ldw       0, PC, 0, INSN_E
-    | sxt       1, 0x2, CRET1, CRET1           // Sign extend to simplify next work
+    | sxt       1, 0x2, PRET1, PRET1           // Sign extend to simplify next work
     | ldwsm     2, PC, 4, INSN_B
     | lddsm     3, BASE, -8, T3
     | lddsm     5, DISPATCH, DISPATCH_J(trace), S0
     | disp      ctpr1, extern lj_err_trace
     | --
     | ldd       0, STACK, SAVE_L, RB           // Reload, need it only for vm_exit_interp
-    | cmpbdb    1, CRET1, -LUA_ERRERR, pred0   // Check for error from exit.
+    | cmpbdb    1, PRET1, -LUA_ERRERR, pred0   // Check for error from exit.
     | ldwsm     2, PC, 12, INSN_D
     | ldd       3, BASE, -16, KBASE
-    | cmpedb    4, CRET1, -17, pred1           // Static dispatch?
+    | cmpedb    4, PRET1, -17, pred1           // Static dispatch?
     | ldwsm     5, PC, 16, INSN_S
     | --
-    | shld      2, CRET1, 3, S1
+    | shld      2, PRET1, 3, S1
     | ldwsm     3, PC, 8, INSN_L
     | addd      4, PC, 4, PC
     | wait_load INSN_E, 2
