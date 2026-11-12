@@ -147,7 +147,7 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
   int32_t ofs = is_vararg ? 0 : STACKARG_OFS;
   Reg gpr = RID_NONE;
   if (ci->func)
-    emit_call(as, RID_CTPR1, 0, 0, PIPE_WBS, &as->mcp);
+    emit_call(as, RID_CTPR1, 0, 0, JIT_WBS, &as->mcp);
   for (gpr = REGARG_FIRSTGPR; gpr <= REGARG_LASTGPR; gpr++)
     as->cost[gpr] = REGCOST(~0u, ASMREF_L);
   gpr = REGARG_FIRSTGPR;
@@ -220,7 +220,7 @@ static void asm_callx(ASMState *as, IRIns *ir)
   if (irref_isk(func)) {  /* Call to constant address. */
     ci.func = (ASMFunction)(void *)get_kval(as, func);
   } else {
-    emit_call(as, RID_CTPR1, 0, 0, PIPE_WBS, &as->mcp);
+    emit_call(as, RID_CTPR1, 0, 0, JIT_WBS, &as->mcp);
     ci.func = (ASMFunction)(void *)0;
   }
   asm_gencall(as, &ci, args);
@@ -1496,6 +1496,10 @@ static void asm_head_root_base(ASMState *as)
     if (r != RID_BASE)
       emit_movrr(as, 0, r, RID_BASE);
   }
+
+  /* setup jit window */
+  emit_window(as, JIT_WSZ, JIT_NFX, JIT_DBL,
+              JIT_RSZ, JIT_RBS, JIT_RCUR, &as->mcp);
 }
 
 /* Coalesce BASE register for a side trace. */

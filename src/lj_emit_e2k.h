@@ -44,12 +44,10 @@ static intptr_t get_kval(ASMState *as, IRRef ref)
 static E2kOpT get_reg_type(ASMState *as, intptr_t val)
 {
   UNUSED(as);
-  if (val <= RID_R15)
-    return E2K_REG_R;
-  else if (val <= RID_R59)
-    return E2K_REG_RARG;
-  else if (val <= RID_B15)
+  if (val <= RID_B7)
     return E2K_REG_B;
+  else if (val <= RID_R31)
+    return E2K_REG_R;
   else if (val <= RID_G19)
     return E2K_REG_G;
   else if (val <= RID_PRED3)
@@ -144,7 +142,7 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
   /* CS[0-1], 32-bit */
   if (hs_c & 0x02) *--mxp = as->bundle.cs[1];
   if (hs_c & 0x01) {
-    E2kCopf2 cs0 = { as->bundle.cs[0] };
+    E2kC0f2 cs0 = { as->bundle.cs[0] };
     cs0.fields.disp = cs0.fields.disp + (hs_lng >> 1);
     *--mxp = cs0.i;
   }
@@ -165,17 +163,17 @@ static MCode *emit_bundle_finalize(ASMState *as, MCode *mxp)
 
 /* -- Emit basic instructions --------------------------------------------- */
 
-static uint32_t emit_lts(ASMState *as, E2kOpT type, uint64_t val)
+static uint32_t emit_lts(ASMState *as, uint64_t mask, E2kOpT type, uint64_t val)
 {
   /* 16-bit halfsyls not managed yet, using lo part only */
-  uint64_t mask = 0, lts = 0;
+  uint64_t lts = 0;
   int lts_idx = 0;
   if (type == E2K_CONST16) {
-    mask = RES_LTS1|RES_LTS0;
+    mask &= RES_LTS1|RES_LTS0;
   } else if (type == E2K_CONST32) {
-    mask = RES_LTS3|RES_LTS2|RES_LTS1|RES_LTS0;
+    mask &= RES_LTS3|RES_LTS2|RES_LTS1|RES_LTS0;
   } else {
-    mask = RES_LTS2|RES_LTS1|RES_LTS0;
+    mask &= RES_LTS2|RES_LTS1|RES_LTS0;
   }
   lts = check_resource(as, mask);
   if (type == E2K_CONST64) /* check 2 syls for 64-bit literal */
@@ -208,8 +206,6 @@ static uint32_t emit_src1(ASMState *as, E2kOpT type, intptr_t src1)
       return src1 - RID_B0;
     case E2K_REG_R:
       return (src1 - RID_R0) | 0x80;
-    case E2K_REG_RARG:
-      return (src1 - RID_R52 + 52) | 0x80;
     case E2K_REG_G:
       return (src1 - RID_G16 + 16) | 0xe0;
     default:
@@ -235,8 +231,6 @@ static uint32_t emit_src2(ASMState *as, E2kOpT type, intptr_t src2)
       return src2 - RID_B0;
     case E2K_REG_R:
       return (src2 - RID_R0) | 0x80;
-    case E2K_REG_RARG:
-      return (src2 - RID_R52 + 52) | 0x80;
     case E2K_REG_G:
       return (src2 - RID_G16 + 16) | 0xe0;
     default:
@@ -248,11 +242,11 @@ static uint32_t emit_src2(ASMState *as, E2kOpT type, intptr_t src2)
     case E2K_CONST4:
       return src2 | 0xc0;
     case E2K_CONST5: case E2K_CONST16:
-      return (emit_lts(as, E2K_CONST16, src2) | 0xd0);
+      return (emit_lts(as, RES_LTS_ALL, E2K_CONST16, src2) | 0xd0);
     case E2K_CONST32:
-      return (emit_lts(as, E2K_CONST32, src2) | 0xd8);
+      return (emit_lts(as, RES_LTS_ALL, E2K_CONST32, src2) | 0xd8);
     case E2K_CONST64:
-      return (emit_lts(as, E2K_CONST64, src2) | 0xdc);
+      return (emit_lts(as, RES_LTS_ALL, E2K_CONST64, src2) | 0xdc);
     default:
       lj_assertA(0, "bad type for src2 (%d)", type);
       return 0;
@@ -269,8 +263,6 @@ static uint32_t emit_src3(ASMState *as, E2kOpT type, intptr_t src3)
       return src3 - RID_B0;
     case E2K_REG_R:
       return (src3 - RID_R0) | 0x80;
-    case E2K_REG_RARG:
-      return (src3 - RID_R52 + 52) | 0x80;
     case E2K_REG_G:
       return (src3 - RID_G16 + 16) | 0xe0;
     default:
@@ -290,8 +282,6 @@ static uint32_t emit_dst(ASMState *as, E2kOpT type, intptr_t dst)
       return dst - RID_B0;
     case E2K_REG_R:
       return (dst - RID_R0) | 0x80;
-    case E2K_REG_RARG:
-      return (dst - RID_R52 + 52) | 0x80;
     case E2K_REG_CTPR:
       return (dst - RID_CTPR1 + 1) | 0xd0;
     case E2K_REG_G:
@@ -521,7 +511,7 @@ static void emit_cds(ASMState *as, int opc, int als, Reg pred, int inverted, MCo
   emit_alopf1(as, p, spec, op, ISRC1(src1), ISRC2(src2), RDST(dst))
 #define emit_snapno(as, snapno, p) \
   emit_alopf1(as, p, 0, E2K_ADDD, emit_src1(as, E2K_CONST, 0), \
-               emit_lts(as, E2K_CONST32, (intptr_t)snapno) | 0xd8, \
+               emit_lts(as, RES_LTS_ALL, E2K_CONST32, (intptr_t)snapno) | 0xd8, \
                emit_dst(as, E2K_REG, RID_TMP))
 #define emit_nop(as, nops) \
   as->bundle.nop = nops
@@ -619,7 +609,7 @@ static void emit_copf2(ASMState *as, uint32_t opc, Reg ctpr,
                        uintptr_t disp, MCode **p)
 {
   check_resource(as, RES_CS0);
-  E2kCopf2 syl;
+  E2kC0f2 syl;
   syl.i = 0;
   syl.fields.disp = disp >> 3;
   syl.fields.opc = opc;
@@ -655,6 +645,45 @@ static void emit_jmp(ASMState *as,  MCode *target)
   emit_ibranch(as, (ptrdiff_t)((void *)target - (void *)as->mcp),
                0, 0, &as->mcp);
 }
+
+static void emit_setr(ASMState *as, MCode **p,
+                      int wsz, int nfx, int dbl,
+                      int rsz, int rbs, int rcur,
+                      int psz, int rpsz, int op)
+{
+    check_resource(as, RES_CS1);
+    E2kSetBR params;
+    params.i = 0;
+    params.fields.rsz = rsz;
+    params.fields.rbs = rbs;
+    params.fields.rcur = rcur;
+    params.fields.psz = psz;
+    params.fields.setbn = op & E2K_SETBN ? 1 : 0;
+    params.fields.setbp = op & E2K_SETBP ? 1 : 0;
+    E2kC1f1 syl;
+    syl.i = 0;
+    syl.fields.opc = op & E2K_VFRPSZ ? E2K_SETR1 :
+                     op & E2K_SETWD ? E2K_SETR0 : E2K_SETBR;
+    syl.fields.params = params.i;
+    as->bundle.cs[1] = syl.i;
+    as->bundle.f2++;
+
+    if (op & E2K_SETWD) {
+        /* extended format */
+        E2kSetR lts0;
+        lts0.i = 0;
+        lts0.fields.rpsz = rpsz;
+        lts0.fields.wsz = wsz;
+        lts0.fields.nfx = nfx;
+        lts0.fields.dbl = dbl;
+        emit_lts(as, RES_LTS0, E2K_CONST32, lts0.i);
+    }
+
+    if (p) *p = emit_bundle_finalize(as, *p);
+}
+
+#define emit_window(as, wsz, nfx, dbl, rsz, rbs, rcur, p) \
+  emit_setr(as, p, wsz, nfx, dbl, rsz, rbs, rcur, 0, 0, E2K_SETWD|E2K_SETBN)
 
 /* -- Emit generic operations --------------------------------------------- */
 

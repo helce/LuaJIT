@@ -9,15 +9,16 @@
 /* -- Registers IDs ------------------------------------------------------- */
 
 /* Use registers from pipeline state to avoid misscomunications */
-/* R0-R15 - direct, B0-B35 - rotating, R52-R59 - scratch(arguments) */
-/* G16-G31 - global, PRED1-PRED3 - predicates, CTPR1-CTPR3 - cf */
+/* B0-B7 - rotating(arguments), R0-R2 - return value, R3-R31 - direct */
+/* G16-G31 - global(tmpp reserved) */
+/* PRED1-PRED3 - predicates, CTPR1-CTPR3 - cf */
 
 #define GPRDEF(_) \
+   _(B0)  _(B1)  _(B2)  _(B3)  _(B4)  _(B5)  _(B6)  _(B7) \
    _(R0)  _(R1)  _(R2)  _(R3)  _(R4)  _(R5)  _(R6)  _(R7) \
    _(R8)  _(R9) _(R10) _(R11) _(R12) _(R13) _(R14) _(R15) \
-  _(R52) _(R53) _(R54) _(R55) _(R56) _(R57) _(R58) _(R59) \
-   _(B0)  _(B1)  _(B2)  _(B3)  _(B4)  _(B5)  _(B6)  _(B7) \
-   _(B8)  _(B9) _(B10) _(B11) _(B12) _(B13) _(B14) _(B15) \
+  _(R16) _(R17) _(R18) _(R19) _(R20) _(R21) _(R22) _(R23) \
+  _(R24) _(R25) _(R26) _(R27) _(R28) _(R29) _(R30) _(R31) \
   _(G16) _(G17) _(G18) _(G19)
 
 #define NGPRDEF(_) \
@@ -42,13 +43,13 @@ enum {
   RID_LPC = RID_R7, /* Interpreter PC */
   RID_DISPATCH = RID_R8, /* Interpreter dispatch */
   /* Calling conventions */
-  RID_RETLO = RID_R52,
-  RID_RETHI = RID_R53,
-  RID_RET = RID_R52,
-  RID_FPRET = RID_R52,
+  RID_RETLO = RID_B0,
+  RID_RETHI = RID_B1,
+  RID_RET = RID_B0,
+  RID_FPRET = RID_B0,
 
-  RID_MIN_GPR = RID_R0,
-  RID_MAX_GPR = RID_B15 + 1,
+  RID_MIN_GPR = RID_B0,
+  RID_MAX_GPR = RID_R31 + 1,
   RID_MIN_FPR = 0,
   RID_MAX_FPR = RID_MIN_FPR,
 
@@ -57,29 +58,33 @@ enum {
 };
 
 #define RID_NUM_KREF		RID_NUM_GPR
-#define RID_MIN_KREF		RID_R0
+#define RID_MIN_KREF		RID_B0
 
 /* -- Register sets ------------------------------------------------------- */
 
-/* Make use of all registers, except SP */
 #define RSET_FIXED \
     (RID2RSET(RID_SP)|RID2RSET(RID_DISPATCH)|RID2RSET(RID_LPC))
-#define RSET_GPR    (RSET_RANGE(RID_R0, RID_B15+1) - RSET_FIXED)
+#define RSET_GPR    (RSET_RANGE(RID_B0, RID_R31+1) - RSET_FIXED)
 #define RSET_FPR    0
 #define RSET_ALL    RSET_GPR
 #define RSET_INIT   RSET_ALL
 
-/* In pipe state scratch registers are r52-r59 */
 #define RSET_SCRATCH_FPR  0
-#define RSET_SCRATCH_GPR  (RSET_RANGE(RID_R52, RID_R59+1))
+#define RSET_SCRATCH_GPR  (RSET_RANGE(RID_B0, RID_B7+1))
 #define RSET_SCRATCH    (RSET_SCRATCH_GPR|RSET_SCRATCH_FPR)
 
-#define REGARG_FIRSTGPR RID_R52
-#define REGARG_LASTGPR  RID_R59
+#define REGARG_FIRSTGPR RID_B0
+#define REGARG_LASTGPR  RID_B7
 #define REGARG_NUMGPR   8
 #define STACKARG_OFS (8*8)
-/* wbs for pipe_call */
-#define PIPE_WBS     0x1a
+/* window setup */
+#define JIT_WSZ     0x14 // (32 + 8)/2
+#define JIT_NFX     0x1  // no fx operations
+#define JIT_DBL     0x0  // disable 64-bit extension
+#define JIT_RSZ     0x3  // (8)/2 - 1
+#define JIT_RBS     0x10 // base of rotation
+#define JIT_RCUR    0x0  // current base
+#define JIT_WBS     JIT_RBS
 
 /* -- Spill slots --------------------------------------------------------- */
 
@@ -288,7 +293,33 @@ typedef union {
     uint32_t opc     : 2;
     uint32_t ctpr    : 2;
   } fields;
-} E2kCopf2;
+} E2kC0f2;
+
+typedef union {
+  uint32_t i;
+  struct {
+    uint32_t rbs       : 6;
+    uint32_t rsz       : 6;
+    uint32_t rcur      : 6;
+    uint32_t psz       : 5;
+    uint32_t x         : 3;
+    uint32_t setbn     : 1;
+    uint32_t setbp     : 1;
+    uint32_t pad       : 4;
+  } fields;
+} E2kSetBR;
+
+typedef union {
+  uint32_t i;
+  struct {
+    uint32_t x       : 3;
+    uint32_t dbl     : 1;
+    uint32_t nfx     : 1;
+    uint32_t wsz     : 7;
+    uint32_t rpsz    : 5;
+    uint32_t pad     : 15;
+  } fields;
+} E2kSetR;
 
 typedef union {
   uint32_t i;
@@ -344,8 +375,23 @@ typedef enum {
 
 #define E2K_DISP    0x0
 #define E2K_IBRANCH 0x0
-#define E2K_CALL    0x5
 #define E2K_NOP     0x0
+
+#define E2K_SETR0   0x0
+#define E2K_SETR1   0x1
+#define E2K_SETEI   0x2
+#define WAIT        0x3
+#define E2K_SETBR   0x4
+#define E2K_CALL    0x5
+#define E2K_MAS     0x6
+#define E2K_FLUSHR  0x7
+#define E2K_BG      0x8
+
+#define E2K_SETBN   0x1
+#define E2K_SETBP   0x2
+#define E2K_SETWD   0x4
+#define E2K_VFRPSZ  0x8
+
 #define SXT_BS      0x0
 #define SXT_HS      0x1
 #define SXT_WS      0x2
