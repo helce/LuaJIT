@@ -269,10 +269,6 @@ ifneq (,$(findstring LJ_TARGET_MIPS ,$(TARGET_TESTARCH)))
 else
 ifneq (,$(findstring LJ_TARGET_E2K, $(TARGET_TESTARCH)))
   TARGET_LJARCH= e2k
-  # Detect .non_target_label directive for use in lj_vm.S
-  ifeq (,$(shell echo ".non_target_label x" | $(TARGET_CC) -xassembler -c -o check-non-target-label.o -))
-    HOST_ACFLAGS+= -DLJ_TARGET_E2K_NON_TARGET_LABEL
-  endif
 else
   $(error Unsupported target architecture)
 endif
