@@ -269,6 +269,20 @@ ifneq (,$(findstring LJ_TARGET_MIPS ,$(TARGET_TESTARCH)))
 else
 ifneq (,$(findstring LJ_TARGET_E2K, $(TARGET_TESTARCH)))
   TARGET_LJARCH= e2k
+
+  # Detect ISA and assembler versions.
+  #
+  # An assembler will align labels with dangerous addresses to work around
+  # hardware bug in some CPUs. DASM must do the same adjustments.
+  HOST_ACFLAGS+= -DLJ_TARGET_ISET=$(shell echo '__iset__' | $(TARGET_CC) $(TARGET_ACFLAGS) -E -xc - | tail -n1)
+  TARGET_AS=$(shell $(TARGET_CC) $(TARGET_ACFLAGS) -print-prog-name=as)
+  TARGET_AS_VERSION_STRING=$(shell $(TARGET_AS) --version | head -n1)
+  ifneq (,$(findstring GNU assembler,$(TARGET_AS_VERSION_STRING)))
+    TARGET_AS_VERSION=$(lastword $(TARGET_AS_VERSION_STRING))
+    HOST_ACFLAGS+= -DLJ_TARGET_GAS=1
+    HOST_ACFLAGS+= -DLJ_TARGET_GAS_MAJOR=$(shell echo $(TARGET_AS_VERSION) | cut -d. -f1)
+    HOST_ACFLAGS+= -DLJ_TARGET_GAS_MINOR=$(shell echo $(TARGET_AS_VERSION) | cut -d. -f2)
+  endif
 else
   $(error Unsupported target architecture)
 endif

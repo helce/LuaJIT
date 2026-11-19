@@ -15,6 +15,16 @@
 #define DASM_EXTERN(a,b,c,d)    0
 #endif
 
+#if LJ_TARGET_ISET < 7
+# if defined(LJ_TARGET_GAS) && LJ_TARGET_GAS_MAJOR == 2
+#  if LJ_TARGET_GAS_MINOR > 35
+#   define E2K_CODE_POSITION_FIX
+#  endif
+# else
+#  error "unexpected target assembler"
+# endif
+#endif
+
 /* Action definitions. */
 enum {
   DASM_STOP, DASM_SECTION, DASM_ESC, DASM_REL_EXT,
@@ -268,7 +278,7 @@ int dasm_link(Dst_DECL, size_t *szp)
     int pos = DASM_SEC2POS(secnum);
     int lastpos = sec->pos;
 
-#if defined(__LCC__) && (__LCC__ >= 127)
+#ifdef E2K_CODE_POSITION_FIX
     int shift = 0, range = 0;
 #endif
     while (pos != lastpos) {
@@ -281,7 +291,7 @@ int dasm_link(Dst_DECL, size_t *szp)
           case DASM_ESC: p++; break;
           case DASM_REL_EXT: break;
           case DASM_REL_LG: case DASM_REL_PC: pos++; break;
-#if defined(__LCC__) && (__LCC__ >= 127)
+#ifdef E2K_CODE_POSITION_FIX
           case DASM_LABEL_LG:
             if ((ins & 0x3ff) < 20) {
               b[pos++] += shift + ofs;
@@ -305,7 +315,7 @@ int dasm_link(Dst_DECL, size_t *szp)
       }
       stop: (void)0;
     }
-#if defined(__LCC__) && (__LCC__ >= 127)
+#ifdef E2K_CODE_POSITION_FIX
     sec->ofs += shift;
 #endif
     ofs += sec->ofs;  /* Next section starts right after current section. */
@@ -337,7 +347,7 @@ int dasm_encode(Dst_DECL, void *buffer)
     int *b = sec->buf;
     int *endb = sec->rbuf + sec->pos;
     int ofs, ofs_e, ofs_s, info = 0;
-#if defined(__LCC__) && (__LCC__ >= 127)
+#ifdef E2K_CODE_POSITION_FIX
     int range = 0;
 #endif
 
@@ -372,7 +382,7 @@ int dasm_encode(Dst_DECL, void *buffer)
               ofs_s = ((ins & 0xf000) >> 12);
               cp[-ofs_e] |= (((n >> 3) + ofs_s) & 0x0fffffff);
               break;
-#if defined(__LCC__) && (__LCC__ >= 127)
+#ifdef E2K_CODE_POSITION_FIX
           case DASM_LABEL_LG:
             ins &= 2047;
             if (ins >= 20) {
