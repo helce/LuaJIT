@@ -200,7 +200,14 @@ static void emit_asm_label(BuildCtx *ctx, const char *name, int size, int isfunc
       "\t.hidden %s\n"
       "\t.type %s, " ELFASM_PX "%s\n"
       "\t.size %s, %d\n"
+#ifdef LJ_TARGET_E2K_NON_TARGET_LABEL
+      /* Assembler can unconditionally align labels, which is a fix for LCC
+       * bug 142105. Dispatch offsets in lj_bc_ofs will be invalid because
+       * of that. Define labels with special directive to prevent this. */
+      "\t.non_target_label %s\n",
+#else
       "%s:\n",
+#endif
       name, name, name, isfunc ? "function" : "object", name, size, name);
     break;
   case BUILD_coffasm:
