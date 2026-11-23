@@ -555,6 +555,10 @@
 #error "No support for ptr32 model on E2K"
 #undef LJ_TARGET_E2K
 #endif
+/* Technicly workaround is in gas, but no exact version known, so check LCC */
+#if defined(__LCC__) && (__LCC__ >= 127)
+#define LJ_E2K_LABEL_WORKAROUND
+#endif
 #endif
 #endif
 
