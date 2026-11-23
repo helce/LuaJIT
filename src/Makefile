@@ -269,6 +269,10 @@ ifneq (,$(findstring LJ_TARGET_MIPS ,$(TARGET_TESTARCH)))
 else
 ifneq (,$(findstring LJ_TARGET_E2K, $(TARGET_TESTARCH)))
   TARGET_LJARCH= e2k
+  #Detect assembler has workaround of HWBUG#140436 and HWBUG#1142105
+  ifneq (,$(findstring LJ_E2K_LABEL_WORKAROUND, $(TARGET_TESTARCH)))
+    HOST_ACFLAGS+= -DLJ_E2K_LABEL_WORKAROUND
+  endif
 else
   $(error Unsupported target architecture)
 endif
